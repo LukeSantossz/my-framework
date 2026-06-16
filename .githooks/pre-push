@@ -1,0 +1,13 @@
+#!/usr/bin/env bash
+# Pre-push: run the Codex R2 cross-provider review (advisory by default).
+# Activate with: git config core.hooksPath .githooks
+# See docs/standards/codex_review.md for behavior, env vars, and bypass.
+set -u
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
+runner="$repo_root/scripts/codex-review.sh"
+
+[ -f "$runner" ] || exit 0
+
+bash "$runner"
+exit $?
