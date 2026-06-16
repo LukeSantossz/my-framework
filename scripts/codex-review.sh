@@ -26,26 +26,28 @@ if [ "$branch" = "$base" ]; then
   exit 0
 fi
 
-# 3. Codex is optional tooling: absence must not block the push.
-if ! command -v "$codex_bin" >/dev/null 2>&1; then
-  log "Codex not installed; skipping R2 (cross-provider review did not run)."
-  exit 0
-fi
-
-# 4. The exact command, with the reviewer model pinned for reproducibility.
-log "Running R2 cross-provider review: $branch vs $base (reviewer: $REVIEWER_MODEL/$REVIEWER_EFFORT)."
+# 3. Dry-run prints the command and exits, regardless of Codex availability,
+#    so the documented CODEX_REVIEW_DRYRUN contract holds without Codex installed.
 if [ "${CODEX_REVIEW_DRYRUN:-}" = "1" ]; then
   printf '%s\n' "codex review --base $base -c model=\"$REVIEWER_MODEL\" -c model_reasoning_effort=\"$REVIEWER_EFFORT\""
   exit 0
 fi
 
+# 4. Codex is optional tooling: absence must not block the push.
+if ! command -v "$codex_bin" >/dev/null 2>&1; then
+  log "Codex not installed; skipping R2 (cross-provider review did not run)."
+  exit 0
+fi
+
+# 5. Run the review, with the reviewer model pinned for reproducibility.
+log "Running R2 cross-provider review: $branch vs $base (reviewer: $REVIEWER_MODEL/$REVIEWER_EFFORT)."
 # stdin is redirected from /dev/null so Codex never consumes the hook's ref list.
 "$codex_bin" review --base "$base" \
   -c "model=$REVIEWER_MODEL" \
   -c "model_reasoning_effort=$REVIEWER_EFFORT" </dev/null
 status=$?
 
-# 5. Findings are advisory (ai_guidelines.md): surface them, do not block by default.
+# 6. Findings are advisory (ai_guidelines.md): surface them, do not block by default.
 if [ "$status" -ne 0 ]; then
   if [ "${CODEX_REVIEW_BLOCKING:-}" = "1" ]; then
     log "Codex review exited $status and blocking mode is on; stopping push."

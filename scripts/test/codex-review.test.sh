@@ -57,6 +57,15 @@ else
   no "builds_review_command_with_pinned_model" "code=$code out=$out"
 fi
 
+# honors_dryrun_even_when_codex_absent (R2 finding P2): dry-run prints the command
+# regardless of Codex availability, per codex_review.md.
+out=$(CODEX_REVIEW_BRANCH=feature/x CODEX_BIN=__no_such_codex__ CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "$expected"; then
+  ok "honors_dryrun_even_when_codex_absent"
+else
+  no "honors_dryrun_even_when_codex_absent" "code=$code out=$out"
+fi
+
 # advisory_on_codex_failure_does_not_block (design: R2 is advisory by default)
 out=$(PATH="$STUB_DIR:$PATH" STUB_EXIT=1 CODEX_REVIEW_BRANCH=feature/x bash "$RUNNER" 2>&1); code=$?
 if [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "STUB_CODEX_CALLED"; then
