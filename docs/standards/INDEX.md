@@ -17,6 +17,7 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 
 - All output in English: identifiers, comments, commit/PR/issue text, documentation.
 - Specify before building: a non-trivial change starts with a `SPEC.md` that passes the Spec Gate, per `spec_method.md`. The spec is the source of truth for intent and scope.
+- Decision records flow: a decision's rationale is captured in the SPEC's Alternatives Considered (before code, transient), promoted at the Spec Gate to a durable ADR under `docs/adr/` when it is hard to reverse, surprising, and a real trade-off, and surfaced in the README Engineering Decisions as an index linking that ADR. See `docs/adr/0001-decision-records-flow.md`.
 - The canonical type vocabulary lives only in the Type Table in `github.md`. Commits, PR titles, issue titles, and branch names draw from it. No parallel list exists.
 - Naming flows from `code_conventions.md` (general) to `var_method.md` (suffixes); the suffix guide is the lowest layer of precedence.
 - Test-first order (red-green-refactor) is project policy, enforced by the Superpowers TDD phase and recorded in `code_conventions.md` and `ai_guidelines.md`.

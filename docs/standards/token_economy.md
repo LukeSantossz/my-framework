@@ -49,7 +49,7 @@ Terse mode never applies to versioned or review artifacts. These follow their ow
 templates in full prose, regardless of any active compression level:
 
 - `SPEC.md` and the Spec Gate (`spec_method.md`): all sections filled with real content.
-- Pull Request body and Self-Review Checklist (`github.md`): templates filled, not abbreviated.
+- Pull Request body and PR Review Checklist (`github.md`): templates filled, not abbreviated.
 - Issue body (`github.md`): structured sections, not one-liners.
 - Commit messages: Conventional Commits format and imperative subject as specified;
   Caveman's terse-commit helper is acceptable only if its output still satisfies

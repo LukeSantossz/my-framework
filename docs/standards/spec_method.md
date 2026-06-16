@@ -64,13 +64,21 @@ the Gate only when all of the following hold:
 - At least one Acceptance Criterion exists and is verifiable.
 
 A spec missing any of these is not ready; the agent must not proceed to the Plan.
-The author approves the spec at the Gate before implementation starts.
+The Developer approves the spec at the Gate before implementation starts.
+
+At the Gate the Developer also promotes any Design Decision that is hard to reverse,
+surprising without context, and the result of a real trade-off into an Architecture
+Decision Record under `docs/adr/`. The SPEC's Alternatives Considered is transient — it
+is overwritten by the next change — so the durable rationale lives in the ADR, not the
+spec; the README Engineering Decisions later links that ADR rather than restating it.
+Later promotion is allowed when a decision's significance only emerges during
+implementation. See `docs/adr/0001-decision-records-flow.md`.
 
 ## Where It Sits in the Pipeline
 
 1. Brainstorm refines requirements into a draft spec.
 2. The draft is shown in chunks short enough to read and digest.
-3. The author approves at the Spec Gate.
+3. The Developer approves at the Spec Gate.
 4. The Plan turns each Acceptance Criterion into a failing test, then implementation.
 
 Naming, code rules, commits, and review continue to follow `code_conventions.md`,

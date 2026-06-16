@@ -65,9 +65,9 @@ Step-by-step for the reviewer:
 
 Screenshots or videos if the change is visual; omit if backend or configuration only.
 
-### 5. Self-Review Checklist
+### 5. PR Review Checklist
 
-- Self-review done in the Files Changed tab.
+- Reviewed in the Files Changed tab.
 - Spec approved at the Gate before implementation, and the change matches its Scope (per `spec_method.md`).
 - Each Acceptance Criterion has a passing test; tests were written before their implementation.
 - Commented-out code and unnecessary debug statements removed.
@@ -131,7 +131,7 @@ Include a Mermaid diagram only if the flow is non-trivial. Remove for simple scr
 
 ### Engineering Decisions
 
-Minimum 3 rows, each with: decision made, alternative considered, why this approach. Proves trade-off reasoning.
+A curated index of the project's most significant decisions for an outside reader. Each row links the ADR in `docs/adr/` that holds the full rationale (decision made, alternative considered, why this approach) rather than restating it. Minimum 3 rows once the project has that many recorded ADRs. Proves trade-off reasoning. See `docs/adr/0001-decision-records-flow.md`.
 
 ### Results (OPTIONAL)
 
