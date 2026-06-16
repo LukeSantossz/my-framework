@@ -62,7 +62,7 @@ Reviews compose; they do not replace one another. Three layers can run on a chan
 with a defined hierarchy so none is duplicated or skipped:
 
 - R1, internal review: the Superpowers two-stage subagent review (same provider, Claude). It applies `code_conventions.md`, `var_method.md`, and this file, and stands in for the Author's Self-Review. Record that it ran; do not repeat it manually.
-- R2, cross-provider review: a Reviewer model from a provider different from the Author (e.g. the Codex pre-commit gate). If the pre-commit reviewer is a different provider than the Author, the cross-provider requirement is satisfied and no third reviewer is required for that purpose.
+- R2, cross-provider review: a Reviewer model from a provider different from the Author (e.g. the Codex pre-commit gate; the operational gate is defined in `codex_review.md`). If the pre-commit reviewer is a different provider than the Author, the cross-provider requirement is satisfied and no third reviewer is required for that purpose.
 - R3, automated PR review: any automated PR reviewer (e.g. CodeRabbit). It is additional signal and does not substitute for R2.
 
 When no second-provider tool is available, R1 plus the human PR review (per `crura_method.md`) stand in for R2; note its absence in the PR.

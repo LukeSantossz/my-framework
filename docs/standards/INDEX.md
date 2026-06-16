@@ -11,6 +11,7 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - `crura_method.md`: human review discipline.
 - `github.md`: Conventional Commits (canonical type vocabulary), branch naming, PR/Issue/README templates.
 - `token_economy.md`: controlled token consumption (Caveman), with the scope boundary against versioned artifacts.
+- `codex_review.md`: operational R2 cross-provider gate (Codex CLI pre-push review).
 
 ## System Rules
 
@@ -32,3 +33,4 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 5. `crura_method.md`
 6. `ai_guidelines.md`
 7. `token_economy.md`
+8. `codex_review.md`
