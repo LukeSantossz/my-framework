@@ -10,6 +10,7 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - `var_method.md`: naming-suffix guide.
 - `crura_method.md`: human review discipline.
 - `github.md`: Conventional Commits (canonical type vocabulary), branch naming, PR/Issue/README templates.
+- `token_economy.md`: controlled token consumption (Caveman), with the scope boundary against versioned artifacts.
 
 ## System Rules
 
@@ -19,6 +20,7 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - Naming flows from `code_conventions.md` (general) to `var_method.md` (suffixes); the suffix guide is the lowest layer of precedence.
 - Test-first order (red-green-refactor) is project policy, enforced by the Superpowers TDD phase and recorded in `code_conventions.md` and `ai_guidelines.md`.
 - Review composes across three layers meeting at the PR: R1 internal Superpowers review, R2 cross-provider review, R3 automated PR review, per `ai_guidelines.md` Review Composition. Human review follows `crura_method.md`.
+- Token economy per `token_economy.md`: `CLAUDE.md` is kept compressed; terse mode is allowed in conversation but never in `SPEC.md`, PR, Issue, or commit artifacts. It never overrides Safety or Correctness.
 - Conflict resolution follows the precedence order in `code_conventions.md`.
 
 ## Reading Order
@@ -29,3 +31,4 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 4. `github.md`
 5. `crura_method.md`
 6. `ai_guidelines.md`
+7. `token_economy.md`
