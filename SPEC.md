@@ -1,79 +1,68 @@
-# SPEC: chore(review): add Codex CLI pre-push gate for R2 cross-provider review
+# SPEC: docs: add domain glossary and align standards
 
 ## Problem
-The standards name a "Codex pre-commit gate" as the R2 cross-provider reviewer, but
-nothing in the repository invokes Codex or gives it the project's conventions, so the
-R2 layer never actually runs.
+The framework's domain language is overloaded and scattered across the standards
+("author" means both the writing model and the human approver; "Self-Review", "Gate",
+and "Plan" each name two different things), with no central glossary, and trade-off
+rationale has three overlapping homes (SPEC Alternatives Considered, README Engineering
+Decisions, ADRs) with no defined relationship — so in practice no decision rationale is
+durably recorded.
 
 ## Design Decision
-Wire Codex CLI as the R2 layer through versioned pieces: (1) a project `AGENTS.md` at
-the repo root that points Codex at `docs/standards/INDEX.md`, so its review applies the
-same conventions Claude follows; (2) a versioned `pre-push` git hook under `.githooks/`
-(activated locally via `core.hooksPath`) that runs a small runner script; (3) a runner
-`scripts/codex-review.sh` that builds and invokes `codex review --base main` with the
-reviewer model pinned to `gpt-5.5` at `model_reasoning_effort=high`, with its guard logic
-kept testable; (4) `docs/standards/codex_review.md` documenting when the gate runs, the
-exact command, how to record the result in the PR Self-Review Checklist, and the bypass
-path, plus a pointer from `ai_guidelines.md` R2 and the INDEX files.
+Capture the resolved vocabulary in a root `CONTEXT.md` glossary (the source of truth for
+terms), align the standards docs to it, and define a single decision-records flow
+SPEC -> ADR -> README in which a SPEC's Design Decision is promoted to a durable ADR at
+the Spec Gate while Alternatives Considered stays transient and the README Engineering
+Decisions indexes the ADR. Record that flow as the first ADR. Also land the agent-skills
+configuration (`CLAUDE.md` `## Agent skills` + `docs/agents/`) the engineering skills
+require.
 
 ## Alternatives Considered
-- Documented manual command only, no hook: rejected — relies on the developer remembering
-  to run it; the user chose enforcement at push time.
-- Editing `.git/hooks/pre-push` directly: rejected — `.git/` is not versioned, so the gate
-  could not be shared or reviewed. `.githooks/` plus `core.hooksPath` keeps it in the tree.
-- Inheriting the reviewer model from `~/.codex/config.toml`: rejected — the user chose to
-  pin `gpt-5.5`/high for reproducible, explicitly cross-provider reviews.
-- Hard-blocking the push on any Codex finding by default: rejected — `codex review` is not
-  guaranteed to expose a reliable pass/fail exit code, and `ai_guidelines.md` treats R2
-  findings as advisory-but-must-address; the hook surfaces the review and a blocking mode
-  is opt-in.
+- Keep the vocabulary implicit in each standard, no central glossary: rejected — the
+  overloaded terms had already produced a real contradiction in `spec_method.md`, and
+  nothing would prevent future drift.
+- Make the README Engineering Decisions the durable home for rationale and keep ADRs
+  optional: rejected — no README exists and a single product-facing table is too coarse
+  for per-decision rationale and supersession (recorded in `docs/adr/0001`).
 
 ## Scope
 - Includes:
-  - `AGENTS.md` at the repo root pointing Codex to the standards and its reviewer duties.
-  - `.githooks/pre-push` hook plus `scripts/codex-review.sh` runner.
-  - `docs/standards/codex_review.md`, a pointer from `ai_guidelines.md` R2, and INDEX entries.
-  - A one-time local activation step (`git config core.hooksPath .githooks`), documented.
+  - `CONTEXT.md`: the domain glossary.
+  - Terminology alignment in `spec_method.md`, `github.md`, `crura_method.md`,
+    `codex_review.md`, `token_economy.md` (Developer; PR Review Checklist).
+  - The decision-records flow in `spec_method.md`, `github.md`, `INDEX.md`, recorded as
+    `docs/adr/0001-decision-records-flow.md`.
+  - Agent-skills configuration: `## Agent skills` in `CLAUDE.md` and
+    `docs/agents/{issue-tracker,triage-labels,domain}.md`.
 - Does NOT include:
-  - Changing the Author model or any `CLAUDE.md`/Claude behavior.
-  - Wiring R3 automated PR review (e.g. CodeRabbit).
-  - CI integration or running Codex inside GitHub Actions.
-  - Committing or pushing anything (per the standing no-auto-commit instruction).
-  - Modifying the user's global `~/.codex/config.toml`.
+  - Any behavior change to the Author/Reviewer models or the review scripts.
+  - Writing the README itself or its Engineering Decisions table.
+  - Retroactive ADRs for already-merged work (e.g. the Codex R2 gate).
+  - Creating tracker issues or wiring R3 automated PR review.
 
 ## Acceptance Criteria
-Phrased as test outcomes; each becomes a failing test first.
+Phrased as verifiable documentation-consistency outcomes.
 
-- skips_review_when_codex_binary_absent: the runner exits 0 and prints a clear
-  "Codex not installed, skipping R2" message when `codex` is not on PATH.
-- skips_review_when_pushing_base_branch: the runner exits 0 without invoking Codex when the
-  current branch is the base branch (nothing to review against itself).
-- builds_review_command_with_pinned_model: in dry-run mode the runner prints exactly
-  `codex review --base main -c model="gpt-5.5" -c model_reasoning_effort="high"`.
-- bypass_env_skips_gate: setting `SKIP_CODEX_REVIEW=1` makes the runner exit 0 without
-  invoking Codex.
-- agents_file_points_to_standards: `AGENTS.md` references `docs/standards/INDEX.md` and the
-  precedence order in `code_conventions.md`.
+- glossary_cross_references_resolve: every term referenced inside a `CONTEXT.md`
+  definition is itself defined, and no `_Avoid_` synonym is used as a definition.
+- deprecated_wording_absent: `grep -rEn "Self-Review Checklist|author approves"
+  docs/standards` returns no matches.
+- decision_flow_consistent: `INDEX.md`, `spec_method.md`, `CONTEXT.md`, and
+  `docs/adr/0001-decision-records-flow.md` all name the Design Decision (not Alternatives
+  Considered) as the artifact promoted to the ADR.
+- agent_skills_documented: `CLAUDE.md` has an `## Agent skills` section pointing at the
+  three `docs/agents/*.md` files, and those files exist.
 
 ## Reproducibility
-- Codex: codex-cli 0.140.0 (`codex --version`). Reviewer model `gpt-5.5`,
-  `model_reasoning_effort=high`.
-- Activate locally: `git config core.hooksPath .githooks`.
-- Run the gate manually: `bash scripts/codex-review.sh`; print the command without running
-  it: `CODEX_REVIEW_DRYRUN=1 bash scripts/codex-review.sh`.
-- Tests: `bash scripts/test/codex-review.test.sh`, exercising the criteria above with a
-  `codex` stub placed first on PATH.
+- Verify on branch `docs/domain-glossary` at the PR head.
+- Commands: the three `grep`/read checks above; `ls docs/agents docs/adr`.
 - Platform: Windows 11, Git Bash (POSIX sh).
 
 ## Risks and Assumptions
-- Assumption: `codex review --base <branch>` runs non-interactively and does not block on
-  stdin (per `codex review --help`). If it prompts, the hook would hang and must gain a
-  timeout.
-- Assumption: `codex review` exit code is not a reliable pass/fail signal; treated as
-  advisory. If testing shows a stable non-zero-on-findings contract, blocking mode could
-  become the default.
-- Assumption: pre-push hooks run under the user's Git on Windows via Git Bash (POSIX sh).
-- Risk: Codex auth or quota failure at push time. Mitigated by treating runner failure as
-  non-blocking (exit 0 with a warning) unless blocking mode is enabled.
-- Assumption: the base branch is `main` (matches this repo); parameterized via
-  `CODEX_REVIEW_BASE`, defaulting to `main`.
+- Assumption: this SPEC is written to bring an already-implemented documentation change
+  into compliance (retroactive); the Spec Gate review here is the Developer's approval of
+  the change as a whole.
+- Risk: the root `SPEC.md` is transient and overwrites the prior (merged) Codex-gate
+  spec; that content remains in git history (PR #1).
+- Assumption: no code changes, so the "tests" are the consistency checks above rather
+  than executable unit tests.
