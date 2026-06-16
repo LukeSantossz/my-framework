@@ -1,6 +1,6 @@
 # CRURA Method
 
-Human review discipline. Counterpart to the Self-Review section of `ai_guidelines.md`; feeds the PR Self-Review Checklist in `github.md`.
+Human review discipline. Counterpart to the Self-Review section of `ai_guidelines.md`; feeds the PR Review Checklist in `github.md`.
 
 ## Benefits
 

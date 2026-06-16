@@ -59,7 +59,7 @@ did not run; record that in the PR per the next section.
 
 ## Recording in the PR
 
-In the PR Self-Review Checklist (`github.md`), name the models for the review layers:
+In the PR Review Checklist (`github.md`), name the models for the review layers:
 Author `claude-opus-4-8`, Reviewer `codex / gpt-5.5`. If R2 did not run (Codex absent,
 skipped, or bypassed), note it and why, as the checklist requires.
 
