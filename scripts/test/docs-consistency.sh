@@ -24,11 +24,17 @@ if matches=$(grep -rEn "Self-Review Checklist|author approves" "$docs_dir"); the
   fail=1
 fi
 
+# The .md reference tokens in INDEX.md, shared by Checks 2 and 3.
+refs="$(grep -oE '[A-Za-z0-9_./-]+\.md' "$index" | sort -u)"
+
 # Check 2: every standard is listed in INDEX.md (no orphan documents).
+# Whole-token match: a name that is a substring of a listed reference
+# (hub.md inside github.md) must still be flagged as missing.
 for f in "$docs_dir"/*.md; do
   base="$(basename "$f")"
   [ "$base" = "INDEX.md" ] && continue
-  if ! grep -qF "$base" "$index"; then
+  base_re="$(printf '%s' "$base" | sed 's/\./\\./g')"
+  if ! printf '%s\n' "$refs" | grep -qE "(^|/)${base_re}\$"; then
     log "missing from INDEX.md: $base"
     fail=1
   fi
@@ -38,7 +44,6 @@ done
 # separator) are checked against the standards dir or the repo root (e.g.
 # CLAUDE.md, SPEC.md). References containing a path separator (e.g.
 # docs/adr/...) are checked relative to the repo root.
-refs="$(grep -oE '[A-Za-z0-9_./-]+\.md' "$index" | sort -u)"
 for ref in $refs; do
   case "$ref" in
     */*)
