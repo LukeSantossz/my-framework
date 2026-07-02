@@ -28,7 +28,9 @@ cat > "$STUB_DIR/gh" <<'STUB'
 printf 'STUB_GH %s\n' "$*" >> "$GH_LOG"
 case "$1 $2" in
   "auth status") exit 0 ;;
-  "label list") [ -n "${STUB_GH_LABELS:-}" ] && printf '%s\n' $STUB_GH_LABELS; exit 0 ;;
+  "label list")
+    [ -n "${STUB_GH_LIST_FAILS:-}" ] && exit 1
+    [ -n "${STUB_GH_LABELS:-}" ] && printf '%s\n' $STUB_GH_LABELS; exit 0 ;;
   "label create") exit 0 ;;
 esac
 exit 0
@@ -106,6 +108,30 @@ if [ "$code" -eq 0 ] && grep -q -- "label list .*--limit" "$log"; then
   ok "setup_lists_labels_unpaginated"
 else
   no "setup_lists_labels_unpaginated" "code=$code out=$out"
+fi
+
+# setup_fails_when_hookspath_cannot_be_set (a stale config lock makes
+# `git config` fail; setup must not report the gate as active).
+repo="$(new_repo lockedcfg)"
+log="$SANDBOX/lockedcfg.log"; : > "$log"
+touch "$repo/.git/config.lock"
+out=$(cd "$repo" && GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -ne 0 ] && ! printf '%s' "$out" | grep -q "gate active"; then
+  ok "setup_fails_when_hookspath_cannot_be_set"
+else
+  no "setup_fails_when_hookspath_cannot_be_set" "code=$code out=$out"
+fi
+
+# setup_skips_label_creation_when_list_fails (label discovery failing must not
+# be treated as an empty label set; no creates, advisory message, exit 0).
+repo="$(new_repo listfail)"
+log="$SANDBOX/listfail.log"; : > "$log"
+out=$(cd "$repo" && GH_LOG="$log" STUB_GH_LIST_FAILS=1 PATH="$STUB_DIR:$PATH" bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -eq 0 ] && ! grep -q "label create" "$log" \
+  && printf '%s' "$out" | grep -q "could not list labels"; then
+  ok "setup_skips_label_creation_when_list_fails"
+else
+  no "setup_skips_label_creation_when_list_fails" "code=$code out=$out"
 fi
 
 # setup_label_specs_match_triage_labels_doc (guard: fails if setup.sh's
