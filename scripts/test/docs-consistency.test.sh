@@ -58,6 +58,20 @@ else
   no "docs_consistency_detects_index_drift" "code=$code out=$out"
 fi
 
+# docs_consistency_detects_substring_orphan (hub.md unlisted must be flagged
+# even though the listed github.md contains it as a substring)
+root="$(make_fixture substr)"
+printf -- '- `github.md`: git and GitHub standard.\n' >> "$root/docs/standards/INDEX.md"
+printf '# GitHub\n' > "$root/docs/standards/github.md"
+printf '# Hub\n' > "$root/docs/standards/hub.md"
+out=$(ROOT_DIR="$root" bash "$CHECK" 2>&1); code=$?
+if [ "$code" -ne 0 ] && printf '%s' "$out" | grep -qF "missing from INDEX.md: hub.md" \
+  && ! printf '%s' "$out" | grep -qF "missing from INDEX.md: github.md"; then
+  ok "docs_consistency_detects_substring_orphan"
+else
+  no "docs_consistency_detects_substring_orphan" "code=$code out=$out"
+fi
+
 # docs_consistency_detects_missing_reference (referenced, not present)
 root="$(make_fixture rev)"
 printf -- '- `ghost.md`: does not exist.\n' >> "$root/docs/standards/INDEX.md"
