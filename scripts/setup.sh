@@ -24,8 +24,12 @@ repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
 }
 log "repo: $repo_root"
 
-# 2. Activate the R2 pre-push gate (idempotent local setting).
-git config core.hooksPath .githooks
+# 2. Activate the R2 pre-push gate (idempotent local setting). This is the
+#    activation itself: if it cannot be set, the bootstrap failed.
+if ! git config core.hooksPath .githooks; then
+  log "failed to set core.hooksPath (is .git/config writable?); activation incomplete."
+  exit 1
+fi
 log "core.hooksPath -> .githooks (R2 pre-push gate active)."
 
 # 3. Toolchain report. Advisory: absence never fails the bootstrap, matching
@@ -46,8 +50,14 @@ elif ! "$gh_bin" auth status >/dev/null 2>&1; then
 fi
 
 # 4. Create the triage labels that are missing from the tracker.
+# A failed listing must not read as an empty label set: creating against an
+# unknown set misreports existing labels as creation failures.
+if [ "$labels_ok" -eq 1 ] && ! existing="$("$gh_bin" label list --limit 500 --json name --jq '.[].name')"; then
+  log "gh: could not list labels (older gh, missing repo permission, or network error); skipping triage-label creation."
+  labels_ok=0
+fi
+
 if [ "$labels_ok" -eq 1 ]; then
-  existing="$("$gh_bin" label list --limit 500 --json name --jq '.[].name' 2>/dev/null)"
   printf '%s\n' "$LABEL_SPECS" | while IFS='|' read -r name color desc; do
     if printf '%s\n' "$existing" | grep -qx "$name"; then
       log "label '$name': present."
