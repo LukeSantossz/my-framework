@@ -17,11 +17,15 @@ SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
 
 # A minimal consistent docs tree: INDEX.md referencing a.md, and a.md present.
+# Also includes one valid path-style reference (docs/adr/0001-real.md) to prove
+# such references still pass once they resolve against the repo root.
 make_fixture() {
   d="$SANDBOX/$1/docs/standards"
-  mkdir -p "$d"
-  printf '# Index\n\n- `a.md`: sample standard.\n' > "$d/INDEX.md"
+  adr="$SANDBOX/$1/docs/adr"
+  mkdir -p "$d" "$adr"
+  printf '# Index\n\n- `a.md`: sample standard.\n- See `docs/adr/0001-real.md` for the decision.\n' > "$d/INDEX.md"
   printf '# A\n\nClean content.\n' > "$d/a.md"
+  printf '# Decision\n' > "$adr/0001-real.md"
   printf '%s\n' "$SANDBOX/$1"
 }
 
@@ -62,6 +66,16 @@ if [ "$code" -ne 0 ] && printf '%s' "$out" | grep -q "ghost.md"; then
   ok "docs_consistency_detects_missing_reference"
 else
   no "docs_consistency_detects_missing_reference" "code=$code out=$out"
+fi
+
+# docs_consistency_detects_missing_path_reference (path-style ref, not present)
+root="$(make_fixture pathrev)"
+printf -- '- See `docs/adr/0001-ghost.md` for the decision.\n' >> "$root/docs/standards/INDEX.md"
+out=$(ROOT_DIR="$root" bash "$CHECK" 2>&1); code=$?
+if [ "$code" -ne 0 ] && printf '%s' "$out" | grep -q "docs/adr/0001-ghost.md"; then
+  ok "docs_consistency_detects_missing_path_reference"
+else
+  no "docs_consistency_detects_missing_path_reference" "code=$code out=$out"
 fi
 
 # passes_on_current_tree (the real docs/standards must be consistent)
