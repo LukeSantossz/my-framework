@@ -34,16 +34,26 @@ for f in "$docs_dir"/*.md; do
   fi
 done
 
-# Check 3: every plain-file .md reference in INDEX.md resolves, either in the
-# standards dir or at the repo root (e.g. CLAUDE.md, SPEC.md). References
-# containing a path separator (e.g. docs/adr/...) are out of scope here.
+# Check 3: every .md reference in INDEX.md resolves. Plain filenames (no path
+# separator) are checked against the standards dir or the repo root (e.g.
+# CLAUDE.md, SPEC.md). References containing a path separator (e.g.
+# docs/adr/...) are checked relative to the repo root.
 refs="$(grep -oE '[A-Za-z0-9_./-]+\.md' "$index" | sort -u)"
 for ref in $refs; do
-  case "$ref" in */*) continue ;; esac
-  if [ ! -f "$docs_dir/$ref" ] && [ ! -f "$root/$ref" ]; then
-    log "INDEX.md references missing file: $ref"
-    fail=1
-  fi
+  case "$ref" in
+    */*)
+      if [ ! -f "$root/$ref" ]; then
+        log "INDEX.md references missing file: $ref"
+        fail=1
+      fi
+      ;;
+    *)
+      if [ ! -f "$docs_dir/$ref" ] && [ ! -f "$root/$ref" ]; then
+        log "INDEX.md references missing file: $ref"
+        fail=1
+      fi
+      ;;
+  esac
 done
 
 [ "$fail" -eq 0 ] && log "all checks passed."
