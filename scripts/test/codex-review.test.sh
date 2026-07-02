@@ -22,7 +22,15 @@ echo "STUB_CODEX_CALLED $*"
 exit "${STUB_EXIT:-0}"
 STUB
 chmod +x "$STUB_DIR/codex"
-trap 'rm -rf "$STUB_DIR"' EXIT
+
+# Throwaway git repos so codexreview.* config never leaks from this repo.
+REPO_SANDBOX="$(mktemp -d)"
+trap 'rm -rf "$STUB_DIR" "$REPO_SANDBOX"' EXIT
+new_repo() {
+  d="$REPO_SANDBOX/repo-$1"
+  git init -q "$d"
+  printf '%s\n' "$d"
+}
 
 # bypass_env_skips_gate
 out=$(SKIP_CODEX_REVIEW=1 CODEX_REVIEW_BRANCH=feature/x bash "$RUNNER" 2>&1); code=$?
@@ -48,22 +56,57 @@ else
   no "skips_review_when_codex_binary_absent" "code=$code out=$out"
 fi
 
-# builds_review_command_with_pinned_model (dry-run prints the exact command)
+# review_model_default_when_unset (dry-run prints the default command)
 expected='codex review --base main -c model="gpt-5.5" -c model_reasoning_effort="high"'
-out=$(PATH="$STUB_DIR:$PATH" CODEX_REVIEW_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
+repo="$(new_repo default)"
+out=$(cd "$repo" && PATH="$STUB_DIR:$PATH" CODEX_REVIEW_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
 if [ "$code" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "$expected"; then
-  ok "builds_review_command_with_pinned_model"
+  ok "review_model_default_when_unset"
 else
-  no "builds_review_command_with_pinned_model" "code=$code out=$out"
+  no "review_model_default_when_unset" "code=$code out=$out"
 fi
 
 # honors_dryrun_even_when_codex_absent (R2 finding P2): dry-run prints the command
 # regardless of Codex availability, per codex_review.md.
-out=$(CODEX_REVIEW_BRANCH=feature/x CODEX_BIN=__no_such_codex__ CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
+repo="$(new_repo dryrun)"
+out=$(cd "$repo" && CODEX_REVIEW_BRANCH=feature/x CODEX_BIN=__no_such_codex__ CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
 if [ "$code" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "$expected"; then
   ok "honors_dryrun_even_when_codex_absent"
 else
   no "honors_dryrun_even_when_codex_absent" "code=$code out=$out"
+fi
+
+# review_model_env_override (env vars replace model and effort)
+expected_env='codex review --base main -c model="modelX" -c model_reasoning_effort="xhigh"'
+repo="$(new_repo envover)"
+out=$(cd "$repo" && CODEX_REVIEW_MODEL=modelX CODEX_REVIEW_EFFORT=xhigh CODEX_REVIEW_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "$expected_env"; then
+  ok "review_model_env_override"
+else
+  no "review_model_env_override" "code=$code out=$out"
+fi
+
+# review_model_git_config_fallback (persisted keys used when env is absent)
+expected_cfg='codex review --base main -c model="modelY" -c model_reasoning_effort="low"'
+repo="$(new_repo cfg)"
+git -C "$repo" config codexreview.model modelY
+git -C "$repo" config codexreview.effort low
+out=$(cd "$repo" && CODEX_REVIEW_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "$expected_cfg"; then
+  ok "review_model_git_config_fallback"
+else
+  no "review_model_git_config_fallback" "code=$code out=$out"
+fi
+
+# review_model_env_beats_git_config (precedence: env wins over persisted keys)
+repo="$(new_repo prec)"
+git -C "$repo" config codexreview.model modelY
+git -C "$repo" config codexreview.effort low
+out=$(cd "$repo" && CODEX_REVIEW_MODEL=modelX CODEX_REVIEW_EFFORT=xhigh CODEX_REVIEW_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "$expected_env"; then
+  ok "review_model_env_beats_git_config"
+else
+  no "review_model_env_beats_git_config" "code=$code out=$out"
 fi
 
 # advisory_on_codex_failure_does_not_block (design: R2 is advisory by default)
