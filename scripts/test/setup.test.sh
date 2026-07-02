@@ -31,7 +31,7 @@ case "$1 $2" in
   "label list")
     [ -n "${STUB_GH_LIST_FAILS:-}" ] && exit 1
     [ -n "${STUB_GH_LABELS:-}" ] && printf '%s\n' $STUB_GH_LABELS; exit 0 ;;
-  "label create") exit 0 ;;
+  "label create") [ -n "${STUB_GH_CREATE_FAILS:-}" ] && exit 1; exit 0 ;;
 esac
 exit 0
 STUB
@@ -132,6 +132,17 @@ if [ "$code" -eq 0 ] && ! grep -q "label create" "$log" \
   ok "setup_skips_label_creation_when_list_fails"
 else
   no "setup_skips_label_creation_when_list_fails" "code=$code out=$out"
+fi
+
+# setup_fails_when_label_create_fails (a failed create must not end in a
+# success report; advisory covers only an absent/unauthenticated toolchain).
+repo="$(new_repo createfail)"
+log="$SANDBOX/createfail.log"; : > "$log"
+out=$(cd "$repo" && GH_LOG="$log" STUB_GH_LABELS="" STUB_GH_CREATE_FAILS=1 PATH="$STUB_DIR:$PATH" bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -ne 0 ] && ! printf '%s' "$out" | grep -q "bootstrap complete"; then
+  ok "setup_fails_when_label_create_fails"
+else
+  no "setup_fails_when_label_create_fails" "code=$code out=$out"
 fi
 
 # setup_label_specs_match_triage_labels_doc (guard: fails if setup.sh's
