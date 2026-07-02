@@ -57,16 +57,26 @@ if [ "$labels_ok" -eq 1 ] && ! existing="$("$gh_bin" label list --limit 500 --js
   labels_ok=0
 fi
 
+# The loop reads from a heredoc (not a pipe) so label_failures survives it:
+# a failed create must fail the bootstrap, not end in a success report.
 if [ "$labels_ok" -eq 1 ]; then
-  printf '%s\n' "$LABEL_SPECS" | while IFS='|' read -r name color desc; do
+  label_failures=0
+  while IFS='|' read -r name color desc; do
     if printf '%s\n' "$existing" | grep -qx "$name"; then
       log "label '$name': present."
     elif "$gh_bin" label create "$name" --color "$color" --description "$desc" >/dev/null 2>&1; then
       log "label '$name': created."
     else
       log "label '$name': create failed (check gh permissions for this repo)."
+      label_failures=$((label_failures + 1))
     fi
-  done
+  done <<EOF
+$LABEL_SPECS
+EOF
+  if [ "$label_failures" -gt 0 ]; then
+    log "activation bootstrap incomplete: $label_failures label(s) could not be created."
+    exit 1
+  fi
 fi
 
 log "activation bootstrap complete."
