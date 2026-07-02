@@ -47,7 +47,7 @@ fi
 
 # 4. Create the triage labels that are missing from the tracker.
 if [ "$labels_ok" -eq 1 ]; then
-  existing="$("$gh_bin" label list --json name --jq '.[].name' 2>/dev/null)"
+  existing="$("$gh_bin" label list --limit 500 --json name --jq '.[].name' 2>/dev/null)"
   printf '%s\n' "$LABEL_SPECS" | while IFS='|' read -r name color desc; do
     if printf '%s\n' "$existing" | grep -qx "$name"; then
       log "label '$name': present."
