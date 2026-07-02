@@ -108,5 +108,20 @@ else
   no "setup_lists_labels_unpaginated" "code=$code out=$out"
 fi
 
+# setup_label_specs_match_triage_labels_doc (guard: fails if setup.sh's
+# LABEL_SPECS drifts from docs/agents/triage-labels.md's mapping table).
+TRIAGE_DOC="$REPO_ROOT/docs/agents/triage-labels.md"
+spec_labels="$(sed -n "/^LABEL_SPECS='/,/'\$/p" "$RUNNER" \
+  | sed "1s/^LABEL_SPECS='//; \$s/'\$//" \
+  | cut -d'|' -f1 | sort)"
+doc_labels="$(grep -E '^\| `' "$TRIAGE_DOC" \
+  | awk -F'|' '{print $3}' \
+  | tr -d '` ' | sort)"
+if [ "$spec_labels" = "$doc_labels" ]; then
+  ok "setup_label_specs_match_triage_labels_doc"
+else
+  no "setup_label_specs_match_triage_labels_doc" "setup.sh=[$(printf '%s' "$spec_labels" | tr '\n' ' ')] triage-labels.md=[$(printf '%s' "$doc_labels" | tr '\n' ' ')]"
+fi
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
