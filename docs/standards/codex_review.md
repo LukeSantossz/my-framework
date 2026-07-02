@@ -24,6 +24,10 @@ git config core.hooksPath .githooks
 This is a local setting and is not committed. Requires `codex` on `PATH` and an
 authenticated session (`codex login`). Verify the toolchain with `codex doctor`.
 
+Alternatively, run `bash scripts/setup.sh`: it applies this setting, reports the
+toolchain state, and creates any missing triage labels. It is idempotent and safe
+to re-run.
+
 ## What runs
 
 On `git push`, `.githooks/pre-push` calls `scripts/codex-review.sh`, which runs:
