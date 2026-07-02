@@ -88,16 +88,21 @@ else
   no "setup_reports_missing_toolchain" "code=$code out=$out"
 fi
 
-# setup_is_idempotent
+# setup_is_idempotent (first run creates every label, second run — with the
+# labels now existing — must add no new creates)
 repo="$(new_repo idem)"
 log="$SANDBOX/idem.log"; : > "$log"
-out1=$(cd "$repo" && GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" 2>&1); code1=$?
+set -- $ALL_LABELS; expected=$#
+out1=$(cd "$repo" && GH_LOG="$log" STUB_GH_LABELS="" PATH="$STUB_DIR:$PATH" bash "$RUNNER" 2>&1); code1=$?
+creates1="$(grep -c "label create" "$log")"
 out2=$(cd "$repo" && GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" 2>&1); code2=$?
+creates2="$(grep -c "label create" "$log")"
 hooks="$(git -C "$repo" config core.hooksPath || true)"
-if [ "$code1" -eq 0 ] && [ "$code2" -eq 0 ] && [ "$hooks" = ".githooks" ] && ! grep -q "label create" "$log"; then
+if [ "$code1" -eq 0 ] && [ "$code2" -eq 0 ] && [ "$hooks" = ".githooks" ] \
+  && [ "$creates1" -eq "$expected" ] && [ "$creates2" -eq "$expected" ]; then
   ok "setup_is_idempotent"
 else
-  no "setup_is_idempotent" "code1=$code1 code2=$code2 hooksPath=$hooks out2=$out2"
+  no "setup_is_idempotent" "code1=$code1 code2=$code2 hooksPath=$hooks creates1=$creates1 creates2=$creates2 out2=$out2"
 fi
 
 # setup_lists_labels_unpaginated
