@@ -1,0 +1,25 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Shell tests
+        run: |
+          bash scripts/test/codex-review.test.sh
+          bash scripts/test/setup.test.sh
+          bash scripts/test/docs-consistency.test.sh
+      - name: Docs consistency
+        run: bash scripts/test/docs-consistency.sh

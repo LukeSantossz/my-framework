@@ -24,6 +24,10 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - Review composes across three layers meeting at the PR: R1 internal Superpowers review, R2 cross-provider review, R3 automated PR review, per `ai_guidelines.md` Review Composition. Human review follows `crura_method.md`.
 - Token economy per `token_economy.md`: `CLAUDE.md` is kept compressed; terse mode is allowed in conversation but never in `SPEC.md`, PR, Issue, or commit artifacts. It never overrides Safety or Correctness.
 - Conflict resolution follows the precedence order in `code_conventions.md`.
+- Activation is bootstrapped, not assumed: `bash scripts/setup.sh` applies the local
+  activation state (hooks path, triage labels) and reports the toolchain; CI
+  (`.github/workflows/ci.yml`) runs the shell tests and the docs-consistency checks
+  (`scripts/test/docs-consistency.sh`) on every push and pull request to `main`.
 
 ## Reading Order
 
