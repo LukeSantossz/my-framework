@@ -98,5 +98,15 @@ else
   no "setup_is_idempotent" "code1=$code1 code2=$code2 hooksPath=$hooks out2=$out2"
 fi
 
+# setup_lists_labels_unpaginated
+repo="$(new_repo unpaginated)"
+log="$SANDBOX/unpaginated.log"; : > "$log"
+out=$(cd "$repo" && GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -eq 0 ] && grep -q -- "label list .*--limit" "$log"; then
+  ok "setup_lists_labels_unpaginated"
+else
+  no "setup_lists_labels_unpaginated" "code=$code out=$out"
+fi
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]
