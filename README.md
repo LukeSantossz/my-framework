@@ -51,7 +51,7 @@ Adopting in another repository: copy the standards and everything they reference
 bash scripts/setup.sh
 ```
 
-Use `bash scripts/setup.sh --interactive` to persist reviewer model, reasoning effort, and token-economy choices locally.
+Use `bash scripts/setup.sh --interactive` to persist the reviewer model and reasoning effort locally; the token-economy choice is informational.
 
 `scripts/test/docs-consistency.test.sh` is this repository's self-test suite — it pins this repo's spec archive, git history, and README. Adopters validate with `bash scripts/test/docs-consistency.sh` and drop the self-test line from the copied CI workflow.
 
