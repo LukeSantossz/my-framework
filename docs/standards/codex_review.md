@@ -36,7 +36,7 @@ to re-run.
 
 On `git push`, `.githooks/pre-push` calls `scripts/codex-review.sh`, which runs:
 
-```markdown
+```sh
 codex review --base main -c model="<resolved model>" -c model_reasoning_effort="<resolved effort>"
 ```
 
