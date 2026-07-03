@@ -3,6 +3,11 @@
 # Each test maps to an Acceptance Criterion in SPEC.md.
 set -u
 
+# Isolate git config lookups from this machine's global/system scope so
+# `git config codexreview.*` reads inside sandboxed repos never pick up
+# an operator's real settings.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+
 TEST_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$TEST_DIR/../.." && pwd)"
 RUNNER="$REPO_ROOT/scripts/setup.sh"

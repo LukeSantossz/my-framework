@@ -3,6 +3,11 @@
 # Each test maps to an Acceptance Criterion in SPEC.md.
 set -u
 
+# Isolate git config lookups from this machine's global/system scope so
+# `git config codexreview.*` reads inside sandboxed repos never pick up
+# an operator's real settings.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+
 TEST_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$TEST_DIR/../.." && pwd)"
 RUNNER="$REPO_ROOT/scripts/codex-review.sh"
@@ -59,7 +64,7 @@ fi
 # review_model_default_when_unset (dry-run prints the default command)
 expected='codex review --base main -c model="gpt-5.5" -c model_reasoning_effort="high"'
 repo="$(new_repo default)"
-out=$(cd "$repo" && PATH="$STUB_DIR:$PATH" CODEX_REVIEW_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
+out=$(cd "$repo" && PATH="$STUB_DIR:$PATH" CODEX_REVIEW_MODEL= CODEX_REVIEW_EFFORT= CODEX_REVIEW_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
 if [ "$code" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "$expected"; then
   ok "review_model_default_when_unset"
 else
@@ -69,7 +74,7 @@ fi
 # honors_dryrun_even_when_codex_absent (R2 finding P2): dry-run prints the command
 # regardless of Codex availability, per codex_review.md.
 repo="$(new_repo dryrun)"
-out=$(cd "$repo" && CODEX_REVIEW_BRANCH=feature/x CODEX_BIN=__no_such_codex__ CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
+out=$(cd "$repo" && CODEX_REVIEW_MODEL= CODEX_REVIEW_EFFORT= CODEX_REVIEW_BRANCH=feature/x CODEX_BIN=__no_such_codex__ CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
 if [ "$code" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "$expected"; then
   ok "honors_dryrun_even_when_codex_absent"
 else
@@ -91,7 +96,7 @@ expected_cfg='codex review --base main -c model="modelY" -c model_reasoning_effo
 repo="$(new_repo cfg)"
 git -C "$repo" config codexreview.model modelY
 git -C "$repo" config codexreview.effort low
-out=$(cd "$repo" && CODEX_REVIEW_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
+out=$(cd "$repo" && CODEX_REVIEW_MODEL= CODEX_REVIEW_EFFORT= CODEX_REVIEW_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
 if [ "$code" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "$expected_cfg"; then
   ok "review_model_git_config_fallback"
 else
