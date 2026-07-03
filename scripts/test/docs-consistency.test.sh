@@ -156,6 +156,35 @@ else
   no "standards_authority_and_ambiguity_recorded" "missing wording in:$authority_missing"
 fi
 
+# durable_spec_archive_recorded (guard: specs are authored durably under
+# docs/specs/ with a documented spec-lite tier, the root SPEC.md is retired,
+# ADR 0002 amends ADR 0001, and CONTEXT.md drops the overwritten-each-change
+# wording)
+SPEC_METHOD_DOC="$REPO_ROOT/docs/standards/spec_method.md"
+ADR_0001_DOC="$REPO_ROOT/docs/adr/0001-decision-records-flow.md"
+ADR_0002_DOC="$REPO_ROOT/docs/adr/0002-durable-spec-archive.md"
+CONTEXT_DOC="$REPO_ROOT/CONTEXT.md"
+durable_spec_missing=""
+grep -q "docs/specs/" "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_docs_specs"
+grep -q "spec-lite" "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_spec_lite"
+for n in 0001 0002 0003 0004 0005 0006 0007; do
+  match="$(ls "$REPO_ROOT/docs/specs/${n}"*.md 2>/dev/null | head -1)"
+  if [ -z "$match" ]; then
+    durable_spec_missing="$durable_spec_missing specs_${n}_missing"
+  elif ! head -1 "$match" | grep -q "^# SPEC:"; then
+    durable_spec_missing="$durable_spec_missing specs_${n}_header"
+  fi
+done
+[ ! -f "$REPO_ROOT/SPEC.md" ] || durable_spec_missing="$durable_spec_missing root_spec_present"
+[ -f "$ADR_0002_DOC" ] || durable_spec_missing="$durable_spec_missing adr_0002_missing"
+grep -q "0002" "$ADR_0001_DOC" || durable_spec_missing="$durable_spec_missing adr_0001_not_amended"
+grep -q "overwritten by the next change" "$CONTEXT_DOC" && durable_spec_missing="$durable_spec_missing context_still_transient"
+if [ -z "$durable_spec_missing" ]; then
+  ok "durable_spec_archive_recorded"
+else
+  no "durable_spec_archive_recorded" "missing:$durable_spec_missing"
+fi
+
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
 # any standard's body must fail, not only in INDEX.md)
 root="$(make_fixture bodyrefs)"
