@@ -66,6 +66,10 @@ guard block per cluster in `scripts/test/docs-consistency.test.sh`.
     Spec-lite term is added.
   - `docs/standards/INDEX.md`: one System Rules line recording the durable
     spec archive.
+  - Adjudicated during controller review, same invariant: the pre-existing
+    transiency claims in the `INDEX.md` decision-records-flow rule and the
+    `CONTEXT.md` decision-records intro are corrected to the durable-archive
+    wording, and the cluster A guard is extended to pin both phrases.
   - `scripts/test/docs-consistency.sh`: `HYPOTHETICAL_REFS` gains `SPEC.md`
     with its justification comment (the artifact's generic name in prose;
     concrete specs live under `docs/specs/`), and the Check 3 comment example
