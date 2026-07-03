@@ -1,129 +1,195 @@
-# SPEC: chore(standards): align global and repo standards into one coherent rule set
+# SPEC: chore(framework): archive specs durably, generalize the issue model, and add the framework readme
 
 ## Problem
-The user's global `CLAUDE.md` and the repo standards contradict each other in
-four places (ambiguity policy, an unqualified "Gate", a duplicated VAR table,
-and the deprecated "Self-Review" section name), and three smaller gaps blur
-the review machinery (CRURA predates the R1/R2/R3 composition, the badges
-rule reads as conflicting with the honesty ethos, and no standard records
-that CodeRabbit is the R3 actually wired on this repo).
+The framework discards every approved spec by overwriting the root `SPEC.md`,
+its Issue Model only fits replacement-shaped changes, and the repository that
+mandates a README model for adopters has no README of its own.
 
 ## Design Decision
-One coherence pass in two parts. Repo side (this PR, three parallel doc
-clusters): `code_conventions.md` gains an explicit authority rule — a repo's
-standards override user-global defaults, with Safety and Correctness never
-overridden — echoed in `INDEX.md`; `ai_guidelines.md`'s Declare Assumptions
-becomes the agreed hybrid-by-cost policy verbatim (assume-and-declare when
-cheap to reverse, one focused question when costly); `crura_method.md` is
-rewritten to compose with R1/R2/R3 (human review as final arbiter fed by the
-three layers, stages tied to today's artifacts); `github.md`'s Badges section
-gains the resolving rationale (honesty is discharged by the mandatory Known
-Issues section, not by the badge strip); `codex_review.md` records CodeRabbit
-as the R3 wired on this repository. User side (executed at cycle end, outside
-the PR, with a backup kept): the global `CLAUDE.md` is rewritten thin —
-hybrid ambiguity wording, "Spec Gate" qualified, VAR table replaced by a
-pointer to the repo's `var_method.md`, "Self-Review" renamed "PR Review
-Checklist", and the repo-over-global precedence line added.
+Approved specs become durable: they are authored directly under
+`docs/specs/NNNN-<slug>.md` (numbered like ADRs), the root `SPEC.md` is retired
+and its six historical versions are backfilled from git history, and
+`spec_method.md` gains a spec-lite tier for changes that need no recorded
+trade-off; ADR 0002 records this amendment to the decision-records flow. The
+Issue Model in `github.md` becomes type-agnostic (a conditional "Current State"
+and a "Proposed Solution" replace the refactor-shaped sections) with the issue
+template aligned and its literal title pre-fill removed. The repository gets a
+`README.md` that follows its own README Model, carrying the adoption story and
+the versioning policy. The change is executed as three parallel disjoint
+clusters cherry-picked into one PR (the proven PR #5/#6 pattern), with one
+guard block per cluster in `scripts/test/docs-consistency.test.sh`.
 
 ## Alternatives Considered
-- Ask-first ambiguity policy everywhere (the current global text): rejected
-  by the user — it blocks AFK and parallel work; the hybrid-by-cost rule is
-  what the working sessions already practice.
-- Keeping the global file rich but aligned (VAR table corrected in place):
-  rejected by the user — duplication is standing drift risk; thin-with-
-  pointer removes the class of bug.
-- Making badges honest (show red CI): rejected in favor of documenting the
-  separation of duties — badges communicate health for the shop window, the
-  mandatory Known Issues section carries the honesty duty; hiding is only
-  forbidden where the reader expects truth.
-- Pinning the global `CLAUDE.md` content with a repo test: rejected — CI has
-  no access to `~/.claude/`; the global file's criteria are verified by
-  inspection at execution and recorded in the PR Evidence.
+- Keep authoring at the root `SPEC.md` and archive a copy at merge: rejected —
+  it creates dual maintenance when adjudication amends the spec mid-PR (which
+  happened in PR #6), and no cheap guard can force the copy to stay equal to
+  the original.
+- Keep specs transient and rely on ADRs alone (the status quo per ADR 0001):
+  rejected — an ADR records one curated decision, not the approved scope and
+  acceptance criteria of a change; gate-approved intent is currently lost every
+  cycle and survives only through git archaeology.
+- Three separate PRs, one per cluster: rejected — it triples the R2/R3 review
+  cycles for no isolation benefit; the single-PR disjoint-cluster pattern is
+  proven on PRs #5 and #6.
+- GitHub issue forms (YAML) to solve the literal title placeholder: rejected —
+  a heavier migration with new syntax to maintain; removing the `title:`
+  pre-fill from the existing markdown template achieves the same outcome.
 
 ## Scope
-- Includes (cluster B — authority and ambiguity):
-  - `docs/standards/code_conventions.md` Precedence section: an explicit rule
-    that a repository's standards override user-global defaults (for example
-    a global `CLAUDE.md`), and that Safety and Correctness are never
-    overridden by either side.
-  - `docs/standards/ai_guidelines.md` Declare Assumptions: the hybrid policy
-    stated as the single rule — state the assumption in one line and proceed
-    when it is cheap to reverse; ask one focused question first when a wrong
-    assumption is costly to reverse.
-  - `docs/standards/INDEX.md` System Rules: one line recording the
-    repo-over-global authority rule.
-- Includes (cluster C — human review):
-  - `docs/standards/crura_method.md`: stages tied to today's artifacts (R =
-    the Self-Review section of `ai_guidelines.md` locally; RA = the Files
-    Changed pass backed by the PR Review Checklist of `github.md`), plus a
-    Review Composition paragraph: the human review is the final arbiter and
-    consumes the R1/R2/R3 layers' recorded results rather than repeating
-    them; the "reviews the same code at least 3 times" claim restated
-    accurately in terms of the actual stages.
-- Includes (cluster D — shop window and R3):
-  - `docs/standards/github.md` Badges: the rationale sentence — badges
-    communicate health; the honesty duty is discharged by the mandatory
-    Known Issues section, never by the badge strip.
-  - `docs/standards/codex_review.md`: a line recording that R3 on this
-    repository is CodeRabbit (wired via the GitHub app), adjudicated in the
-    PR discussion like any reviewer finding.
-- Includes (guard tests): one guard per doc invariant above, placed in
-  `scripts/test/docs-consistency.test.sh` at distinct anchors per cluster
-  (B after `codex_review_doc_depinned`; C after the skills-guidelines guard;
-  D before `repo_scripts_are_executable`) so the parallel branches merge
-  cleanly.
-- Includes (user side, at execution, not in the PR): rewrite
-  `~/.claude/CLAUDE.md` to the thin form described in the Design Decision,
-  after saving a timestamped backup next to it.
+- Includes (cluster A — durable specs; owns `spec_method.md`, `CONTEXT.md`,
+  `docs/adr/`, `docs/specs/`, `docs/standards/INDEX.md`,
+  `scripts/test/docs-consistency.sh`):
+  - `docs/standards/spec_method.md`: the durable home (`docs/specs/NNNN-<slug>.md`,
+    authored there directly, numbered sequentially) and the spec-lite tier —
+    permitted when the change needs no Design Decision worth recording; it
+    keeps exactly the three Gate-checked sections (Problem, Scope with a
+    non-empty "Does NOT include", Acceptance Criteria); if Alternatives
+    Considered turns out to be needed, the spec is full-tier. The Spec Gate
+    criteria are unchanged for both tiers.
+  - Backfill `docs/specs/0001`–`0006` verbatim from git history, slugs drawn
+    from each spec's own title, extraction points pinned:
+    0001 `git show 1d1742a^:SPEC.md` (codex pre-push gate), 0002
+    `git show 326bf49^:SPEC.md` (domain glossary), 0003 `git show 4f03e9e^:SPEC.md`
+    (activation gap), 0004 `git show 6a0680f^:SPEC.md` (toolchain portability),
+    0005 `git show 7e62d08^:SPEC.md` (maintenance batch), 0006
+    `git show 619ea7d:SPEC.md` (standards coherence). Each extraction must
+    start with `# SPEC:`; a wrong extraction point is corrected by searching
+    adjacent commits, never by editing recovered content.
+  - This spec becomes `docs/specs/0007-durable-specs-issue-model-readme.md`;
+    the root `SPEC.md` is then deleted.
+  - `docs/adr/0002-durable-spec-archive.md`: new ADR recording that specs are
+    durable while the ADR remains the curated home for decision rationale
+    (audience and lifetime differ); `docs/adr/0001-decision-records-flow.md`
+    gains an amended-by-0002 note on its transiency claim.
+  - `CONTEXT.md`: the SPEC.md and Alternatives Considered entries drop the
+    overwritten-each-change wording in favor of the durable archive; a
+    Spec-lite term is added.
+  - `docs/standards/INDEX.md`: one System Rules line recording the durable
+    spec archive.
+  - `scripts/test/docs-consistency.sh`: `HYPOTHETICAL_REFS` gains `SPEC.md`
+    with its justification comment (the artifact's generic name in prose;
+    concrete specs live under `docs/specs/`), and the Check 3 comment example
+    no longer cites the root `SPEC.md`.
+- Includes (cluster B — issue model; owns `docs/standards/github.md` and
+  `.github/ISSUE_TEMPLATE/issue.md`):
+  - `github.md` Issue Model: Description, Context, and Acceptance Criteria stay
+    mandatory; "Current Usage" becomes "Current State", conditional — included
+    only when the issue changes existing behavior; "Recommended Alternative"
+    becomes "Proposed Solution" (name plus reasons, criteria kept).
+  - `github.md` README Model, What It Is: the classification list is made
+    explicitly illustrative (e.g.-wording) so artifacts outside the list — such
+    as a standards framework — can classify themselves honestly. This edit
+    lives in cluster B only because cluster B owns `github.md`; no two
+    clusters touch the same file.
+  - `.github/ISSUE_TEMPLATE/issue.md`: section headers aligned to the
+    generalized model; the `title:` pre-fill line removed so a literal
+    placeholder can never ship as an issue title (the comment guidance stays).
+- Includes (cluster C — framework readme; owns root `README.md` and `LICENSE`):
+  - `README.md` at the repo root following the canonical README Model order,
+    dogfooded: title with tagline; badges per the Badges rule (language, CI on
+    `LukeSantossz/my-framework`, license badge only if the license lands);
+    What It Is classifying the artifact as a development-standards framework;
+    Engineering Decisions indexing ADR 0001 and ADR 0002 (number fixed by this
+    spec, so cluster C can link it before integration); Getting Started as the
+    adoption story (copy `docs/standards/`, `scripts/`, `.githooks/`, and the
+    `.github/` templates, then run `bash scripts/setup.sh`); Project Status
+    with the versioning policy; a mandatory Known Issues & Limitations section
+    with real limitations (Windows exec-bit reliance, R2 requires a local
+    Codex CLI, open backlog follow-ups).
+  - `LICENSE` file (MIT, approved at the Gate; copyright Lucas Gonçalves) and
+    the README License section and badge naming it.
+  - Versioning policy approved at the Gate: semver git tags starting at
+    v0.1.0 when this PR merges (the tag is created by the controller at merge,
+    outside the PR diff); adopters record the tag they copied from.
+- Includes (guards — one per cluster, distinct anchors in
+  `scripts/test/docs-consistency.test.sh`):
+  - Cluster A guard after `standards_authority_and_ambiguity_recorded`:
+    spec_method names the durable home and the spec-lite tier; `docs/specs/`
+    holds the numbered archive with `# SPEC:` headers; root `SPEC.md` absent;
+    ADR 0002 present and ADR 0001 amended; CONTEXT.md transiency wording gone.
+  - Cluster B guard after `docs_consistency_honors_docs_dir_override`:
+    generalized section names present in `github.md` and the refactor-shaped
+    ones absent; template headers match the model; no `title:` pre-fill in the
+    template; the What It Is list reads as illustrative.
+  - Cluster C guard after `badges_rationale_and_wired_r3_recorded`: root
+    `README.md` exists, canonical section order holds, Known Issues &
+    Limitations present, Engineering Decisions links both ADRs (string
+    presence in the README, not file existence — ADR 0002 lands with cluster
+    A), the `LICENSE` file exists and the README License section names MIT,
+    and no HTML comments or `{...}` placeholders remain.
 - Does NOT include:
-  - Batch 2 items (durable specs + spec-lite, Issue Model generalization,
-    framework README/versioning) — next cycle, own SPEC.
-  - Any behavior change to scripts, hooks, CI, or templates, beyond the guard
-    tests above and one extension adjudicated at R2: the docs-consistency
-    deprecated-wording list gains the retired "only makes R2 concrete" claim,
-    so the contradiction it named cannot reappear.
-  - Changes to the repo `CLAUDE.md` (it already defers to the standards).
-  - Changes to `var_method.md` content (the pointer moves, the table stays
-    where it lives).
+  - The PR #5 deferred follow-ups (loud exec-bit guard on `git ls-files`
+    failure, `sort -u` symmetry in the parity guard, allowlist scope comment
+    for INDEX.md refs) — separate backlog, own cycle.
+  - Changes to the repo `CLAUDE.md`, `AGENTS.md`, or `.gitignore` prose that
+    mentions `SPEC.md` generically (still accurate; not scanned by the checker).
+  - The `Each test maps to an Acceptance Criterion in SPEC.md` header comments
+    in the three test scripts (generic prose about the method, not a file
+    reference the checker scans).
+  - Changes to the Type Table, the PR Model, the README Model's section order,
+    CI workflows, hooks, or `setup.sh`.
+  - Growing the deprecated-wording list in `docs-consistency.sh`; if R2/R3
+    adjudication extends it, this exclusion is amended in the same cycle (per
+    the recorded SPEC-drafting lesson).
 
 ## Acceptance Criteria
-- precedence_names_repo_over_global: `code_conventions.md` Precedence states
-  the repo-over-global rule (guard grep for the rule's key phrase).
-- ambiguity_policy_is_hybrid: `ai_guidelines.md` Declare Assumptions contains
-  both halves of the hybrid rule, including "one focused question" (guard
-  grep).
-- index_records_authority_rule: `INDEX.md` System Rules records the
-  repo-over-global authority line (guard grep).
-- crura_composes_with_review_layers: `crura_method.md` references R1, R2, R3
-  and the PR Review Checklist (guard grep).
-- badges_rationale_present: `github.md` Badges section contains the Known
-  Issues rationale (guard grep).
-- r3_wired_reviewer_named: `codex_review.md` names CodeRabbit as the wired R3
-  (guard grep).
-- docs_consistency_passes_after_edits: the docs-consistency check passes on
-  the tree with every edit above (including the reference scan over all
-  standards bodies).
-- global_claude_md_thin (verified by inspection at execution, outside CI —
-  recorded with before/after evidence in the PR): hybrid ambiguity wording,
-  "Spec Gate" qualified, VAR table replaced by a pointer, "PR Review
-  Checklist" naming, precedence line present, backup saved.
+- spec_archive_holds_all_prior_specs: `docs/specs/0001`–`0007` exist, each
+  file starts with `# SPEC:`, and 0001–0006 match their pinned extraction
+  points (cluster A guard).
+- spec_method_names_durable_home_and_lite_tier: `spec_method.md` contains the
+  `docs/specs/` home, the numbering scheme, and the spec-lite tier with its
+  no-Design-Decision trigger (cluster A guard).
+- root_spec_retired_and_allowlisted: the root `SPEC.md` is absent and the
+  docs-consistency check passes with `SPEC.md` justified in
+  `HYPOTHETICAL_REFS` (cluster A guard plus checker run).
+- decision_flow_amended: `docs/adr/0002-durable-spec-archive.md` exists,
+  ADR 0001 carries the amended-by note, and `CONTEXT.md` no longer states that
+  the active spec is overwritten by the next change (cluster A guard).
+- issue_model_sections_generalized: `github.md` Issue Model contains "Current
+  State" (conditional) and "Proposed Solution", and no longer contains
+  "Current Usage" or "Recommended Alternative" (cluster B guard).
+- issue_template_aligned_without_prefilled_title: the template's section
+  headers match the generalized model and the template has no `title:`
+  pre-fill line (cluster B guard).
+- readme_model_classification_nonexhaustive: the What It Is classification in
+  `github.md` reads as illustrative (cluster B guard).
+- framework_readme_follows_canonical_order: root `README.md` exists and its
+  section headers appear in the canonical order (cluster C guard).
+- readme_engineering_decisions_index_adrs: the README Engineering Decisions
+  section links `docs/adr/0001-decision-records-flow.md` and
+  `docs/adr/0002-durable-spec-archive.md` (cluster C guard).
+- readme_known_issues_present_and_no_placeholders: Known Issues & Limitations
+  is present with content, and the README contains no HTML comments and no
+  `{...}` placeholders (cluster C guard).
+- license_present_and_named: the root `LICENSE` file exists with the MIT terms
+  and the README License section names MIT (cluster C guard).
+- docs_consistency_passes_on_final_tree: `bash scripts/test/docs-consistency.sh`
+  exits 0 on the assembled tree.
+- all_test_suites_green: the three suites pass on the assembled tree.
 
 ## Reproducibility
 - `bash scripts/test/docs-consistency.test.sh && bash scripts/test/docs-consistency.sh`
   — expected: all pass; `all checks passed.`
-- `bash scripts/test/codex-review.test.sh && bash scripts/test/setup.test.sh`
+- `bash scripts/test/setup.test.sh && bash scripts/test/codex-review.test.sh`
   — expected: all pass (regression only; nothing in scope touches them).
 - Versions: bash (Git for Windows), git ≥ 2.40, gh ≥ 2.40, Codex CLI 0.132.0.
   No randomness involved.
 
 ## Risks and Assumptions
-- Assumes three parallel clusters editing distinct standards files, with
-  guard tests at distinct anchors of one shared test file, cherry-pick
-  cleanly; a trivial same-file merge conflict is resolved by the controller.
-- Assumes rewriting the global `CLAUDE.md` affects every project the user
-  works on; the thin form deliberately keeps Prohibited, Delivery, and
-  Definition-of-done intact, and a timestamped backup precedes the rewrite.
-- Assumes the hybrid ambiguity policy matches the user's working preference
-  as approved in this cycle's design questions.
-- Invalidated if the framework later hosts multiple repos with conflicting
-  standards — the authority rule would need a hierarchy, not a single line.
+- Assumes the three clusters are file-disjoint (the only shared file is
+  `scripts/test/docs-consistency.test.sh`, edited at three distinct anchors)
+  and cherry-pick cleanly; the controller resolves any trivial same-file
+  conflict, as proven in PRs #5 and #6.
+- Assumes the README's link to ADR 0002 resolves only after integration
+  (cluster A creates the file); no checker scans README references, and the
+  controller verifies the assembled tree before push.
+- Adding `SPEC.md` to `HYPOTHETICAL_REFS` means a future dangling literal
+  `SPEC.md` reference is never flagged; accepted because the name becomes
+  generic prose by design once no root file exists.
+- Assumes the historical spec bodies extract cleanly at the pinned commits;
+  each must start with `# SPEC:`, and a failed extraction is resolved by
+  searching adjacent commits, never by editing recovered content.
+- Gate decisions recorded 2026-07-03: MIT license, semver tags starting at
+  v0.1.0 at merge, and merge pre-authorized on a clean R2/R3 outcome.
+- Invalidated if the Developer prefers keeping the root `SPEC.md` working-copy
+  convention — cluster A reshapes to author-at-root with archive-at-approval.
