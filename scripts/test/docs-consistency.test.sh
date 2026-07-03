@@ -165,6 +165,17 @@ else
   no "docs_consistency_honors_docs_dir_override" "code=$code out=$out"
 fi
 
+# badges_rationale_and_wired_r3_recorded (guard: the shop-window/honesty
+# separation in github.md; CodeRabbit named as this repo's wired R3)
+GITHUB_DOC="$REPO_ROOT/docs/standards/github.md"
+CODEX_DOC_D="$REPO_ROOT/docs/standards/codex_review.md"
+if grep -q "honesty duty is discharged" "$GITHUB_DOC" \
+  && grep -q "CodeRabbit" "$CODEX_DOC_D"; then
+  ok "badges_rationale_and_wired_r3_recorded"
+else
+  no "badges_rationale_and_wired_r3_recorded" "missing badges rationale in github.md or CodeRabbit in codex_review.md"
+fi
+
 # repo_scripts_are_executable (guard: every shell entry point carries the
 # executable bit in the git index — the filesystem lies on Windows)
 nonexec="$(cd "$REPO_ROOT" && git ls-files -s scripts .githooks | awk '$1 != "100755" {print $4}' | grep -E '\.sh$|pre-push$' || true)"
