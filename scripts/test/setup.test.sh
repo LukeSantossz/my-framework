@@ -205,6 +205,20 @@ else
   no "setup_rejects_unknown_option" "code=$code out=$out"
 fi
 
+# setup_interactive_ignores_global_scope (prompts and summary must reflect the
+# local scope the runner reads, not machine-wide git config)
+repo="$(new_repo globalscope)"
+log="$SANDBOX/globalscope.log"; : > "$log"
+globalcfg="$SANDBOX/globalconfig"
+git config --file "$globalcfg" codexreview.model global-model
+out=$(cd "$repo" && printf '\n\n\n' | GIT_CONFIG_GLOBAL="$globalcfg" GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" --interactive 2>&1); code=$?
+if [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "reviewer=gpt-5.5" \
+  && ! printf '%s' "$out" | grep -q "global-model"; then
+  ok "setup_interactive_ignores_global_scope"
+else
+  no "setup_interactive_ignores_global_scope" "code=$code out=$out"
+fi
+
 # setup_label_specs_match_triage_labels_doc (guard: fails if setup.sh's
 # LABEL_SPECS drifts from docs/agents/triage-labels.md's mapping table).
 TRIAGE_DOC="$REPO_ROOT/docs/agents/triage-labels.md"
