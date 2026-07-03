@@ -31,8 +31,10 @@ Human review discipline. Counterpart to the Self-Review section of
 
 CRURA is the human thread through the machine layers of `ai_guidelines.md`
 Review Composition. R1 (internal review), R2 (cross-provider review), and R3
-(automated PR review) run and record their results; the human review consumes
-those recorded results — verifying each layer ran, reading its findings and
-their adjudications — rather than repeating the layers' work. The human is
-the final arbiter: an unresolved layer finding must be addressed or
-justified before merge, and the merge decision itself is always human.
+(automated PR review) record their results — or, when a layer legitimately
+did not run (per `ai_guidelines.md` Review Composition), its recorded absence
+and the reason. The human review consumes those records — verifying each
+layer either ran or has its absence noted, reading findings and their
+adjudications — rather than repeating the layers' work. The human is the
+final arbiter: an unresolved layer finding must be addressed or justified
+before merge, and the merge decision itself is always human.
