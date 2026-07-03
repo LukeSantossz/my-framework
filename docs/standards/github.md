@@ -109,6 +109,8 @@ Remove all HTML comments and `{...}` placeholders before publishing. Sections ma
 
 Badges communicate health only. Never advertise low coverage, yellow status, or any weakness metric. If CI is not green, omit the CI badge. Order: language(s), main framework, CI, license.
 
+The badge strip is the shop window, not the honesty surface: the honesty duty is discharged by the mandatory Known Issues & Limitations section, never by badges. Omitting a weak badge is presentation; omitting a known limitation is dishonesty.
+
 ### Title
 
 `{Project Name} — {One-Line Subtitle}` plus a one-sentence tagline. Include the highest-impact number if any.
