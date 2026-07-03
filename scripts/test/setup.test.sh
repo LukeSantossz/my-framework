@@ -3,6 +3,11 @@
 # Each test maps to an Acceptance Criterion in SPEC.md.
 set -u
 
+# Isolate git config lookups from this machine's global/system scope so
+# `git config codexreview.*` reads inside sandboxed repos never pick up
+# an operator's real settings.
+export GIT_CONFIG_GLOBAL=/dev/null GIT_CONFIG_SYSTEM=/dev/null
+
 TEST_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$TEST_DIR/../.." && pwd)"
 RUNNER="$REPO_ROOT/scripts/setup.sh"
@@ -148,6 +153,70 @@ if [ "$code" -ne 0 ] && ! printf '%s' "$out" | grep -q "bootstrap complete"; the
   ok "setup_fails_when_label_create_fails"
 else
   no "setup_fails_when_label_create_fails" "code=$code out=$out"
+fi
+
+# setup_interactive_persists_choices (answers persisted via git config and
+# echoed in the summary)
+repo="$(new_repo interactive)"
+log="$SANDBOX/interactive.log"; : > "$log"
+out=$(cd "$repo" && printf 'modelZ\nxhigh\nterse\n' | GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" --interactive 2>&1); code=$?
+model="$(git -C "$repo" config codexreview.model || true)"
+effort="$(git -C "$repo" config codexreview.effort || true)"
+if [ "$code" -eq 0 ] && [ "$model" = "modelZ" ] && [ "$effort" = "xhigh" ] \
+  && printf '%s' "$out" | grep -q "reviewer=modelZ" \
+  && printf '%s' "$out" | grep -q "effort=xhigh"; then
+  ok "setup_interactive_persists_choices"
+else
+  no "setup_interactive_persists_choices" "code=$code model=$model effort=$effort out=$out"
+fi
+
+# setup_interactive_enter_keeps_defaults (empty answers write no keys, so the
+# script defaults can evolve without stale persisted copies)
+repo="$(new_repo enterdefault)"
+log="$SANDBOX/enterdefault.log"; : > "$log"
+out=$(cd "$repo" && printf '\n\n\n' | GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" --interactive 2>&1); code=$?
+if [ "$code" -eq 0 ] && ! git -C "$repo" config codexreview.model >/dev/null 2>&1 \
+  && ! git -C "$repo" config codexreview.effort >/dev/null 2>&1; then
+  ok "setup_interactive_enter_keeps_defaults"
+else
+  no "setup_interactive_enter_keeps_defaults" "code=$code out=$out"
+fi
+
+# setup_noninteractive_never_prompts (no flag: no prompt text, no keys, exit 0
+# even with stdin closed)
+repo="$(new_repo noninteractive)"
+log="$SANDBOX/noninteractive.log"; : > "$log"
+out=$(cd "$repo" && GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" </dev/null 2>&1); code=$?
+if [ "$code" -eq 0 ] && ! printf '%s' "$out" | grep -q "reviewer model" \
+  && ! git -C "$repo" config codexreview.model >/dev/null 2>&1; then
+  ok "setup_noninteractive_never_prompts"
+else
+  no "setup_noninteractive_never_prompts" "code=$code out=$out"
+fi
+
+# setup_rejects_unknown_option (usage error: fail fast instead of silently
+# running a bootstrap the caller did not ask for)
+repo="$(new_repo unknownopt)"
+log="$SANDBOX/unknownopt.log"; : > "$log"
+out=$(cd "$repo" && GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" --interactve 2>&1); code=$?
+if [ "$code" -ne 0 ] && printf '%s' "$out" | grep -q "unknown option"; then
+  ok "setup_rejects_unknown_option"
+else
+  no "setup_rejects_unknown_option" "code=$code out=$out"
+fi
+
+# setup_interactive_ignores_global_scope (prompts and summary must reflect the
+# local scope the runner reads, not machine-wide git config)
+repo="$(new_repo globalscope)"
+log="$SANDBOX/globalscope.log"; : > "$log"
+globalcfg="$SANDBOX/globalconfig"
+git config --file "$globalcfg" codexreview.model global-model
+out=$(cd "$repo" && printf '\n\n\n' | GIT_CONFIG_GLOBAL="$globalcfg" GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" --interactive 2>&1); code=$?
+if [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "reviewer=gpt-5.5" \
+  && ! printf '%s' "$out" | grep -q "global-model"; then
+  ok "setup_interactive_ignores_global_scope"
+else
+  no "setup_interactive_ignores_global_scope" "code=$code out=$out"
 fi
 
 # setup_label_specs_match_triage_labels_doc (guard: fails if setup.sh's

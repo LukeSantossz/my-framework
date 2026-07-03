@@ -10,6 +10,15 @@ codex_bin="${CODEX_BIN:-codex}"
 
 log() { printf '[setup] %s\n' "$1"; }
 
+# Optional interactive adoption mode; anything else is a usage error.
+interactive=0
+if [ "${1:-}" = "--interactive" ]; then
+  interactive=1
+elif [ -n "${1:-}" ]; then
+  log "unknown option: $1 (supported: --interactive)"
+  exit 1
+fi
+
 # Canonical triage labels (docs/agents/triage-labels.md): name|color|description.
 LABEL_SPECS='needs-triage|ededed|Maintainer needs to evaluate this issue
 needs-info|d876e3|Waiting on reporter for more information
@@ -77,6 +86,24 @@ EOF
     log "activation bootstrap incomplete: $label_failures label(s) could not be created."
     exit 1
   fi
+fi
+
+# Interactive adoption questionnaire. Enter (or EOF) keeps the current
+# default and writes nothing, so script defaults can evolve.
+if [ "$interactive" -eq 1 ]; then
+  current_model="$(git config --local codexreview.model 2>/dev/null || true)"
+  current_effort="$(git config --local codexreview.effort 2>/dev/null || true)"
+  printf '[setup] R2 reviewer model [%s]: ' "${current_model:-gpt-5.5}"
+  IFS= read -r answer_model || answer_model=""
+  [ -n "$answer_model" ] && git config --local codexreview.model "$answer_model"
+  printf '[setup] R2 reasoning effort [%s]: ' "${current_effort:-high}"
+  IFS= read -r answer_effort || answer_effort=""
+  [ -n "$answer_effort" ] && git config --local codexreview.effort "$answer_effort"
+  printf '[setup] token economy (caveman/terse/off) [terse]: '
+  IFS= read -r answer_economy || answer_economy=""
+  resolved_model="${answer_model:-${current_model:-gpt-5.5}}"
+  resolved_effort="${answer_effort:-${current_effort:-high}}"
+  log "choices: reviewer=$resolved_model effort=$resolved_effort token-economy=${answer_economy:-terse} (see docs/standards/skills_guidelines.md)."
 fi
 
 log "activation bootstrap complete."

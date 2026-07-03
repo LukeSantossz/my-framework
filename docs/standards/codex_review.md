@@ -7,9 +7,13 @@ unchanged; this document only makes R2 concrete.
 
 ## Roles
 
-- Author: Claude (Anthropic), per `CLAUDE.md`.
-- Reviewer: Codex CLI with `model=gpt-5.5`, `model_reasoning_effort=high` (OpenAI). The
-  reviewer model is a different provider than the Author, which is what satisfies R2.
+- Author: the model conducting the session (Anthropic Claude family, per `CLAUDE.md`).
+  The concrete model varies by session and is recorded per PR.
+- Reviewer: Codex CLI (OpenAI). The requirement is the role, not a name: the Reviewer
+  must be a different provider than the Author. Default model `gpt-5.5` with
+  `model_reasoning_effort=high` — defaults, overridable per the Environment
+  variables section and persisted by `setup.sh --interactive` (see
+  `skills_guidelines.md` for the capability inventory).
 
 Codex reads `AGENTS.md` at the repo root for its role and the binding standards.
 
@@ -33,8 +37,12 @@ to re-run.
 On `git push`, `.githooks/pre-push` calls `scripts/codex-review.sh`, which runs:
 
 ```sh
-codex review --base main -c model="gpt-5.5" -c model_reasoning_effort="high"
+codex review --base main -c model="<resolved model>" -c model_reasoning_effort="<resolved effort>"
 ```
+
+The reviewer identity resolves with precedence: `CODEX_REVIEW_MODEL` /
+`CODEX_REVIEW_EFFORT` (environment) → `git config codexreview.model` /
+`codexreview.effort` (persisted locally) → defaults `gpt-5.5` / `high`.
 
 It reviews the current branch against `main`. The review is **advisory**: findings are
 printed but the push is not blocked by default, matching `ai_guidelines.md` ("A Reviewer
@@ -53,6 +61,8 @@ justified, never silently dropped").
 - `SKIP_CODEX_REVIEW=1`: skip the gate for this push.
 - `CODEX_REVIEW_BLOCKING=1`: block the push when `codex review` exits non-zero.
 - `CODEX_REVIEW_BASE=<branch>`: base branch to review against (default `main`).
+- `CODEX_REVIEW_MODEL=<model>`: reviewer model for this run (highest precedence).
+- `CODEX_REVIEW_EFFORT=<effort>`: reviewer reasoning effort for this run (highest precedence).
 - `CODEX_REVIEW_DRYRUN=1`: print the command without running Codex.
 - `CODEX_BIN=<path>`: override the Codex binary (testing).
 
@@ -63,9 +73,10 @@ did not run; record that in the PR per the next section.
 
 ## Recording in the PR
 
-In the PR Review Checklist (`github.md`), name the models for the review layers:
-Author `claude-opus-4-8`, Reviewer `codex / gpt-5.5`. If R2 did not run (Codex absent,
-skipped, or bypassed), note it and why, as the checklist requires.
+In the PR Review Checklist (`github.md`), name the concrete models that authored and
+reviewed this change (for example: Author `claude-fable-5`, Reviewer `codex / gpt-5.5`),
+including any override in effect. If R2 did not run (Codex absent, skipped, or
+bypassed), note it and why, as the checklist requires.
 
 ## Manual run
 

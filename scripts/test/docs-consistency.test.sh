@@ -92,6 +92,30 @@ else
   no "docs_consistency_detects_missing_path_reference" "code=$code out=$out"
 fi
 
+# skills_guidelines_covers_declared_capabilities (guard: the capability
+# inventory keeps its five categories and the precedence rule)
+SKILLS_DOC="$REPO_ROOT/docs/standards/skills_guidelines.md"
+missing_sections=""
+for h in "## Superpowers" "## Codex CLI" "## Caveman" "## Matt Pocock Engineering Skills" "## Project Agent Docs" "## Overlap Precedence"; do
+  grep -qF "$h" "$SKILLS_DOC" 2>/dev/null || missing_sections="$missing_sections '$h'"
+done
+if [ -f "$SKILLS_DOC" ] && [ -z "$missing_sections" ]; then
+  ok "skills_guidelines_covers_declared_capabilities"
+else
+  no "skills_guidelines_covers_declared_capabilities" "missing:$missing_sections"
+fi
+
+# codex_review_doc_depinned (guard: role-based doc — no stale Author pin,
+# override variables documented)
+CODEX_DOC="$REPO_ROOT/docs/standards/codex_review.md"
+if ! grep -q "claude-opus-4-8" "$CODEX_DOC" \
+  && grep -q "CODEX_REVIEW_MODEL" "$CODEX_DOC" \
+  && grep -q "CODEX_REVIEW_EFFORT" "$CODEX_DOC"; then
+  ok "codex_review_doc_depinned"
+else
+  no "codex_review_doc_depinned" "codex_review.md still pins models or lacks the override variables"
+fi
+
 # passes_on_current_tree (the real docs/standards must be consistent)
 out=$(bash "$CHECK" 2>&1); code=$?
 if [ "$code" -eq 0 ]; then
