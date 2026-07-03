@@ -179,6 +179,8 @@ done
 [ -f "$ADR_0002_DOC" ] || durable_spec_missing="$durable_spec_missing adr_0002_missing"
 grep -q "0002" "$ADR_0001_DOC" || durable_spec_missing="$durable_spec_missing adr_0001_not_amended"
 grep -q "overwritten by the next change" "$CONTEXT_DOC" && durable_spec_missing="$durable_spec_missing context_still_transient"
+grep -q "stays transient" "$REPO_ROOT/docs/standards/INDEX.md" && durable_spec_missing="$durable_spec_missing index_still_transient"
+grep -q "transient, before" "$CONTEXT_DOC" && durable_spec_missing="$durable_spec_missing context_intro_still_transient"
 if [ -z "$durable_spec_missing" ]; then
   ok "durable_spec_archive_recorded"
 else
