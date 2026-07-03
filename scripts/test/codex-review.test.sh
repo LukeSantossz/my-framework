@@ -152,8 +152,8 @@ fi
 # reviewer_defaults_match_across_scripts (guard: the default literals shown by
 # setup's prompts must match the runner's resolution fallbacks)
 SETUP_SH="$REPO_ROOT/scripts/setup.sh"
-runner_model_default="$(sed -n 's/.*{config_model:-\([^}]*\)}.*/\1/p' "$RUNNER")"
-runner_effort_default="$(sed -n 's/.*{config_effort:-\([^}]*\)}.*/\1/p' "$RUNNER")"
+runner_model_default="$(sed -n 's/.*{config_model:-\([^}]*\)}.*/\1/p' "$RUNNER" | sort -u)"
+runner_effort_default="$(sed -n 's/.*{config_effort:-\([^}]*\)}.*/\1/p' "$RUNNER" | sort -u)"
 setup_model_defaults="$(grep -o '{current_model:-[^}]*}' "$SETUP_SH" | sed 's/{current_model:-//; s/}$//' | sort -u)"
 setup_effort_defaults="$(grep -o '{current_effort:-[^}]*}' "$SETUP_SH" | sed 's/{current_effort:-//; s/}$//' | sort -u)"
 if [ -n "$runner_model_default" ] && [ "$setup_model_defaults" = "$runner_model_default" ] \
