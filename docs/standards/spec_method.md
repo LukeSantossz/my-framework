@@ -18,11 +18,15 @@ verifiable acceptance criteria *before* code is written. SPEC Method fills that 
   at the point it matters, not retroactively in the README.
 - Verifiable acceptance criteria written up front become the failing tests in the Plan.
 
-## The Artifact: `SPEC.md`
+## The Artifact: `docs/specs/NNNN-<slug>.md`
 
-One spec per feature, adjustment, or refactor that is non-trivial. Skip it only
-for changes too small to have a design (a typo, a one-line fix). When in doubt,
-write the spec; it is cheaper than the rework it prevents.
+One spec per feature, adjustment, or refactor that is non-trivial, authored
+directly under `docs/specs/NNNN-<slug>.md` — numbered sequentially, the next
+free number, `slug` a short kebab-case phrase drawn from the spec's own title.
+Skip it only for changes too small to have a design (a typo, a one-line fix);
+a change too small for a full spec but not skippable uses the Spec-lite tier
+below instead. When in doubt, write the spec; it is cheaper than the rework
+it prevents.
 
 ```markdown
 # SPEC: <title in Conventional Commits format>
@@ -54,10 +58,37 @@ Assumptions declared in one line each (per `ai_guidelines.md` Declare Assumption
 and what would invalidate this spec.
 ```
 
+## Spec-lite
+
+A lighter tier for a change that needs no Design Decision worth recording —
+there is no real trade-off to weigh, so there is nothing for Alternatives
+Considered to hold. A spec-lite spec is still authored under
+`docs/specs/NNNN-<slug>.md` and keeps exactly the three Gate-checked sections:
+
+```markdown
+# SPEC: <title in Conventional Commits format>
+
+## Problem
+One sentence. What is broken or missing, from the user's or system's point of view.
+
+## Scope
+- Includes: <list>
+- Does NOT include: <list>   # mandatory; this is what blocks scope creep
+
+## Acceptance Criteria
+Verifiable, phrased as test outcomes (returns_empty_list_when_no_matches).
+Each criterion becomes a test in the Plan.
+```
+
+If, while drafting or at the Gate, an Alternatives Considered turns out to be
+needed after all, the spec is full-tier: add the Design Decision, Alternatives
+Considered, Reproducibility, and Risks and Assumptions sections before it
+passes. The Spec Gate criteria below are unchanged for both tiers.
+
 ## The Spec Gate
 
-The Gate is the human checkpoint between design and implementation. A spec passes
-the Gate only when all of the following hold:
+The Gate is the human checkpoint between design and implementation. A spec (of
+either tier) passes the Gate only when all of the following hold:
 
 - Problem is stated in one sentence.
 - Scope is filled, including a non-empty "Does NOT include" list.
@@ -68,18 +99,23 @@ The Developer approves the spec at the Gate before implementation starts.
 
 At the Gate the Developer also promotes any Design Decision that is hard to reverse,
 surprising without context, and the result of a real trade-off into an Architecture
-Decision Record under `docs/adr/`. The SPEC's Alternatives Considered is transient — it
-is overwritten by the next change — so the durable rationale lives in the ADR, not the
-spec; the README Engineering Decisions later links that ADR rather than restating it.
-Later promotion is allowed when a decision's significance only emerges during
-implementation. See `docs/adr/0001-decision-records-flow.md`.
+Decision Record under `docs/adr/`. The SPEC's Alternatives Considered is durable —
+it is archived under `docs/specs/` alongside the rest of the approved spec — but the
+ADR stays the curated home for decision rationale: an ADR records one decision for an
+outside reader, while the spec archive preserves each change's gate-approved intent,
+scope, and acceptance criteria as a whole. The README Engineering Decisions later
+links the ADR rather than restating it. Later promotion is allowed when a decision's
+significance only emerges during implementation. See
+`docs/adr/0001-decision-records-flow.md` and `docs/adr/0002-durable-spec-archive.md`.
 
 ## Where It Sits in the Pipeline
 
 1. Brainstorm refines requirements into a draft spec.
 2. The draft is shown in chunks short enough to read and digest.
 3. The Developer approves at the Spec Gate.
-4. The Plan turns each Acceptance Criterion into a failing test, then implementation.
+4. The approved spec is committed to `docs/specs/NNNN-<slug>.md`; it is not a
+   working copy overwritten by the next change.
+5. The Plan turns each Acceptance Criterion into a failing test, then implementation.
 
 Naming, code rules, commits, and review continue to follow `code_conventions.md`,
 `var_method.md`, `github.md`, and `ai_guidelines.md` from this point on.
