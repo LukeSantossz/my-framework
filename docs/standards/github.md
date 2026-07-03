@@ -101,7 +101,7 @@ Concrete deliverables that define the issue as complete.
 
 ## README Model
 
-Canonical section order, do not reorder: What It Does, What It Is, Tech Stack, Architecture, Engineering Decisions, Results, Getting Started, API Reference, Project Structure, Project Status, Known Issues, Contributing, License.
+Canonical section order, do not reorder: What It Does, What It Is, Tech Stack, Architecture, Engineering Decisions, Results, Getting Started, API Reference, Project Structure, Project Status, Known Issues & Limitations, Contributing, License.
 
 Remove all HTML comments and `{...}` placeholders before publishing. Sections marked OPTIONAL are included only if they add real signal; remove if empty.
 
