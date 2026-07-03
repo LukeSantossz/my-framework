@@ -48,6 +48,17 @@ else
   no "docs_consistency_detects_deprecated_wording" "code=$code out=$out"
 fi
 
+# docs_consistency_detects_stale_r2_only_claim (a standard recording the R3
+# wiring must not also claim the document only makes R2 concrete)
+root="$(make_fixture staler2)"
+printf 'this document only makes R2 concrete.\n' >> "$root/docs/standards/a.md"
+out=$(ROOT_DIR="$root" bash "$CHECK" 2>&1); code=$?
+if [ "$code" -ne 0 ] && printf '%s' "$out" | grep -qi "deprecated"; then
+  ok "docs_consistency_detects_stale_r2_only_claim"
+else
+  no "docs_consistency_detects_stale_r2_only_claim" "code=$code out=$out"
+fi
+
 # docs_consistency_detects_index_drift (file present, not referenced)
 root="$(make_fixture fwd)"
 printf '# B\n' > "$root/docs/standards/b.md"
