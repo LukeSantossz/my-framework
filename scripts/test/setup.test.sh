@@ -194,6 +194,17 @@ else
   no "setup_noninteractive_never_prompts" "code=$code out=$out"
 fi
 
+# setup_rejects_unknown_option (usage error: fail fast instead of silently
+# running a bootstrap the caller did not ask for)
+repo="$(new_repo unknownopt)"
+log="$SANDBOX/unknownopt.log"; : > "$log"
+out=$(cd "$repo" && GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" --interactve 2>&1); code=$?
+if [ "$code" -ne 0 ] && printf '%s' "$out" | grep -q "unknown option"; then
+  ok "setup_rejects_unknown_option"
+else
+  no "setup_rejects_unknown_option" "code=$code out=$out"
+fi
+
 # setup_label_specs_match_triage_labels_doc (guard: fails if setup.sh's
 # LABEL_SPECS drifts from docs/agents/triage-labels.md's mapping table).
 TRIAGE_DOC="$REPO_ROOT/docs/agents/triage-labels.md"
