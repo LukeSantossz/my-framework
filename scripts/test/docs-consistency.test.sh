@@ -105,6 +105,17 @@ else
   no "skills_guidelines_covers_declared_capabilities" "missing:$missing_sections"
 fi
 
+# codex_review_doc_depinned (guard: role-based doc — no stale Author pin,
+# override variables documented)
+CODEX_DOC="$REPO_ROOT/docs/standards/codex_review.md"
+if ! grep -q "claude-opus-4-8" "$CODEX_DOC" \
+  && grep -q "CODEX_REVIEW_MODEL" "$CODEX_DOC" \
+  && grep -q "CODEX_REVIEW_EFFORT" "$CODEX_DOC"; then
+  ok "codex_review_doc_depinned"
+else
+  no "codex_review_doc_depinned" "codex_review.md still pins models or lacks the override variables"
+fi
+
 # passes_on_current_tree (the real docs/standards must be consistent)
 out=$(bash "$CHECK" 2>&1); code=$?
 if [ "$code" -eq 0 ]; then
