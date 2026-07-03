@@ -53,6 +53,16 @@ bash scripts/setup.sh
 
 Use `bash scripts/setup.sh --interactive` to persist reviewer model, reasoning effort, and token-economy choices locally.
 
+### Running
+
+There is no long-running app: the framework runs as checks. Validate the standards tree at any time with:
+
+```sh
+bash scripts/test/docs-consistency.sh
+```
+
+Once wired by `scripts/setup.sh`, the R2 review gate runs automatically on `git push`.
+
 ### Tests
 
 ```sh
