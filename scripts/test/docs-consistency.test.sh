@@ -309,6 +309,11 @@ fi
 if [ "$readme_order_ok" -eq 1 ] \
   && grep -q "docs/adr/0001-decision-records-flow.md" "$README_DOC" \
   && grep -q "docs/adr/0002-durable-spec-archive.md" "$README_DOC" \
+  && grep -q "AGENTS.md" "$README_DOC" \
+  && grep -q "docs/agents/" "$README_DOC" \
+  && grep -q "CLAUDE.md" "$README_DOC" \
+  && grep -q "CONTEXT.md" "$README_DOC" \
+  && grep -q "self-test" "$README_DOC" \
   && grep -q "MIT" "$README_DOC" \
   && [ -f "$LICENSE_FILE" ] \
   && ! grep -q "<!--" "$README_DOC" \
