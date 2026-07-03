@@ -7,8 +7,8 @@ set -u
 # Reviewer identity: env override > git config (persisted by
 # `setup.sh --interactive`) > default, per docs/standards/codex_review.md.
 # An unset git config key is not an error; outside a repo the lookup is empty.
-config_model="$(git config codexreview.model 2>/dev/null || true)"
-config_effort="$(git config codexreview.effort 2>/dev/null || true)"
+config_model="$(git config --local codexreview.model 2>/dev/null || true)"
+config_effort="$(git config --local codexreview.effort 2>/dev/null || true)"
 REVIEWER_MODEL="${CODEX_REVIEW_MODEL:-${config_model:-gpt-5.5}}"
 REVIEWER_EFFORT="${CODEX_REVIEW_EFFORT:-${config_effort:-high}}"
 
