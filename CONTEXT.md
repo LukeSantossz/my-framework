@@ -88,9 +88,17 @@ _Avoid_: discovery, ideation, scoping.
 **SPEC.md**:
 The one-per-change design artifact (Problem, Design Decision, Alternatives Considered,
 Scope with a mandatory "Does NOT include", Acceptance Criteria, Reproducibility, Risks
-and Assumptions). The source of truth for a change's intent and scope; code that
-contradicts it is wrong even if it works.
+and Assumptions), authored directly under `docs/specs/NNNN-<slug>.md` and archived
+there once approved — its durable home; later changes get their own numbered file. The
+source of truth for a change's intent and scope; code that contradicts it is wrong
+even if it works.
 _Avoid_: design doc, RFC, ticket, PRD.
+
+**Spec-lite**:
+The lighter SPEC.md tier for a change with no Design Decision worth recording — it
+keeps exactly the three Gate-checked sections (Problem, Scope, Acceptance Criteria). A
+spec that turns out to need Alternatives Considered after all is full-tier instead.
+_Avoid_: mini-spec, spec stub.
 
 **Spec Gate**:
 The human checkpoint between design and implementation. The Developer approves the
@@ -112,15 +120,17 @@ _Avoid_: the plan (generic), roadmap, implementation plan.
 
 ### Decision records
 
-Three artifacts record a decision's rationale, in one flow: SPEC (transient, before
-code) → ADR (durable) → README (curated index). Each has a distinct audience and
-lifetime; rationale is authored once, in the ADR, and referenced — never restated.
+Three artifacts record a decision's rationale, in one flow: SPEC (gate-approved
+intent, archived under `docs/specs/`) → ADR (curated rationale) → README (curated
+index). Each has a distinct audience and lifetime; rationale is authored once, in
+the ADR, and referenced — never restated.
 
 **Alternatives Considered**:
 The SPEC.md section listing at least two rejected approaches for the current change,
-each with its rejection reason, recorded before code. Transient — it lives only in the
-active SPEC.md and is overwritten by the next change; a qualifying decision is promoted
-to an ADR at the Spec Gate.
+each with its rejection reason, recorded before code. Preserved in the durable spec
+archive under `docs/specs/`, but not the curated decision record — a qualifying
+decision is still promoted to an ADR at the Spec Gate, which stays the curated home
+for an outside reader.
 _Avoid_: Engineering Decisions (the durable after-code counterpart), options, trade-offs.
 
 **ADR** (Architecture Decision Record):

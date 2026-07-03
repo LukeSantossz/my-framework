@@ -27,6 +27,8 @@ Accepted.
   surprising without context, real trade-off); late promotion is allowed when
   significance emerges during implementation.
 - The root SPEC.md stays transient; its Alternatives Considered is not a durable record.
+  _Amended by ADR 0002_: specs are now durable under `docs/specs/`; the ADR remains
+  the curated home for decision rationale.
 - README Engineering Decisions rows link the ADR that holds the rationale; the minimum-3
   guidance applies once that many decisions are recorded.
 - `spec_method.md`, `github.md`, and `INDEX.md` state these rules.

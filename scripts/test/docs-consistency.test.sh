@@ -156,6 +156,55 @@ else
   no "standards_authority_and_ambiguity_recorded" "missing wording in:$authority_missing"
 fi
 
+# durable_spec_archive_recorded (guard: specs are authored durably under
+# docs/specs/ with a documented spec-lite tier, the root SPEC.md is retired,
+# ADR 0002 amends ADR 0001, and CONTEXT.md drops the overwritten-each-change
+# wording)
+SPEC_METHOD_DOC="$REPO_ROOT/docs/standards/spec_method.md"
+ADR_0001_DOC="$REPO_ROOT/docs/adr/0001-decision-records-flow.md"
+ADR_0002_DOC="$REPO_ROOT/docs/adr/0002-durable-spec-archive.md"
+CONTEXT_DOC="$REPO_ROOT/CONTEXT.md"
+durable_spec_missing=""
+grep -q "docs/specs/" "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_docs_specs"
+grep -q "spec-lite" "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_spec_lite"
+for n in 0001 0002 0003 0004 0005 0006 0007; do
+  match="$(ls "$REPO_ROOT/docs/specs/${n}"*.md 2>/dev/null | head -1)"
+  if [ -z "$match" ]; then
+    durable_spec_missing="$durable_spec_missing specs_${n}_missing"
+  elif ! head -1 "$match" | grep -q "^# SPEC:"; then
+    durable_spec_missing="$durable_spec_missing specs_${n}_header"
+  fi
+done
+# The backfilled archive is verbatim history: each committed blob must equal
+# the blob at its pinned extraction commit (blob-to-blob, immune to eol
+# conversion; needs full history — CI fetches with fetch-depth: 0).
+archive_pins="0001-add-codex-pre-push-gate.md=1d1742a^
+0002-add-domain-glossary.md=326bf49^
+0003-close-the-activation-gap.md=4f03e9e^
+0004-make-the-toolchain-portable.md=6a0680f^
+0005-harden-scripts-and-checks.md=7e62d08^
+0006-align-global-and-repo-standards.md=619ea7d"
+for pin in $archive_pins; do
+  pin_file="${pin%%=*}"
+  pin_src="${pin##*=}"
+  have_blob="$(cd "$REPO_ROOT" && git rev-parse "HEAD:docs/specs/$pin_file" 2>/dev/null)"
+  want_blob="$(cd "$REPO_ROOT" && git rev-parse "$pin_src:SPEC.md" 2>/dev/null)"
+  if [ -z "$have_blob" ] || [ -z "$want_blob" ] || [ "$have_blob" != "$want_blob" ]; then
+    durable_spec_missing="$durable_spec_missing archive_blob_$pin_file"
+  fi
+done
+[ ! -f "$REPO_ROOT/SPEC.md" ] || durable_spec_missing="$durable_spec_missing root_spec_present"
+[ -f "$ADR_0002_DOC" ] || durable_spec_missing="$durable_spec_missing adr_0002_missing"
+grep -q "0002" "$ADR_0001_DOC" || durable_spec_missing="$durable_spec_missing adr_0001_not_amended"
+grep -q "overwritten by the next change" "$CONTEXT_DOC" && durable_spec_missing="$durable_spec_missing context_still_transient"
+grep -q "stays transient" "$REPO_ROOT/docs/standards/INDEX.md" && durable_spec_missing="$durable_spec_missing index_still_transient"
+grep -q "transient, before" "$CONTEXT_DOC" && durable_spec_missing="$durable_spec_missing context_intro_still_transient"
+if [ -z "$durable_spec_missing" ]; then
+  ok "durable_spec_archive_recorded"
+else
+  no "durable_spec_archive_recorded" "missing:$durable_spec_missing"
+fi
+
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
 # any standard's body must fail, not only in INDEX.md)
 root="$(make_fixture bodyrefs)"
@@ -180,6 +229,30 @@ else
   no "docs_consistency_honors_docs_dir_override" "code=$code out=$out"
 fi
 
+# issue_model_generalized_and_template_aligned (guard: the Issue Model is
+# type-agnostic — conditional Current State, Proposed Solution — mirrored in
+# the issue template with no literal title pre-fill, and the What It Is
+# classification reads as illustrative, not exhaustive)
+GITHUB_DOC_ISSUE="$REPO_ROOT/docs/standards/github.md"
+ISSUE_TEMPLATE="$REPO_ROOT/.github/ISSUE_TEMPLATE/issue.md"
+issue_model_missing=""
+grep -qF "### Current State" "$GITHUB_DOC_ISSUE" || issue_model_missing="$issue_model_missing github:Current-State-header"
+grep -qF "### Proposed Solution" "$GITHUB_DOC_ISSUE" || issue_model_missing="$issue_model_missing github:Proposed-Solution-header"
+grep -qF "Current Usage" "$GITHUB_DOC_ISSUE" && issue_model_missing="$issue_model_missing github:stale-Current-Usage"
+grep -qF "Recommended Alternative" "$GITHUB_DOC_ISSUE" && issue_model_missing="$issue_model_missing github:stale-Recommended-Alternative"
+grep -qF "## Current State" "$ISSUE_TEMPLATE" || issue_model_missing="$issue_model_missing template:Current-State-header"
+grep -qF "## Proposed Solution" "$ISSUE_TEMPLATE" || issue_model_missing="$issue_model_missing template:Proposed-Solution-header"
+grep -qF "Current Usage" "$ISSUE_TEMPLATE" && issue_model_missing="$issue_model_missing template:stale-Current-Usage"
+grep -qF "Recommended Alternative" "$ISSUE_TEMPLATE" && issue_model_missing="$issue_model_missing template:stale-Recommended-Alternative"
+grep -q '^title:' "$ISSUE_TEMPLATE" && issue_model_missing="$issue_model_missing template:title-prefill-present"
+what_it_is_section="$(awk '/^### What It Is$/{flag=1; next} /^### /{flag=0} flag' "$GITHUB_DOC_ISSUE")"
+printf '%s' "$what_it_is_section" | grep -qF "e.g." || issue_model_missing="$issue_model_missing github:what-it-is-not-illustrative"
+if [ -z "$issue_model_missing" ]; then
+  ok "issue_model_generalized_and_template_aligned"
+else
+  no "issue_model_generalized_and_template_aligned" "issues:$issue_model_missing"
+fi
+
 # badges_rationale_and_wired_r3_recorded (guard: the shop-window/honesty
 # separation in github.md with one canonical Known Issues & Limitations label;
 # CodeRabbit named as this repo's wired R3, with the wiring claim intact)
@@ -193,6 +266,62 @@ if grep -q "honesty duty is discharged" "$GITHUB_DOC" \
   ok "badges_rationale_and_wired_r3_recorded"
 else
   no "badges_rationale_and_wired_r3_recorded" "missing badges rationale or canonical Known Issues label in github.md, or the wired-R3 claim in codex_review.md"
+fi
+
+# framework_readme_and_license_recorded (guard: root README.md exists in
+# canonical section order, links both decision-flow ADRs, Known Issues &
+# Limitations is present, the MIT LICENSE exists and is named in the README
+# License section, and no HTML comments or {...} placeholders remain)
+README_DOC="$REPO_ROOT/README.md"
+LICENSE_FILE="$REPO_ROOT/LICENSE"
+readme_order_ok=0
+if [ -f "$README_DOC" ]; then
+  l_what_does="$(grep -n '^## What It Does$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_what_is="$(grep -n '^## What It Is$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_tech="$(grep -n '^## Tech Stack$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_engdec="$(grep -n '^## Engineering Decisions$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_getting="$(grep -n '^## Getting Started$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_structure="$(grep -n '^## Project Structure$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_status="$(grep -n '^## Project Status$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_known="$(grep -n '^## Known Issues & Limitations$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_contrib="$(grep -n '^## Contributing$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_license="$(grep -n '^## License$' "$README_DOC" | head -1 | cut -d: -f1)"
+  # Getting Started must carry all four model-mandated subsections, in order.
+  l_gs_prereq="$(grep -n '^### Prerequisites$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_gs_install="$(grep -n '^### Installation$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_gs_running="$(grep -n '^### Running$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_gs_tests="$(grep -n '^### Tests$' "$README_DOC" | head -1 | cut -d: -f1)"
+  if [ -n "$l_what_does" ] && [ -n "$l_what_is" ] && [ -n "$l_tech" ] && [ -n "$l_engdec" ] \
+    && [ -n "$l_getting" ] && [ -n "$l_structure" ] && [ -n "$l_status" ] && [ -n "$l_known" ] \
+    && [ -n "$l_contrib" ] && [ -n "$l_license" ] \
+    && [ "$l_what_does" -lt "$l_what_is" ] && [ "$l_what_is" -lt "$l_tech" ] \
+    && [ "$l_tech" -lt "$l_engdec" ] && [ "$l_engdec" -lt "$l_getting" ] \
+    && [ "$l_getting" -lt "$l_structure" ] && [ "$l_structure" -lt "$l_status" ] \
+    && [ "$l_status" -lt "$l_known" ] && [ "$l_known" -lt "$l_contrib" ] \
+    && [ "$l_contrib" -lt "$l_license" ] \
+    && [ -n "$l_gs_prereq" ] && [ -n "$l_gs_install" ] && [ -n "$l_gs_running" ] \
+    && [ -n "$l_gs_tests" ] \
+    && [ "$l_gs_prereq" -lt "$l_gs_install" ] && [ "$l_gs_install" -lt "$l_gs_running" ] \
+    && [ "$l_gs_running" -lt "$l_gs_tests" ]; then
+    readme_order_ok=1
+  fi
+fi
+if [ "$readme_order_ok" -eq 1 ] \
+  && grep -q "docs/adr/0001-decision-records-flow.md" "$README_DOC" \
+  && grep -q "docs/adr/0002-durable-spec-archive.md" "$README_DOC" \
+  && grep -q "AGENTS.md" "$README_DOC" \
+  && grep -q "docs/agents/" "$README_DOC" \
+  && grep -q "CLAUDE.md" "$README_DOC" \
+  && grep -q "CONTEXT.md" "$README_DOC" \
+  && grep -q "self-test" "$README_DOC" \
+  && grep -q "token-economy choice is informational" "$README_DOC" \
+  && grep -q "MIT" "$README_DOC" \
+  && [ -f "$LICENSE_FILE" ] \
+  && ! grep -q "<!--" "$README_DOC" \
+  && ! grep -qE '\{[^}]*\}' "$README_DOC"; then
+  ok "framework_readme_and_license_recorded"
+else
+  no "framework_readme_and_license_recorded" "README missing/out of canonical order, missing ADR links, MIT naming, LICENSE file, or contains comments/placeholders"
 fi
 
 # repo_scripts_are_executable (guard: every shell entry point carries the

@@ -1,7 +1,6 @@
 ---
 name: Issue
 about: Standard issue per docs/standards/github.md Issue Model
-title: "type(scope): subject"
 labels: needs-triage
 ---
 
@@ -16,11 +15,11 @@ labels: needs-triage
 
 <!-- History or technical motivation justifying the issue. -->
 
-## Current Usage
+## Current State
 
-<!-- Current state of what will change: entities, operations, affected dependencies. -->
+<!-- Include only when the issue changes existing behavior: the current entities, operations, and affected dependencies. -->
 
-## Recommended Alternative
+## Proposed Solution
 
 <!-- Proposed solution and the criteria justifying it (name plus reasons). -->
 

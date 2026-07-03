@@ -43,7 +43,7 @@ done
 
 # Check 3: every .md reference in every standards file resolves. Plain
 # filenames (no path separator) are checked against the standards dir or the
-# repo root (e.g. CLAUDE.md, SPEC.md). References containing a path separator
+# repo root (e.g. CLAUDE.md). References containing a path separator
 # (e.g. docs/adr/...) are checked relative to the repo root.
 # Deliberately hypothetical names mentioned in prose (not links) are listed
 # here explicitly; each entry needs a justification:
@@ -51,7 +51,9 @@ done
 #   adopting projects may add; this repo does not have one.
 # - CLAUDE.full.md: named by token_economy.md as an example name for an
 #   uncompressed copy; intentionally absent.
-HYPOTHETICAL_REFS='CONTRIBUTING.md CLAUDE.full.md'
+# - SPEC.md: the artifact's generic name in prose; concrete specs live under
+#   docs/specs/, and the root working copy no longer exists.
+HYPOTHETICAL_REFS='CONTRIBUTING.md CLAUDE.full.md SPEC.md'
 for src in "$docs_dir"/*.md; do
   [ -f "$src" ] || continue
   src_name="$(basename "$src")"

@@ -16,6 +16,9 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          # Full history: the durable-spec-archive guard resolves pinned
+          # extraction commits via git rev-parse.
+          fetch-depth: 0
       - name: Shell tests
         run: |
           bash scripts/test/codex-review.test.sh

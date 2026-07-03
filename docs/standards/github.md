@@ -87,11 +87,11 @@ What needs to be done and why.
 
 History or technical motivation justifying the issue.
 
-### Current Usage
+### Current State (conditional)
 
-Current state of what will change: entities, operations, affected dependencies.
+Include only when the issue changes existing behavior: the current entities, operations, and affected dependencies.
 
-### Recommended Alternative
+### Proposed Solution
 
 Proposed solution and the criteria justifying it (name plus reasons).
 
@@ -121,7 +121,7 @@ One purpose sentence, then working features in a short list. A feature is what t
 
 ### What It Is
 
-Classify the artifact unambiguously: web app, desktop app, mobile app, REST API, CLI tool, library, data pipeline, or research codebase, plus what it produces and the problem it solves.
+Classify the artifact unambiguously (e.g. web app, desktop app, mobile app, REST API, CLI tool, library, data pipeline, or research codebase), plus what it produces and the problem it solves.
 
 ### Tech Stack
 
