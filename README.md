@@ -45,13 +45,15 @@ A development-standards framework: versioned Markdown standards under `docs/stan
 
 ### Installation
 
-Adopting in another repository: copy `docs/standards/`, `scripts/`, `.githooks/`, and the `.github/` templates into the target repo, then run:
+Adopting in another repository: copy the standards and everything they reference — `docs/standards/`, `docs/adr/`, `docs/agents/`, the root `CLAUDE.md`, `AGENTS.md` (the R2 reviewer's binding instructions), and `CONTEXT.md` (rewrite the glossary for your domain) — plus `scripts/`, `.githooks/`, and the `.github/` templates and workflow, then run:
 
 ```sh
 bash scripts/setup.sh
 ```
 
 Use `bash scripts/setup.sh --interactive` to persist reviewer model, reasoning effort, and token-economy choices locally.
+
+`scripts/test/docs-consistency.test.sh` is this repository's self-test suite — it pins this repo's spec archive, git history, and README. Adopters validate with `bash scripts/test/docs-consistency.sh` and drop the self-test line from the copied CI workflow.
 
 ### Running
 

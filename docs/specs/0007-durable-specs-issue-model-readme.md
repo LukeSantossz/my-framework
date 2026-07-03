@@ -121,6 +121,12 @@ guard block per cluster in `scripts/test/docs-consistency.test.sh`.
     presence in the README, not file existence — ADR 0002 lands with cluster
     A), the `LICENSE` file exists and the README License section names MIT,
     and no HTML comments or `{...}` placeholders remain.
+  - Adjudicated at R2, round 2 (one P2 finding, accepted): the README adoption
+    list is completed to everything the standards reference (`docs/adr/`,
+    `docs/agents/`, root `CLAUDE.md`, `AGENTS.md`, `CONTEXT.md`) and carves
+    out `docs-consistency.test.sh` as this repository's self-test suite —
+    adopters validate with `docs-consistency.sh` — with the cluster C guard
+    pinning the additions.
   - Adjudicated at R2 (two P2 findings, both accepted): the cluster A guard
     also asserts each archived spec's committed blob equals the blob at its
     pinned extraction commit (blob-to-blob comparison, immune to eol
