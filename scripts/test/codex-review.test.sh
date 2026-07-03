@@ -114,6 +114,19 @@ else
   no "review_model_env_beats_git_config" "code=$code out=$out"
 fi
 
+# review_model_ignores_global_scope (persisted choices are repo-local state;
+# a machine-wide codexreview.* must not leak into other repos)
+repo="$(new_repo globalscope)"
+globalcfg="$REPO_SANDBOX/globalconfig"
+git config --file "$globalcfg" codexreview.model global-model
+git config --file "$globalcfg" codexreview.effort global-effort
+out=$(cd "$repo" && GIT_CONFIG_GLOBAL="$globalcfg" CODEX_REVIEW_MODEL= CODEX_REVIEW_EFFORT= CODEX_REVIEW_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "$expected"; then
+  ok "review_model_ignores_global_scope"
+else
+  no "review_model_ignores_global_scope" "code=$code out=$out"
+fi
+
 # advisory_on_codex_failure_does_not_block (design: R2 is advisory by default)
 out=$(PATH="$STUB_DIR:$PATH" STUB_EXIT=1 CODEX_REVIEW_BRANCH=feature/x bash "$RUNNER" 2>&1); code=$?
 if [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "STUB_CODEX_CALLED"; then
