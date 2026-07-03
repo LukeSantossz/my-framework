@@ -314,6 +314,7 @@ if [ "$readme_order_ok" -eq 1 ] \
   && grep -q "CLAUDE.md" "$README_DOC" \
   && grep -q "CONTEXT.md" "$README_DOC" \
   && grep -q "self-test" "$README_DOC" \
+  && grep -q "token-economy choice is informational" "$README_DOC" \
   && grep -q "MIT" "$README_DOC" \
   && [ -f "$LICENSE_FILE" ] \
   && ! grep -q "<!--" "$README_DOC" \
