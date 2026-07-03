@@ -53,6 +53,8 @@ done
 #   uncompressed copy; intentionally absent.
 # - SPEC.md: the artifact's generic name in prose; concrete specs live under
 #   docs/specs/, and the root working copy no longer exists.
+# This exemption applies to references found in any scanned standards file,
+# including INDEX.md itself.
 HYPOTHETICAL_REFS='CONTRIBUTING.md CLAUDE.full.md SPEC.md'
 for src in "$docs_dir"/*.md; do
   [ -f "$src" ] || continue
