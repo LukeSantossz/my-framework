@@ -209,6 +209,30 @@ else
   no "docs_consistency_honors_docs_dir_override" "code=$code out=$out"
 fi
 
+# issue_model_generalized_and_template_aligned (guard: the Issue Model is
+# type-agnostic — conditional Current State, Proposed Solution — mirrored in
+# the issue template with no literal title pre-fill, and the What It Is
+# classification reads as illustrative, not exhaustive)
+GITHUB_DOC_ISSUE="$REPO_ROOT/docs/standards/github.md"
+ISSUE_TEMPLATE="$REPO_ROOT/.github/ISSUE_TEMPLATE/issue.md"
+issue_model_missing=""
+grep -qF "### Current State" "$GITHUB_DOC_ISSUE" || issue_model_missing="$issue_model_missing github:Current-State-header"
+grep -qF "### Proposed Solution" "$GITHUB_DOC_ISSUE" || issue_model_missing="$issue_model_missing github:Proposed-Solution-header"
+grep -qF "Current Usage" "$GITHUB_DOC_ISSUE" && issue_model_missing="$issue_model_missing github:stale-Current-Usage"
+grep -qF "Recommended Alternative" "$GITHUB_DOC_ISSUE" && issue_model_missing="$issue_model_missing github:stale-Recommended-Alternative"
+grep -qF "## Current State" "$ISSUE_TEMPLATE" || issue_model_missing="$issue_model_missing template:Current-State-header"
+grep -qF "## Proposed Solution" "$ISSUE_TEMPLATE" || issue_model_missing="$issue_model_missing template:Proposed-Solution-header"
+grep -qF "Current Usage" "$ISSUE_TEMPLATE" && issue_model_missing="$issue_model_missing template:stale-Current-Usage"
+grep -qF "Recommended Alternative" "$ISSUE_TEMPLATE" && issue_model_missing="$issue_model_missing template:stale-Recommended-Alternative"
+grep -q '^title:' "$ISSUE_TEMPLATE" && issue_model_missing="$issue_model_missing template:title-prefill-present"
+what_it_is_section="$(awk '/^### What It Is$/{flag=1; next} /^### /{flag=0} flag' "$GITHUB_DOC_ISSUE")"
+printf '%s' "$what_it_is_section" | grep -qF "e.g." || issue_model_missing="$issue_model_missing github:what-it-is-not-illustrative"
+if [ -z "$issue_model_missing" ]; then
+  ok "issue_model_generalized_and_template_aligned"
+else
+  no "issue_model_generalized_and_template_aligned" "issues:$issue_model_missing"
+fi
+
 # badges_rationale_and_wired_r3_recorded (guard: the shop-window/honesty
 # separation in github.md with one canonical Known Issues & Limitations label;
 # CodeRabbit named as this repo's wired R3, with the wiring claim intact)
