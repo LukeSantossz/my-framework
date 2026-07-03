@@ -286,6 +286,11 @@ if [ -f "$README_DOC" ]; then
   l_known="$(grep -n '^## Known Issues & Limitations$' "$README_DOC" | head -1 | cut -d: -f1)"
   l_contrib="$(grep -n '^## Contributing$' "$README_DOC" | head -1 | cut -d: -f1)"
   l_license="$(grep -n '^## License$' "$README_DOC" | head -1 | cut -d: -f1)"
+  # Getting Started must carry all four model-mandated subsections, in order.
+  l_gs_prereq="$(grep -n '^### Prerequisites$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_gs_install="$(grep -n '^### Installation$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_gs_running="$(grep -n '^### Running$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_gs_tests="$(grep -n '^### Tests$' "$README_DOC" | head -1 | cut -d: -f1)"
   if [ -n "$l_what_does" ] && [ -n "$l_what_is" ] && [ -n "$l_tech" ] && [ -n "$l_engdec" ] \
     && [ -n "$l_getting" ] && [ -n "$l_structure" ] && [ -n "$l_status" ] && [ -n "$l_known" ] \
     && [ -n "$l_contrib" ] && [ -n "$l_license" ] \
@@ -293,7 +298,11 @@ if [ -f "$README_DOC" ]; then
     && [ "$l_tech" -lt "$l_engdec" ] && [ "$l_engdec" -lt "$l_getting" ] \
     && [ "$l_getting" -lt "$l_structure" ] && [ "$l_structure" -lt "$l_status" ] \
     && [ "$l_status" -lt "$l_known" ] && [ "$l_known" -lt "$l_contrib" ] \
-    && [ "$l_contrib" -lt "$l_license" ]; then
+    && [ "$l_contrib" -lt "$l_license" ] \
+    && [ -n "$l_gs_prereq" ] && [ -n "$l_gs_install" ] && [ -n "$l_gs_running" ] \
+    && [ -n "$l_gs_tests" ] \
+    && [ "$l_gs_prereq" -lt "$l_gs_install" ] && [ "$l_gs_install" -lt "$l_gs_running" ] \
+    && [ "$l_gs_running" -lt "$l_gs_tests" ]; then
     readme_order_ok=1
   fi
 fi
