@@ -106,10 +106,12 @@ else
 fi
 
 # crura_composes_with_review_layers (guard: the human-review method names the
-# three machine layers and the checklist it feeds)
+# three machine layers and the checklist it feeds, and honors the documented
+# fallback path — a layer's recorded absence, not only its results)
 CRURA_DOC="$REPO_ROOT/docs/standards/crura_method.md"
 if grep -q "R1" "$CRURA_DOC" && grep -q "R2" "$CRURA_DOC" \
-  && grep -q "R3" "$CRURA_DOC" && grep -q "PR Review Checklist" "$CRURA_DOC"; then
+  && grep -q "R3" "$CRURA_DOC" && grep -q "PR Review Checklist" "$CRURA_DOC" \
+  && grep -q "recorded absence" "$CRURA_DOC"; then
   ok "crura_composes_with_review_layers"
 else
   no "crura_composes_with_review_layers" "crura_method.md does not reference the review layers or the checklist"
