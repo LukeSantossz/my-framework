@@ -150,6 +150,45 @@ else
   no "setup_fails_when_label_create_fails" "code=$code out=$out"
 fi
 
+# setup_interactive_persists_choices (answers persisted via git config and
+# echoed in the summary)
+repo="$(new_repo interactive)"
+log="$SANDBOX/interactive.log"; : > "$log"
+out=$(cd "$repo" && printf 'modelZ\nxhigh\nterse\n' | GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" --interactive 2>&1); code=$?
+model="$(git -C "$repo" config codexreview.model || true)"
+effort="$(git -C "$repo" config codexreview.effort || true)"
+if [ "$code" -eq 0 ] && [ "$model" = "modelZ" ] && [ "$effort" = "xhigh" ] \
+  && printf '%s' "$out" | grep -q "reviewer=modelZ" \
+  && printf '%s' "$out" | grep -q "effort=xhigh"; then
+  ok "setup_interactive_persists_choices"
+else
+  no "setup_interactive_persists_choices" "code=$code model=$model effort=$effort out=$out"
+fi
+
+# setup_interactive_enter_keeps_defaults (empty answers write no keys, so the
+# script defaults can evolve without stale persisted copies)
+repo="$(new_repo enterdefault)"
+log="$SANDBOX/enterdefault.log"; : > "$log"
+out=$(cd "$repo" && printf '\n\n\n' | GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" --interactive 2>&1); code=$?
+if [ "$code" -eq 0 ] && ! git -C "$repo" config codexreview.model >/dev/null 2>&1 \
+  && ! git -C "$repo" config codexreview.effort >/dev/null 2>&1; then
+  ok "setup_interactive_enter_keeps_defaults"
+else
+  no "setup_interactive_enter_keeps_defaults" "code=$code out=$out"
+fi
+
+# setup_noninteractive_never_prompts (no flag: no prompt text, no keys, exit 0
+# even with stdin closed)
+repo="$(new_repo noninteractive)"
+log="$SANDBOX/noninteractive.log"; : > "$log"
+out=$(cd "$repo" && GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" </dev/null 2>&1); code=$?
+if [ "$code" -eq 0 ] && ! printf '%s' "$out" | grep -q "reviewer model" \
+  && ! git -C "$repo" config codexreview.model >/dev/null 2>&1; then
+  ok "setup_noninteractive_never_prompts"
+else
+  no "setup_noninteractive_never_prompts" "code=$code out=$out"
+fi
+
 # setup_label_specs_match_triage_labels_doc (guard: fails if setup.sh's
 # LABEL_SPECS drifts from docs/agents/triage-labels.md's mapping table).
 TRIAGE_DOC="$REPO_ROOT/docs/agents/triage-labels.md"
