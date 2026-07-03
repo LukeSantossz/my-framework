@@ -116,6 +116,21 @@ else
   no "codex_review_doc_depinned" "codex_review.md still pins models or lacks the override variables"
 fi
 
+# standards_authority_and_ambiguity_recorded (guard: repo-over-global rule in
+# code_conventions.md and INDEX.md; hybrid ambiguity policy in ai_guidelines.md)
+CONV_DOC="$REPO_ROOT/docs/standards/code_conventions.md"
+AI_DOC="$REPO_ROOT/docs/standards/ai_guidelines.md"
+INDEX_DOC="$REPO_ROOT/docs/standards/INDEX.md"
+authority_missing=""
+grep -q "override user-global defaults" "$CONV_DOC" || authority_missing="$authority_missing code_conventions"
+grep -q "override user-global defaults" "$INDEX_DOC" || authority_missing="$authority_missing INDEX"
+grep -q "one focused question" "$AI_DOC" || authority_missing="$authority_missing ai_guidelines"
+if [ -z "$authority_missing" ]; then
+  ok "standards_authority_and_ambiguity_recorded"
+else
+  no "standards_authority_and_ambiguity_recorded" "missing wording in:$authority_missing"
+fi
+
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
 # any standard's body must fail, not only in INDEX.md)
 root="$(make_fixture bodyrefs)"
