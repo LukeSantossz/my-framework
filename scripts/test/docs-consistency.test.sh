@@ -175,6 +175,24 @@ for n in 0001 0002 0003 0004 0005 0006 0007; do
     durable_spec_missing="$durable_spec_missing specs_${n}_header"
   fi
 done
+# The backfilled archive is verbatim history: each committed blob must equal
+# the blob at its pinned extraction commit (blob-to-blob, immune to eol
+# conversion; needs full history — CI fetches with fetch-depth: 0).
+archive_pins="0001-add-codex-pre-push-gate.md=1d1742a^
+0002-add-domain-glossary.md=326bf49^
+0003-close-the-activation-gap.md=4f03e9e^
+0004-make-the-toolchain-portable.md=6a0680f^
+0005-harden-scripts-and-checks.md=7e62d08^
+0006-align-global-and-repo-standards.md=619ea7d"
+for pin in $archive_pins; do
+  pin_file="${pin%%=*}"
+  pin_src="${pin##*=}"
+  have_blob="$(cd "$REPO_ROOT" && git rev-parse "HEAD:docs/specs/$pin_file" 2>/dev/null)"
+  want_blob="$(cd "$REPO_ROOT" && git rev-parse "$pin_src:SPEC.md" 2>/dev/null)"
+  if [ -z "$have_blob" ] || [ -z "$want_blob" ] || [ "$have_blob" != "$want_blob" ]; then
+    durable_spec_missing="$durable_spec_missing archive_blob_$pin_file"
+  fi
+done
 [ ! -f "$REPO_ROOT/SPEC.md" ] || durable_spec_missing="$durable_spec_missing root_spec_present"
 [ -f "$ADR_0002_DOC" ] || durable_spec_missing="$durable_spec_missing adr_0002_missing"
 grep -q "0002" "$ADR_0001_DOC" || durable_spec_missing="$durable_spec_missing adr_0001_not_amended"
