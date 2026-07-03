@@ -121,6 +121,13 @@ guard block per cluster in `scripts/test/docs-consistency.test.sh`.
     presence in the README, not file existence — ADR 0002 lands with cluster
     A), the `LICENSE` file exists and the README License section names MIT,
     and no HTML comments or `{...}` placeholders remain.
+  - Adjudicated at R2 (two P2 findings, both accepted): the cluster A guard
+    also asserts each archived spec's committed blob equals the blob at its
+    pinned extraction commit (blob-to-blob comparison, immune to eol
+    conversion), which requires full history in CI; and the cluster C guard
+    also requires the four Getting Started subsections (Prerequisites,
+    Installation, Running, Tests) in model order, with the README gaining
+    its Running subsection.
 - Does NOT include:
   - The PR #5 deferred follow-ups (loud exec-bit guard on `git ls-files`
     failure, `sort -u` symmetry in the parity guard, allowlist scope comment
@@ -131,7 +138,9 @@ guard block per cluster in `scripts/test/docs-consistency.test.sh`.
     in the three test scripts (generic prose about the method, not a file
     reference the checker scans).
   - Changes to the Type Table, the PR Model, the README Model's section order,
-    CI workflows, hooks, or `setup.sh`.
+    CI workflows, hooks, or `setup.sh` — with one exception adjudicated at R2:
+    the `ci.yml` checkout gains `fetch-depth: 0` so the archive blob guard can
+    resolve its pinned extraction commits in CI.
   - Growing the deprecated-wording list in `docs-consistency.sh`; if R2/R3
     adjudication extends it, this exclusion is amended in the same cycle (per
     the recorded SPEC-drafting lesson).
