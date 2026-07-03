@@ -248,6 +248,47 @@ else
   no "badges_rationale_and_wired_r3_recorded" "missing badges rationale or canonical Known Issues label in github.md, or the wired-R3 claim in codex_review.md"
 fi
 
+# framework_readme_and_license_recorded (guard: root README.md exists in
+# canonical section order, links both decision-flow ADRs, Known Issues &
+# Limitations is present, the MIT LICENSE exists and is named in the README
+# License section, and no HTML comments or {...} placeholders remain)
+README_DOC="$REPO_ROOT/README.md"
+LICENSE_FILE="$REPO_ROOT/LICENSE"
+readme_order_ok=0
+if [ -f "$README_DOC" ]; then
+  l_what_does="$(grep -n '^## What It Does$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_what_is="$(grep -n '^## What It Is$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_tech="$(grep -n '^## Tech Stack$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_engdec="$(grep -n '^## Engineering Decisions$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_getting="$(grep -n '^## Getting Started$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_structure="$(grep -n '^## Project Structure$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_status="$(grep -n '^## Project Status$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_known="$(grep -n '^## Known Issues & Limitations$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_contrib="$(grep -n '^## Contributing$' "$README_DOC" | head -1 | cut -d: -f1)"
+  l_license="$(grep -n '^## License$' "$README_DOC" | head -1 | cut -d: -f1)"
+  if [ -n "$l_what_does" ] && [ -n "$l_what_is" ] && [ -n "$l_tech" ] && [ -n "$l_engdec" ] \
+    && [ -n "$l_getting" ] && [ -n "$l_structure" ] && [ -n "$l_status" ] && [ -n "$l_known" ] \
+    && [ -n "$l_contrib" ] && [ -n "$l_license" ] \
+    && [ "$l_what_does" -lt "$l_what_is" ] && [ "$l_what_is" -lt "$l_tech" ] \
+    && [ "$l_tech" -lt "$l_engdec" ] && [ "$l_engdec" -lt "$l_getting" ] \
+    && [ "$l_getting" -lt "$l_structure" ] && [ "$l_structure" -lt "$l_status" ] \
+    && [ "$l_status" -lt "$l_known" ] && [ "$l_known" -lt "$l_contrib" ] \
+    && [ "$l_contrib" -lt "$l_license" ]; then
+    readme_order_ok=1
+  fi
+fi
+if [ "$readme_order_ok" -eq 1 ] \
+  && grep -q "docs/adr/0001-decision-records-flow.md" "$README_DOC" \
+  && grep -q "docs/adr/0002-durable-spec-archive.md" "$README_DOC" \
+  && grep -q "MIT" "$README_DOC" \
+  && [ -f "$LICENSE_FILE" ] \
+  && ! grep -q "<!--" "$README_DOC" \
+  && ! grep -qE '\{[^}]*\}' "$README_DOC"; then
+  ok "framework_readme_and_license_recorded"
+else
+  no "framework_readme_and_license_recorded" "README missing/out of canonical order, missing ADR links, MIT naming, LICENSE file, or contains comments/placeholders"
+fi
+
 # repo_scripts_are_executable (guard: every shell entry point carries the
 # executable bit in the git index — the filesystem lies on Windows)
 nonexec="$(cd "$REPO_ROOT" && git ls-files -s scripts .githooks | awk '$1 != "100755" {print $4}' | grep -E '\.sh$|pre-push$' || true)"
