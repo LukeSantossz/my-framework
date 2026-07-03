@@ -84,8 +84,8 @@ their stages:
 - Required: yes (they are versioned repo content, not an external install).
 - Install/verify: present in the repo; `bash scripts/test/docs-consistency.sh`
   verifies the standards tree they link into.
-- Fallback: none needed — if missing, run `setup-matt-pocock-skills` to
-  regenerate them.
+- Fallback: not applicable (versioned repo content has no degraded mode); if
+  missing, regenerate them with `setup-matt-pocock-skills`.
 
 ## Overlap Precedence
 
