@@ -1,4 +1,4 @@
-# SPEC: docs: align global and repo standards into one coherent rule set
+# SPEC: chore(standards): align global and repo standards into one coherent rule set
 
 ## Problem
 The user's global `CLAUDE.md` and the repo standards contradict each other in
@@ -78,7 +78,10 @@ Checklist", and the repo-over-global precedence line added.
 - Does NOT include:
   - Batch 2 items (durable specs + spec-lite, Issue Model generalization,
     framework README/versioning) — next cycle, own SPEC.
-  - Any behavior change to scripts, hooks, CI, or templates.
+  - Any behavior change to scripts, hooks, CI, or templates, beyond the guard
+    tests above and one extension adjudicated at R2: the docs-consistency
+    deprecated-wording list gains the retired "only makes R2 concrete" claim,
+    so the contradiction it named cannot reappear.
   - Changes to the repo `CLAUDE.md` (it already defers to the standards).
   - Changes to `var_method.md` content (the pointer moves, the table stays
     where it lives).
