@@ -120,9 +120,10 @@ _Avoid_: the plan (generic), roadmap, implementation plan.
 
 ### Decision records
 
-Three artifacts record a decision's rationale, in one flow: SPEC (transient, before
-code) → ADR (durable) → README (curated index). Each has a distinct audience and
-lifetime; rationale is authored once, in the ADR, and referenced — never restated.
+Three artifacts record a decision's rationale, in one flow: SPEC (gate-approved
+intent, archived under `docs/specs/`) → ADR (curated rationale) → README (curated
+index). Each has a distinct audience and lifetime; rationale is authored once, in
+the ADR, and referenced — never restated.
 
 **Alternatives Considered**:
 The SPEC.md section listing at least two rejected approaches for the current change,
