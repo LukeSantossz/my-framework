@@ -42,6 +42,21 @@ exit 0
 STUB
 chmod +x "$STUB_DIR/gh"
 
+# A pass-through `git` stub: behaves exactly like real git unless
+# STUB_GIT_CONFIG_WRITE_FAILS is set, in which case writes (key + value) to
+# codexreview.* fail — the only way to exercise a mid-run persist failure.
+REAL_GIT="$(command -v git)"
+cat > "$STUB_DIR/git" <<STUB
+#!/bin/sh
+if [ -n "\${STUB_GIT_CONFIG_WRITE_FAILS:-}" ] && [ "\$1" = "config" ] && [ "\$2" = "--local" ] && [ -n "\${4:-}" ]; then
+  case "\$3" in
+    codexreview.*) echo "stub: config write refused" >&2; exit 1 ;;
+  esac
+fi
+exec "$REAL_GIT" "\$@"
+STUB
+chmod +x "$STUB_DIR/git"
+
 new_repo() {
   d="$SANDBOX/repo-$1"
   git init -q "$d"
@@ -217,6 +232,29 @@ if [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "reviewer=gpt-5.5" \
   ok "setup_interactive_ignores_global_scope"
 else
   no "setup_interactive_ignores_global_scope" "code=$code out=$out"
+fi
+
+# setup_fails_when_reviewer_config_write_fails (a failed persist must not end
+# in a success summary; matches the hooksPath and label-create pattern)
+repo="$(new_repo cfgwritefail)"
+log="$SANDBOX/cfgwritefail.log"; : > "$log"
+out=$(cd "$repo" && printf 'modelZ\nxhigh\nterse\n' | STUB_GIT_CONFIG_WRITE_FAILS=1 GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" --interactive 2>&1); code=$?
+if [ "$code" -ne 0 ] && ! printf '%s' "$out" | grep -q "reviewer=modelZ"; then
+  ok "setup_fails_when_reviewer_config_write_fails"
+else
+  no "setup_fails_when_reviewer_config_write_fails" "code=$code out=$out"
+fi
+
+# setup_exits_nonzero_outside_git_repo (invariant pin: the only hard
+# requirement is running inside a repository)
+nodir="$SANDBOX/no-repo"
+mkdir -p "$nodir"
+log="$SANDBOX/norepo.log"; : > "$log"
+out=$(cd "$nodir" && GH_LOG="$log" PATH="$STUB_DIR:$PATH" bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -eq 1 ] && printf '%s' "$out" | grep -q "not inside a git repository"; then
+  ok "setup_exits_nonzero_outside_git_repo"
+else
+  no "setup_exits_nonzero_outside_git_repo" "code=$code out=$out"
 fi
 
 # setup_label_specs_match_triage_labels_doc (guard: fails if setup.sh's
