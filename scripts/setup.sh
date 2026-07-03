@@ -95,10 +95,10 @@ if [ "$interactive" -eq 1 ]; then
   current_effort="$(git config --local codexreview.effort 2>/dev/null || true)"
   printf '[setup] R2 reviewer model [%s]: ' "${current_model:-gpt-5.5}"
   IFS= read -r answer_model || answer_model=""
-  [ -n "$answer_model" ] && git config codexreview.model "$answer_model"
+  [ -n "$answer_model" ] && git config --local codexreview.model "$answer_model"
   printf '[setup] R2 reasoning effort [%s]: ' "${current_effort:-high}"
   IFS= read -r answer_effort || answer_effort=""
-  [ -n "$answer_effort" ] && git config codexreview.effort "$answer_effort"
+  [ -n "$answer_effort" ] && git config --local codexreview.effort "$answer_effort"
   printf '[setup] token economy (caveman/terse/off) [terse]: '
   IFS= read -r answer_economy || answer_economy=""
   resolved_model="${answer_model:-${current_model:-gpt-5.5}}"
