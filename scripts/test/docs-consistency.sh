@@ -24,7 +24,7 @@ if matches=$(grep -rEn "Self-Review Checklist|author approves" "$docs_dir"); the
   fail=1
 fi
 
-# The .md reference tokens in INDEX.md, shared by Checks 2 and 3.
+# The .md reference tokens in INDEX.md, used by Check 2.
 refs="$(grep -oE '[A-Za-z0-9_./-]+\.md' "$index" | sort -u)"
 
 # Check 2: every standard is listed in INDEX.md (no orphan documents).
@@ -40,25 +40,40 @@ for f in "$docs_dir"/*.md; do
   fi
 done
 
-# Check 3: every .md reference in INDEX.md resolves. Plain filenames (no path
-# separator) are checked against the standards dir or the repo root (e.g.
-# CLAUDE.md, SPEC.md). References containing a path separator (e.g.
-# docs/adr/...) are checked relative to the repo root.
-for ref in $refs; do
-  case "$ref" in
-    */*)
-      if [ ! -f "$root/$ref" ]; then
-        log "INDEX.md references missing file: $ref"
-        fail=1
-      fi
-      ;;
-    *)
-      if [ ! -f "$docs_dir/$ref" ] && [ ! -f "$root/$ref" ]; then
-        log "INDEX.md references missing file: $ref"
-        fail=1
-      fi
-      ;;
-  esac
+# Check 3: every .md reference in every standards file resolves. Plain
+# filenames (no path separator) are checked against the standards dir or the
+# repo root (e.g. CLAUDE.md, SPEC.md). References containing a path separator
+# (e.g. docs/adr/...) are checked relative to the repo root.
+# Deliberately hypothetical names mentioned in prose (not links) are listed
+# here explicitly; each entry needs a justification:
+# - CONTRIBUTING.md: named by github.md's README template as an optional file
+#   adopting projects may add; this repo does not have one.
+# - CLAUDE.full.md: named by token_economy.md as an example name for an
+#   uncompressed copy; intentionally absent.
+HYPOTHETICAL_REFS='CONTRIBUTING.md CLAUDE.full.md'
+for src in "$docs_dir"/*.md; do
+  [ -f "$src" ] || continue
+  src_name="$(basename "$src")"
+  src_refs="$(grep -oE '[A-Za-z0-9_./-]+\.md' "$src" | sort -u)"
+  for ref in $src_refs; do
+    case " $HYPOTHETICAL_REFS " in
+      *" $ref "*) continue ;;
+    esac
+    case "$ref" in
+      */*)
+        if [ ! -f "$root/$ref" ]; then
+          log "$src_name references missing file: $ref"
+          fail=1
+        fi
+        ;;
+      *)
+        if [ ! -f "$docs_dir/$ref" ] && [ ! -f "$root/$ref" ]; then
+          log "$src_name references missing file: $ref"
+          fail=1
+        fi
+        ;;
+    esac
+  done
 done
 
 [ "$fail" -eq 0 ] && log "all checks passed."

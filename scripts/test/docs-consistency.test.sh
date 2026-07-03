@@ -116,6 +116,39 @@ else
   no "codex_review_doc_depinned" "codex_review.md still pins models or lacks the override variables"
 fi
 
+# docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
+# any standard's body must fail, not only in INDEX.md)
+root="$(make_fixture bodyrefs)"
+printf -- 'See `phantom.md` for details.\n' >> "$root/docs/standards/a.md"
+out=$(ROOT_DIR="$root" bash "$CHECK" 2>&1); code=$?
+if [ "$code" -ne 0 ] && printf '%s' "$out" | grep -qF "a.md references missing file: phantom.md"; then
+  ok "docs_consistency_detects_refs_in_standards_bodies"
+else
+  no "docs_consistency_detects_refs_in_standards_bodies" "code=$code out=$out"
+fi
+
+# docs_consistency_honors_docs_dir_override (invariant pin: DOCS_DIR points
+# the check at an alternate tree)
+root="$(make_fixture altdocs)"
+alt="$SANDBOX/altdocs-alt/standards"
+mkdir -p "$alt"
+printf '# Index\n\n- `missing.md`: not there.\n' > "$alt/INDEX.md"
+out=$(ROOT_DIR="$root" DOCS_DIR="$alt" bash "$CHECK" 2>&1); code=$?
+if [ "$code" -ne 0 ] && printf '%s' "$out" | grep -q "missing.md"; then
+  ok "docs_consistency_honors_docs_dir_override"
+else
+  no "docs_consistency_honors_docs_dir_override" "code=$code out=$out"
+fi
+
+# repo_scripts_are_executable (guard: every shell entry point carries the
+# executable bit in the git index — the filesystem lies on Windows)
+nonexec="$(cd "$REPO_ROOT" && git ls-files -s scripts .githooks | awk '$1 != "100755" {print $4}' | grep -E '\.sh$|pre-push$' || true)"
+if [ -z "$nonexec" ]; then
+  ok "repo_scripts_are_executable"
+else
+  no "repo_scripts_are_executable" "not 100755: $(printf '%s' "$nonexec" | tr '\n' ' ')"
+fi
+
 # passes_on_current_tree (the real docs/standards must be consistent)
 out=$(bash "$CHECK" 2>&1); code=$?
 if [ "$code" -eq 0 ]; then

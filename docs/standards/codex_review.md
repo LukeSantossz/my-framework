@@ -61,8 +61,8 @@ justified, never silently dropped").
 - `SKIP_CODEX_REVIEW=1`: skip the gate for this push.
 - `CODEX_REVIEW_BLOCKING=1`: block the push when `codex review` exits non-zero.
 - `CODEX_REVIEW_BASE=<branch>`: base branch to review against (default `main`).
-- `CODEX_REVIEW_MODEL=<model>`: reviewer model for this run (highest precedence).
-- `CODEX_REVIEW_EFFORT=<effort>`: reviewer reasoning effort for this run (highest precedence).
+- `CODEX_REVIEW_MODEL=<model>`: reviewer model for this run (highest precedence, if non-empty; an empty value is treated as unset).
+- `CODEX_REVIEW_EFFORT=<effort>`: reviewer reasoning effort for this run (highest precedence, if non-empty; an empty value is treated as unset).
 - `CODEX_REVIEW_DRYRUN=1`: print the command without running Codex.
 - `CODEX_BIN=<path>`: override the Codex binary (testing).
 
