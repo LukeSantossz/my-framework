@@ -2,8 +2,10 @@
 
 Operational definition of the R2 cross-provider review from `ai_guidelines.md`. It wires
 Codex CLI as the Reviewer model (provider different from the Author) and runs it as a
-`pre-push` gate. R1 (internal Superpowers review) and R3 (automated PR review) are
-unchanged; this document only makes R2 concrete.
+`pre-push` gate. R1 (internal Superpowers review) is unchanged; this document makes R2
+concrete and records the repository's R3 wiring. On this repository, R3 is CodeRabbit
+(wired via its GitHub app); its findings are adjudicated in the PR discussion like any
+reviewer finding.
 
 ## Roles
 

@@ -12,6 +12,11 @@ When rules conflict, lower number wins:
 4. The project's existing established pattern over any default here.
 5. VAR Method naming suffixes.
 
+Authority between rule sources: a repository's standards (its `CLAUDE.md` and
+`docs/standards/`) override user-global defaults (for example a global
+`CLAUDE.md`) wherever both speak. Safety and Correctness are never overridden
+by either side.
+
 When still ambiguous, follow `ai_guidelines.md` and state the assumption. The
 approved `SPEC.md` (per `spec_method.md`) is the source of truth for what the
 change should do and what is out of scope; code that contradicts the spec is wrong

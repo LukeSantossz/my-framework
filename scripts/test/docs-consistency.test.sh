@@ -48,6 +48,17 @@ else
   no "docs_consistency_detects_deprecated_wording" "code=$code out=$out"
 fi
 
+# docs_consistency_detects_stale_r2_only_claim (a standard recording the R3
+# wiring must not also claim the document only makes R2 concrete)
+root="$(make_fixture staler2)"
+printf 'this document only makes R2 concrete.\n' >> "$root/docs/standards/a.md"
+out=$(ROOT_DIR="$root" bash "$CHECK" 2>&1); code=$?
+if [ "$code" -ne 0 ] && printf '%s' "$out" | grep -qi "deprecated"; then
+  ok "docs_consistency_detects_stale_r2_only_claim"
+else
+  no "docs_consistency_detects_stale_r2_only_claim" "code=$code out=$out"
+fi
+
 # docs_consistency_detects_index_drift (file present, not referenced)
 root="$(make_fixture fwd)"
 printf '# B\n' > "$root/docs/standards/b.md"
@@ -105,6 +116,18 @@ else
   no "skills_guidelines_covers_declared_capabilities" "missing:$missing_sections"
 fi
 
+# crura_composes_with_review_layers (guard: the human-review method names the
+# three machine layers and the checklist it feeds, and honors the documented
+# fallback path — a layer's recorded absence, not only its results)
+CRURA_DOC="$REPO_ROOT/docs/standards/crura_method.md"
+if grep -q "R1" "$CRURA_DOC" && grep -q "R2" "$CRURA_DOC" \
+  && grep -q "R3" "$CRURA_DOC" && grep -q "PR Review Checklist" "$CRURA_DOC" \
+  && grep -q "recorded absence" "$CRURA_DOC"; then
+  ok "crura_composes_with_review_layers"
+else
+  no "crura_composes_with_review_layers" "crura_method.md does not reference the review layers or the checklist"
+fi
+
 # codex_review_doc_depinned (guard: role-based doc — no stale Author pin,
 # override variables documented)
 CODEX_DOC="$REPO_ROOT/docs/standards/codex_review.md"
@@ -114,6 +137,23 @@ if ! grep -q "claude-opus-4-8" "$CODEX_DOC" \
   ok "codex_review_doc_depinned"
 else
   no "codex_review_doc_depinned" "codex_review.md still pins models or lacks the override variables"
+fi
+
+# standards_authority_and_ambiguity_recorded (guard: repo-over-global rule in
+# code_conventions.md and INDEX.md; hybrid ambiguity policy in ai_guidelines.md)
+CONV_DOC="$REPO_ROOT/docs/standards/code_conventions.md"
+AI_DOC="$REPO_ROOT/docs/standards/ai_guidelines.md"
+INDEX_DOC="$REPO_ROOT/docs/standards/INDEX.md"
+authority_missing=""
+grep -q "override user-global defaults" "$CONV_DOC" || authority_missing="$authority_missing code_conventions"
+grep -q "override user-global defaults" "$INDEX_DOC" || authority_missing="$authority_missing INDEX"
+grep -q "Safety and Correctness are never overridden" "$CONV_DOC" || authority_missing="$authority_missing code_conventions"
+grep -q "Safety and Correctness are never overridden" "$INDEX_DOC" || authority_missing="$authority_missing INDEX"
+grep -q "one focused question" "$AI_DOC" || authority_missing="$authority_missing ai_guidelines"
+if [ -z "$authority_missing" ]; then
+  ok "standards_authority_and_ambiguity_recorded"
+else
+  no "standards_authority_and_ambiguity_recorded" "missing wording in:$authority_missing"
 fi
 
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
@@ -138,6 +178,21 @@ if [ "$code" -ne 0 ] && printf '%s' "$out" | grep -q "missing.md"; then
   ok "docs_consistency_honors_docs_dir_override"
 else
   no "docs_consistency_honors_docs_dir_override" "code=$code out=$out"
+fi
+
+# badges_rationale_and_wired_r3_recorded (guard: the shop-window/honesty
+# separation in github.md with one canonical Known Issues & Limitations label;
+# CodeRabbit named as this repo's wired R3, with the wiring claim intact)
+GITHUB_DOC="$REPO_ROOT/docs/standards/github.md"
+CODEX_DOC_D="$REPO_ROOT/docs/standards/codex_review.md"
+if grep -q "honesty duty is discharged" "$GITHUB_DOC" \
+  && grep -q "Known Issues & Limitations, Contributing" "$GITHUB_DOC" \
+  && grep -q "R3 is CodeRabbit" "$CODEX_DOC_D" \
+  && grep -q "wired via its GitHub app" "$CODEX_DOC_D" \
+  && grep -q "adjudicated in the PR discussion" "$CODEX_DOC_D"; then
+  ok "badges_rationale_and_wired_r3_recorded"
+else
+  no "badges_rationale_and_wired_r3_recorded" "missing badges rationale or canonical Known Issues label in github.md, or the wired-R3 claim in codex_review.md"
 fi
 
 # repo_scripts_are_executable (guard: every shell entry point carries the

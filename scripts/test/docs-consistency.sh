@@ -17,8 +17,9 @@ if [ ! -f "$index" ]; then
 fi
 
 # Check 1: deprecated wording must not reappear in the standards
-# (glossary alignment, see CONTEXT.md and the domain-glossary SPEC).
-if matches=$(grep -rEn "Self-Review Checklist|author approves" "$docs_dir"); then
+# (glossary alignment and retired claims, see CONTEXT.md and the
+# domain-glossary SPEC).
+if matches=$(grep -rEn "Self-Review Checklist|author approves|only makes R2 concrete" "$docs_dir"); then
   log "deprecated wording found:"
   printf '%s\n' "$matches"
   fail=1

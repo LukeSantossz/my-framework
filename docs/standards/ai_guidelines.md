@@ -17,7 +17,7 @@ AI assistant behavior when generating or modifying code. Counterpart to `crura_m
 
 ## Declare Assumptions
 
-- If a request is ambiguous in a way that changes the output, state the assumption in one line and proceed. Ask only when a wrong assumption is costly to reverse.
+- If a request is ambiguous in a way that changes the output: state the assumption in one line and proceed when it is cheap to reverse; ask one focused question first when a wrong assumption is costly to reverse.
 - If the task needs context you lack, request it rather than guessing.
 - Surface non-obvious trade-offs and discarded alternatives. Record them in the spec's Alternatives Considered section.
 

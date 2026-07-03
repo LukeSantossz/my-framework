@@ -101,13 +101,15 @@ Concrete deliverables that define the issue as complete.
 
 ## README Model
 
-Canonical section order, do not reorder: What It Does, What It Is, Tech Stack, Architecture, Engineering Decisions, Results, Getting Started, API Reference, Project Structure, Project Status, Known Issues, Contributing, License.
+Canonical section order, do not reorder: What It Does, What It Is, Tech Stack, Architecture, Engineering Decisions, Results, Getting Started, API Reference, Project Structure, Project Status, Known Issues & Limitations, Contributing, License.
 
 Remove all HTML comments and `{...}` placeholders before publishing. Sections marked OPTIONAL are included only if they add real signal; remove if empty.
 
 ### Badges
 
 Badges communicate health only. Never advertise low coverage, yellow status, or any weakness metric. If CI is not green, omit the CI badge. Order: language(s), main framework, CI, license.
+
+The badge strip is the shop window, not the honesty surface: the honesty duty is discharged by the mandatory Known Issues & Limitations section, never by badges. Omitting a weak badge is presentation; omitting a known limitation is dishonesty.
 
 ### Title
 

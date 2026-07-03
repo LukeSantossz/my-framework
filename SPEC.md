@@ -1,108 +1,129 @@
-# SPEC: chore: harden scripts and checks with the deferred review follow-ups
+# SPEC: chore(standards): align global and repo standards into one coherent rule set
 
 ## Problem
-Seven small hardening items adjudicated as "defer as follow-up" across the
-reviews of PR #3 and PR #4 remain open, leaving known-but-unpinned contracts
-(empty-string env semantics, duplicated default literals, unchecked config
-writes, an untested error path, INDEX-only reference checking, an untested
-override, inconsistent test-file exec modes) in the framework's own tooling.
+The user's global `CLAUDE.md` and the repo standards contradict each other in
+four places (ambiguity policy, an unqualified "Gate", a duplicated VAR table,
+and the deprecated "Self-Review" section name), and three smaller gaps blur
+the review machinery (CRURA predates the R1/R2/R3 composition, the badges
+rule reads as conflicting with the honesty ethos, and no standard records
+that CodeRabbit is the R3 actually wired on this repo).
 
 ## Design Decision
-Close the whole batch in one maintenance cycle, implemented in parallel by
-three subagents over disjoint file clusters (codex-review, setup,
-docs-consistency), each in an isolated git worktree with its own TDD commits,
-merged back into this branch; the cross-cutting exec-mode normalization lands
-serially after the merge. No behavior of the R2 gate, the bootstrap's happy
-path, or any standard's meaning changes — every item is a test, a guard, an
-error check, or a checker extension.
+One coherence pass in two parts. Repo side (this PR, three parallel doc
+clusters): `code_conventions.md` gains an explicit authority rule — a repo's
+standards override user-global defaults, with Safety and Correctness never
+overridden — echoed in `INDEX.md`; `ai_guidelines.md`'s Declare Assumptions
+becomes the agreed hybrid-by-cost policy verbatim (assume-and-declare when
+cheap to reverse, one focused question when costly); `crura_method.md` is
+rewritten to compose with R1/R2/R3 (human review as final arbiter fed by the
+three layers, stages tied to today's artifacts); `github.md`'s Badges section
+gains the resolving rationale (honesty is discharged by the mandatory Known
+Issues section, not by the badge strip); `codex_review.md` records CodeRabbit
+as the R3 wired on this repository. User side (executed at cycle end, outside
+the PR, with a backup kept): the global `CLAUDE.md` is rewritten thin —
+hybrid ambiguity wording, "Spec Gate" qualified, VAR table replaced by a
+pointer to the repo's `var_method.md`, "Self-Review" renamed "PR Review
+Checklist", and the repo-over-global precedence line added.
 
 ## Alternatives Considered
-- One serial fix wave (like previous cycles): rejected — the items are
-  pre-adjudicated and independent; the user explicitly asked for parallel
-  subagent execution, and disjoint clusters make it conflict-free.
-- Extracting shared default literals into a sourced config file instead of a
-  guard test: rejected — an unrequested abstraction for two bash scripts; the
-  repo's established pattern for drift risk is a guard test (LABEL_SPECS).
-- A new repo-hygiene test suite for the exec-mode guard: rejected — a fourth
-  suite would require a CI edit for one assertion; the guard lives in
-  docs-consistency.test.sh, the closest thing to a repo-invariants suite.
+- Ask-first ambiguity policy everywhere (the current global text): rejected
+  by the user — it blocks AFK and parallel work; the hybrid-by-cost rule is
+  what the working sessions already practice.
+- Keeping the global file rich but aligned (VAR table corrected in place):
+  rejected by the user — duplication is standing drift risk; thin-with-
+  pointer removes the class of bug.
+- Making badges honest (show red CI): rejected in favor of documenting the
+  separation of duties — badges communicate health for the shop window, the
+  mandatory Known Issues section carries the honesty duty; hiding is only
+  forbidden where the reader expects truth.
+- Pinning the global `CLAUDE.md` content with a repo test: rejected — CI has
+  no access to `~/.claude/`; the global file's criteria are verified by
+  inspection at execution and recorded in the PR Evidence.
 
 ## Scope
-- Includes (cluster A — codex-review):
-  - Test pinning that an empty-string `CODEX_REVIEW_MODEL`/`CODEX_REVIEW_EFFORT`
-    behaves as unset (falls through to git config/default), plus an
-    "if non-empty" qualifier on the two env-var lines in
-    `docs/standards/codex_review.md`.
-  - Guard test pinning the `gpt-5.5`/`high` default literals in
-    `scripts/setup.sh` (prompt/summary fallbacks) to those in
-    `scripts/codex-review.sh` (resolution fallbacks), extracted mechanically
-    from both scripts.
-- Includes (cluster B — setup):
-  - Error check on the two interactive `git config --local codexreview.*`
-    writes: a failed write logs and exits 1 (the hooksPath/label-create
-    pattern), tested via a stub `git` that fails only that subcommand.
-  - Test pinning the existing exit-1 path when `setup.sh` runs outside a git
-    repository.
-- Includes (cluster C — docs-consistency):
-  - Extend the reverse-reference check to validate `.md` references inside
-    every file in the standards dir, not only `INDEX.md` (same token rules and
-    resolution roots as today; failure message names the referencing file).
-  - Test pinning that the `DOCS_DIR` override is honored (a violation planted
-    in an alternate docs dir is detected while the default location is clean).
-- Includes (serial, after merge):
-  - Normalize the executable bit (100755) on all `scripts/**/*.sh` and
-    `.githooks/pre-push` in the git index, plus a guard test in
-    `docs-consistency.test.sh` asserting it stays that way.
+- Includes (cluster B — authority and ambiguity):
+  - `docs/standards/code_conventions.md` Precedence section: an explicit rule
+    that a repository's standards override user-global defaults (for example
+    a global `CLAUDE.md`), and that Safety and Correctness are never
+    overridden by either side.
+  - `docs/standards/ai_guidelines.md` Declare Assumptions: the hybrid policy
+    stated as the single rule — state the assumption in one line and proceed
+    when it is cheap to reverse; ask one focused question first when a wrong
+    assumption is costly to reverse.
+  - `docs/standards/INDEX.md` System Rules: one line recording the
+    repo-over-global authority rule.
+- Includes (cluster C — human review):
+  - `docs/standards/crura_method.md`: stages tied to today's artifacts (R =
+    the Self-Review section of `ai_guidelines.md` locally; RA = the Files
+    Changed pass backed by the PR Review Checklist of `github.md`), plus a
+    Review Composition paragraph: the human review is the final arbiter and
+    consumes the R1/R2/R3 layers' recorded results rather than repeating
+    them; the "reviews the same code at least 3 times" claim restated
+    accurately in terms of the actual stages.
+- Includes (cluster D — shop window and R3):
+  - `docs/standards/github.md` Badges: the rationale sentence — badges
+    communicate health; the honesty duty is discharged by the mandatory
+    Known Issues section, never by the badge strip.
+  - `docs/standards/codex_review.md`: a line recording that R3 on this
+    repository is CodeRabbit (wired via the GitHub app), adjudicated in the
+    PR discussion like any reviewer finding.
+- Includes (guard tests): one guard per doc invariant above, placed in
+  `scripts/test/docs-consistency.test.sh` at distinct anchors per cluster
+  (B after `codex_review_doc_depinned`; C after the skills-guidelines guard;
+  D before `repo_scripts_are_executable`) so the parallel branches merge
+  cleanly.
+- Includes (user side, at execution, not in the PR): rewrite
+  `~/.claude/CLAUDE.md` to the thin form described in the Design Decision,
+  after saving a timestamped backup next to it.
 - Does NOT include:
-  - Any change to R2 gate advisory behavior, resolution precedence, or
-    defaults.
-  - Any change to the non-interactive setup happy path.
-  - The larger backlog items (CLAUDE.md conflicts, durable specs, Issue Model,
-    README, CRURA, badges).
-  - New test suites or CI workflow changes.
-  - The user's `prompt.md` (untracked personal file).
+  - Batch 2 items (durable specs + spec-lite, Issue Model generalization,
+    framework README/versioning) — next cycle, own SPEC.
+  - Any behavior change to scripts, hooks, CI, or templates, beyond the guard
+    tests above and one extension adjudicated at R2: the docs-consistency
+    deprecated-wording list gains the retired "only makes R2 concrete" claim,
+    so the contradiction it named cannot reappear.
+  - Changes to the repo `CLAUDE.md` (it already defers to the standards).
+  - Changes to `var_method.md` content (the pointer moves, the table stays
+    where it lives).
 
 ## Acceptance Criteria
-- review_model_empty_env_treated_as_unset: with `CODEX_REVIEW_MODEL=""` and
-  `CODEX_REVIEW_EFFORT=""` exported and repo-local `codexreview.*` set,
-  dry-run prints the git-config values (empty env never yields an empty
-  `-c model=""`).
-- codex_review_doc_qualifies_env_override: the two env-var bullets in
-  `codex_review.md` carry the "if non-empty" qualifier (guard grep).
-- reviewer_defaults_match_across_scripts: a guard test extracts the model and
-  effort default literals from both scripts and fails when they differ.
-- setup_fails_when_reviewer_config_write_fails: `--interactive` with a
-  non-empty answer and a `git` that fails the `config --local codexreview.*`
-  write exits non-zero with a message, and does not report the choice as
-  persisted in the summary.
-- setup_exits_nonzero_outside_git_repo: running `setup.sh` in a directory
-  with no repository exits 1 with the "not inside a git repository" message.
-- docs_consistency_detects_refs_in_standards_bodies: a standards file (not
-  INDEX.md) referencing a missing `.md` fails the check, naming the
-  referencing file; the current tree still passes.
-- docs_consistency_honors_docs_dir_override: with `DOCS_DIR` pointing at an
-  alternate tree containing a violation, the check fails; unset, the default
-  tree passes.
-- repo_scripts_are_executable: a guard test lists `scripts/**/*.sh` and
-  `.githooks/pre-push` from the git index and fails if any lacks mode 100755.
+- precedence_names_repo_over_global: `code_conventions.md` Precedence states
+  the repo-over-global rule (guard grep for the rule's key phrase).
+- ambiguity_policy_is_hybrid: `ai_guidelines.md` Declare Assumptions contains
+  both halves of the hybrid rule, including "one focused question" (guard
+  grep).
+- index_records_authority_rule: `INDEX.md` System Rules records the
+  repo-over-global authority line (guard grep).
+- crura_composes_with_review_layers: `crura_method.md` references R1, R2, R3
+  and the PR Review Checklist (guard grep).
+- badges_rationale_present: `github.md` Badges section contains the Known
+  Issues rationale (guard grep).
+- r3_wired_reviewer_named: `codex_review.md` names CodeRabbit as the wired R3
+  (guard grep).
+- docs_consistency_passes_after_edits: the docs-consistency check passes on
+  the tree with every edit above (including the reference scan over all
+  standards bodies).
+- global_claude_md_thin (verified by inspection at execution, outside CI —
+  recorded with before/after evidence in the PR): hybrid ambiguity wording,
+  "Spec Gate" qualified, VAR table replaced by a pointer, "PR Review
+  Checklist" naming, precedence line present, backup saved.
 
 ## Reproducibility
-- `bash scripts/test/codex-review.test.sh` — expected: all pass, 0 failed.
-- `bash scripts/test/setup.test.sh` — expected: all pass, 0 failed.
 - `bash scripts/test/docs-consistency.test.sh && bash scripts/test/docs-consistency.sh`
   — expected: all pass; `all checks passed.`
+- `bash scripts/test/codex-review.test.sh && bash scripts/test/setup.test.sh`
+  — expected: all pass (regression only; nothing in scope touches them).
 - Versions: bash (Git for Windows), git ≥ 2.40, gh ≥ 2.40, Codex CLI 0.132.0.
   No randomness involved.
 
 ## Risks and Assumptions
-- Assumes the three clusters stay strictly disjoint by file; the plan assigns
-  files explicitly and the merge is expected to be conflict-free.
-- Assumes extending reverse-reference checking to all standards files passes
-  on the current tree (the PR #4 reviewer verified every body reference
-  resolves today); a false-positive token in prose would surface as a check
-  failure and be fixed by tightening the token rules, not by skipping files.
-- Assumes `git update-index --chmod=+x` semantics on Windows (mode lives in
-  the index, not the filesystem) — the guard reads the index, so it is
-  platform-stable.
-- Invalidated if a future cycle extracts shared script config; the guard test
-  for default literals would then be replaced by the shared source.
+- Assumes three parallel clusters editing distinct standards files, with
+  guard tests at distinct anchors of one shared test file, cherry-pick
+  cleanly; a trivial same-file merge conflict is resolved by the controller.
+- Assumes rewriting the global `CLAUDE.md` affects every project the user
+  works on; the thin form deliberately keeps Prohibited, Delivery, and
+  Definition-of-done intact, and a timestamped backup precedes the rewrite.
+- Assumes the hybrid ambiguity policy matches the user's working preference
+  as approved in this cycle's design questions.
+- Invalidated if the framework later hosts multiple repos with conflicting
+  standards — the authority rule would need a hierarchy, not a single line.
