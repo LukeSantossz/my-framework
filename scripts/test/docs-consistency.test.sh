@@ -326,11 +326,15 @@ fi
 
 # repo_scripts_are_executable (guard: every shell entry point carries the
 # executable bit in the git index — the filesystem lies on Windows)
-nonexec="$(cd "$REPO_ROOT" && git ls-files -s scripts .githooks | awk '$1 != "100755" {print $4}' | grep -E '\.sh$|pre-push$' || true)"
-if [ -z "$nonexec" ]; then
-  ok "repo_scripts_are_executable"
+if ! listing="$(cd "$REPO_ROOT" && git ls-files -s scripts .githooks)"; then
+  no "repo_scripts_are_executable" "git ls-files listing failed"
 else
-  no "repo_scripts_are_executable" "not 100755: $(printf '%s' "$nonexec" | tr '\n' ' ')"
+  nonexec="$(printf '%s\n' "$listing" | awk '$1 != "100755" {print $4}' | grep -E '\.sh$|pre-push$' || true)"
+  if [ -z "$nonexec" ]; then
+    ok "repo_scripts_are_executable"
+  else
+    no "repo_scripts_are_executable" "not 100755: $(printf '%s' "$nonexec" | tr '\n' ' ')"
+  fi
 fi
 
 # passes_on_current_tree (the real docs/standards must be consistent)
