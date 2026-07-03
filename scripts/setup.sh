@@ -91,8 +91,8 @@ fi
 # Interactive adoption questionnaire. Enter (or EOF) keeps the current
 # default and writes nothing, so script defaults can evolve.
 if [ "$interactive" -eq 1 ]; then
-  current_model="$(git config codexreview.model 2>/dev/null || true)"
-  current_effort="$(git config codexreview.effort 2>/dev/null || true)"
+  current_model="$(git config --local codexreview.model 2>/dev/null || true)"
+  current_effort="$(git config --local codexreview.effort 2>/dev/null || true)"
   printf '[setup] R2 reviewer model [%s]: ' "${current_model:-gpt-5.5}"
   IFS= read -r answer_model || answer_model=""
   [ -n "$answer_model" ] && git config codexreview.model "$answer_model"
