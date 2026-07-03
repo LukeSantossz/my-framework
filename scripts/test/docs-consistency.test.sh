@@ -136,6 +136,8 @@ INDEX_DOC="$REPO_ROOT/docs/standards/INDEX.md"
 authority_missing=""
 grep -q "override user-global defaults" "$CONV_DOC" || authority_missing="$authority_missing code_conventions"
 grep -q "override user-global defaults" "$INDEX_DOC" || authority_missing="$authority_missing INDEX"
+grep -q "Safety and Correctness are never overridden" "$CONV_DOC" || authority_missing="$authority_missing code_conventions"
+grep -q "Safety and Correctness are never overridden" "$INDEX_DOC" || authority_missing="$authority_missing INDEX"
 grep -q "one focused question" "$AI_DOC" || authority_missing="$authority_missing ai_guidelines"
 if [ -z "$authority_missing" ]; then
   ok "standards_authority_and_ambiguity_recorded"
@@ -168,14 +170,18 @@ else
 fi
 
 # badges_rationale_and_wired_r3_recorded (guard: the shop-window/honesty
-# separation in github.md; CodeRabbit named as this repo's wired R3)
+# separation in github.md with one canonical Known Issues & Limitations label;
+# CodeRabbit named as this repo's wired R3, with the wiring claim intact)
 GITHUB_DOC="$REPO_ROOT/docs/standards/github.md"
 CODEX_DOC_D="$REPO_ROOT/docs/standards/codex_review.md"
 if grep -q "honesty duty is discharged" "$GITHUB_DOC" \
-  && grep -q "CodeRabbit" "$CODEX_DOC_D"; then
+  && grep -q "Known Issues & Limitations, Contributing" "$GITHUB_DOC" \
+  && grep -q "R3 is CodeRabbit" "$CODEX_DOC_D" \
+  && grep -q "wired via its GitHub app" "$CODEX_DOC_D" \
+  && grep -q "adjudicated in the PR discussion" "$CODEX_DOC_D"; then
   ok "badges_rationale_and_wired_r3_recorded"
 else
-  no "badges_rationale_and_wired_r3_recorded" "missing badges rationale in github.md or CodeRabbit in codex_review.md"
+  no "badges_rationale_and_wired_r3_recorded" "missing badges rationale or canonical Known Issues label in github.md, or the wired-R3 claim in codex_review.md"
 fi
 
 # repo_scripts_are_executable (guard: every shell entry point carries the
