@@ -1,33 +1,61 @@
-# SPEC 0009 benchmark assets
+# SPEC 0009 benchmark record
 
 Evidence for [`../0009-switch-r2-reviewer-to-gpt-5-6-terra.md`](../0009-switch-r2-reviewer-to-gpt-5-6-terra.md):
 the benchmark that justified switching the R2 reviewer default from `gpt-5.5` to
-`gpt-5.6-terra`.
+`gpt-5.6-terra`. This is a methodology and results record, not runnable code — the
+one-off harness was intentionally not committed (a branch-juggling research script
+does not belong in a standards repo; see the spec's R2 Adjudication).
 
-## Files
+## What was measured
 
-- `run_benchmark.sh` — the harness. Reviews five diffs (three seeded defects it
-  regenerates on each run, two real commits) with each of `gpt-5.5`,
-  `gpt-5.6-terra`, and `gpt-5.6-sol` at `model_reasoning_effort=high`, and writes a
-  `manifest.csv`. Requires an authenticated Codex CLI (verified on 0.144.1).
-- `manifest.csv` — the recorded run: one row per (model, diff) cell with its
-  latency and exit code. The seeded rows carry `SEEDED` in the `sha` column because
-  the harness recreates those commits on each run, so their SHAs are not stable; the
-  two real diffs are the fixed commits `c3a891b` and `5ff245c`.
+Five diffs were reviewed with each of `gpt-5.5`, `gpt-5.6-terra`, and `gpt-5.6-sol`
+via `codex review --commit <SHA> -c model="<model>" -c model_reasoning_effort="high"`
+(Codex CLI 0.144.1). Three diffs each carried one **intentional seeded defect**; two
+were real, clean pre-merged commits, used to check for false positives.
+
+| Diff | Kind | Planted defect (expected finding) |
+|---|---|---|
+| seed1 | correctness | a base-branch guard whose condition is inverted, so it skips feature branches and runs only on the base |
+| seed2 | invented symbol | `codex review --format=json` and `git rev-parse --branch-name` — neither flag exists |
+| seed3 | security | `eval` on an unsanitized positional argument (command injection) |
+| `c3a891b` | real-clean | none (exec-bit guard hardening) |
+| `5ff245c` | real-clean | none (`sort -u` dedupe) |
+
+Each seeded diff was a single-file commit; the two real diffs are the named commits.
+
+## Result (auditable scoring)
+
+`manifest.csv` records one row per (model, diff) cell: the expected outcome, the
+reviewer's actual verdict (`caught` the seeded defect / reported the clean diff as
+`clean`), whether that matched (`pass`), and latency. Summary:
+
+| Model | Seeded recall | Real-clean precision | Latency (5 cells) |
+|---|---|---|---|
+| gpt-5.5 | 3/3 | 2/2 | 524s |
+| gpt-5.6-terra | 3/3 | 2/2 | 410s |
+| gpt-5.6-sol | 3/3 | 2/2 | 310s |
+
+All three models caught every seeded defect and reported every clean diff as clean.
+Terra matched the more expensive Sol tier, so it was adopted as the cheaper default.
+
+## Caveats
+
+Sample is n=5, one run per cell — directional, not statistically significant. All
+three tiers saturated recall, so the benchmark establishes that Terra is not worse
+than Sol for this gate, not that it is universally better. Auth mode was ChatGPT, so
+per-token dollar cost was not billed locally; the $2.50/$15 and $5/$30 per-1M rates
+are OpenAI's published Terra/Sol prices supplied by the Developer. The per-cell
+review transcripts were generated locally and are not committed; `manifest.csv` is
+the committed scoring record.
 
 ## Reproduce
 
+Recreate the three seeded defects above as single-file commits, then, for each of the
+three models and each of the five commit SHAs:
+
 ```sh
-bash docs/specs/0009-assets/run_benchmark.sh   # writes manifest + per-cell logs to $BENCH_OUT
+codex review --commit <SHA> -c model="<model>" -c model_reasoning_effort="high"
 ```
 
-Per-cell review transcripts (the reviewers' verdicts) are written to `$BENCH_OUT`
-alongside the manifest; they were not committed. Scoring (recall on the seeded
-defects, precision on the clean real diffs) is done by reading each cell's verdict.
-
-## Result
-
-All three models reached full recall (3/3 seeded defects) and full precision (2/2
-clean real diffs). Terra matched the more expensive Sol tier, so it was adopted as
-the cheaper default. Sample is n=5, one run per cell — directional, not
-statistically significant. See the spec for the full table and caveats.
+Score each cell by whether the reviewer flagged the planted defect (seeded diffs) or
+returned no actionable finding (real diffs).

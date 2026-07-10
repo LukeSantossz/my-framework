@@ -40,8 +40,8 @@ the more expensive Sol tier for this gate; only the single default literal moves
     the stale `Codex CLI` prerequisite version to the `0.144.1` the gate is now
     verified against (folded in at the Developer's in-task request; see the R2
     adjudication note below).
-  - `docs/specs/0009-assets/`: the tracked benchmark harness and its result
-    manifest, so the reported numbers are reproducible.
+  - `docs/specs/0009-assets/`: the benchmark methodology record and per-cell
+    scoring manifest, so the reported numbers are auditable.
   - `docs/specs/0009-*.md` and `docs/adr/0003-*.md`: the decision record.
 - Does NOT include:
   - Any change to the resolution precedence (env → git config → default) or to the
@@ -69,15 +69,16 @@ the more expensive Sol tier for this gate; only the single default literal moves
 Benchmark command, per cell:
 `codex review --commit <SHA> -c model="<model>" -c model_reasoning_effort="high"`
 for each of `{gpt-5.5, gpt-5.6-terra, gpt-5.6-sol}` over five diffs — three seeded
-by the tracked harness `docs/specs/0009-assets/run_benchmark.sh` (categories:
-inverted-guard correctness, invented CLI symbols, `eval` command injection; the
-harness regenerates the seeded commits on each run, so their SHAs are not fixed)
-and two real commits `c3a891b` and `5ff245c`. Codex CLI 0.144.1; auth mode ChatGPT,
-so per-token pricing is not billed locally ($2.50/$15 and $5/$30 per 1M are
-OpenAI's published Terra/Sol rates, supplied by the Developer). Raw per-cell
-timings and exit codes are tracked in `docs/specs/0009-assets/manifest.csv`;
-per-cell review transcripts were generated locally. Observed result (n=5, one run
-per cell — directional, not statistically significant):
+defects (an inverted base-branch guard; the non-existent flags
+`codex review --format=json` and `git rev-parse --branch-name`; `eval` on an
+unsanitized argument), each a single-file commit, and two real commits `c3a891b`
+and `5ff245c`. Codex CLI 0.144.1; auth mode ChatGPT, so per-token pricing is not
+billed locally ($2.50/$15 and $5/$30 per 1M are OpenAI's published Terra/Sol rates,
+supplied by the Developer). The per-cell scoring — expected outcome, reviewer
+verdict, and latency — is tracked in `docs/specs/0009-assets/manifest.csv`, with the
+methodology in `docs/specs/0009-assets/README.md`; per-cell review transcripts were
+generated locally. Observed result (n=5, one run per cell — directional, not
+statistically significant):
 
 | Model | Seeded recall | Real-clean precision | Latency (5 cells) |
 |---|---|---|---|
@@ -99,12 +100,24 @@ All three model ids were validated live against CLI 0.144.1 before the run.
   established.
 
 ## R2 Adjudication
-The R2 gate (`gpt-5.6-terra`) reviewed this branch and raised two P2 findings, both
-accepted and resolved here rather than silently dropped:
+The R2 gate (`gpt-5.6-terra`) reviewed this branch across two passes; every finding
+was addressed or justified, never silently dropped.
+
+First pass — two P2 findings, both accepted:
 - README prerequisite flagged as scope creep — the version line was in this spec's
   "Does NOT include" list. Resolved by folding the Developer-approved correction
   into Scope > Includes, not by reverting it.
-- Benchmark not reproducible from the repository — the harness lived in an untracked
-  scratch path and the seeded commit SHAs were ephemeral. Resolved by tracking the
-  harness and the result manifest under `docs/specs/0009-assets/` and pointing
-  Reproducibility at them.
+- Benchmark not reproducible from the repository — the evidence lived in an untracked
+  scratch path and the seeded commit SHAs were ephemeral. Resolved by recording the
+  benchmark under `docs/specs/0009-assets/`.
+
+Second pass — on the newly tracked benchmark assets:
+- Robustness findings on the committed harness (it force-deleted a same-named branch,
+  could clobber untracked paths, and did not fail on a failed seed commit), plus a
+  request for an auditable scoring record. Resolved by removing the harness rather
+  than hardening a fragile research script inside a standards repo, and recording the
+  benchmark as a methodology note plus a per-cell scoring manifest (expected outcome,
+  reviewer verdict, latency).
+- Claim that the spec was committed after the test and implementation commits:
+  rejected as verified false — the spec was added in `3cc2ba0`, before the test
+  (`83db7b6`) and implementation (`914b760`) commits.

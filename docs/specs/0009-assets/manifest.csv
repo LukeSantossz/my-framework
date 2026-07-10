@@ -1,16 +1,16 @@
-label,model,sha,category,ground_truth,seconds,exit
-seed1_correctness,gpt-5.5,SEEDED,correctness,"DEFECT: guard condition inverted (skips feature branches, runs only on base)",68,0
-seed2_invented,gpt-5.5,SEEDED,invented-symbol,"DEFECT: codex review --format=json and git rev-parse --branch-name do not exist",127,0
-seed3_security,gpt-5.5,SEEDED,security,"DEFECT: eval of unsanitized $1 -> command injection",121,0
-real_c3a891b,gpt-5.5,c3a891b,real-clean,"CLEAN: defensive hardening, no real defect",118,0
-real_5ff245c,gpt-5.5,5ff245c,real-clean,"CLEAN: adds sort -u dedupe, no real defect",90,0
-seed1_correctness,gpt-5.6-terra,SEEDED,correctness,"DEFECT: guard condition inverted (skips feature branches, runs only on base)",93,0
-seed2_invented,gpt-5.6-terra,SEEDED,invented-symbol,"DEFECT: codex review --format=json and git rev-parse --branch-name do not exist",116,0
-seed3_security,gpt-5.6-terra,SEEDED,security,"DEFECT: eval of unsanitized $1 -> command injection",55,0
-real_c3a891b,gpt-5.6-terra,c3a891b,real-clean,"CLEAN: defensive hardening, no real defect",78,0
-real_5ff245c,gpt-5.6-terra,5ff245c,real-clean,"CLEAN: adds sort -u dedupe, no real defect",68,0
-seed1_correctness,gpt-5.6-sol,SEEDED,correctness,"DEFECT: guard condition inverted (skips feature branches, runs only on base)",74,0
-seed2_invented,gpt-5.6-sol,SEEDED,invented-symbol,"DEFECT: codex review --format=json and git rev-parse --branch-name do not exist",58,0
-seed3_security,gpt-5.6-sol,SEEDED,security,"DEFECT: eval of unsanitized $1 -> command injection",42,0
-real_c3a891b,gpt-5.6-sol,c3a891b,real-clean,"CLEAN: defensive hardening, no real defect",66,0
-real_5ff245c,gpt-5.6-sol,5ff245c,real-clean,"CLEAN: adds sort -u dedupe, no real defect",70,0
+label,model,category,expected,verdict,pass,latency_s
+seed1_correctness,gpt-5.5,correctness,defect,caught,yes,68
+seed2_invented,gpt-5.5,invented-symbol,defect,caught,yes,127
+seed3_security,gpt-5.5,security,defect,caught,yes,121
+real_c3a891b,gpt-5.5,real-clean,clean,clean,yes,118
+real_5ff245c,gpt-5.5,real-clean,clean,clean,yes,90
+seed1_correctness,gpt-5.6-terra,correctness,defect,caught,yes,93
+seed2_invented,gpt-5.6-terra,invented-symbol,defect,caught,yes,116
+seed3_security,gpt-5.6-terra,security,defect,caught,yes,55
+real_c3a891b,gpt-5.6-terra,real-clean,clean,clean,yes,78
+real_5ff245c,gpt-5.6-terra,real-clean,clean,clean,yes,68
+seed1_correctness,gpt-5.6-sol,correctness,defect,caught,yes,74
+seed2_invented,gpt-5.6-sol,invented-symbol,defect,caught,yes,58
+seed3_security,gpt-5.6-sol,security,defect,caught,yes,42
+real_c3a891b,gpt-5.6-sol,real-clean,clean,clean,yes,66
+real_5ff245c,gpt-5.6-sol,real-clean,clean,clean,yes,70
