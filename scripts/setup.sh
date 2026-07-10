@@ -93,7 +93,7 @@ fi
 if [ "$interactive" -eq 1 ]; then
   current_model="$(git config --local codexreview.model 2>/dev/null || true)"
   current_effort="$(git config --local codexreview.effort 2>/dev/null || true)"
-  printf '[setup] R2 reviewer model [%s]: ' "${current_model:-gpt-5.5}"
+  printf '[setup] R2 reviewer model [%s]: ' "${current_model:-gpt-5.6-terra}"
   IFS= read -r answer_model || answer_model=""
   if [ -n "$answer_model" ] && ! git config --local codexreview.model "$answer_model"; then
     log "failed to persist codexreview.model (is .git/config writable?); activation incomplete."
@@ -107,7 +107,7 @@ if [ "$interactive" -eq 1 ]; then
   fi
   printf '[setup] token economy (caveman/terse/off) [terse]: '
   IFS= read -r answer_economy || answer_economy=""
-  resolved_model="${answer_model:-${current_model:-gpt-5.5}}"
+  resolved_model="${answer_model:-${current_model:-gpt-5.6-terra}}"
   resolved_effort="${answer_effort:-${current_effort:-high}}"
   log "choices: reviewer=$resolved_model effort=$resolved_effort token-economy=${answer_economy:-terse} (see docs/standards/skills_guidelines.md)."
 fi

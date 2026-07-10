@@ -9,7 +9,7 @@ set -u
 # An unset git config key is not an error; outside a repo the lookup is empty.
 config_model="$(git config --local codexreview.model 2>/dev/null || true)"
 config_effort="$(git config --local codexreview.effort 2>/dev/null || true)"
-REVIEWER_MODEL="${CODEX_REVIEW_MODEL:-${config_model:-gpt-5.5}}"
+REVIEWER_MODEL="${CODEX_REVIEW_MODEL:-${config_model:-gpt-5.6-terra}}"
 REVIEWER_EFFORT="${CODEX_REVIEW_EFFORT:-${config_effort:-high}}"
 
 # All overridable for testing and per-repo use.

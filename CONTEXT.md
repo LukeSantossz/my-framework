@@ -23,7 +23,7 @@ _Avoid_: coder, generator, assistant, the AI.
 
 **Reviewer**:
 The model that performs the R2 Cross-Provider Review, drawn from a different Provider
-than the Author (currently Codex / gpt-5.5, OpenAI). Reports findings; never rewrites
+than the Author (currently Codex / gpt-5.6-terra, OpenAI). Reports findings; never rewrites
 the code.
 _Avoid_: checker, validator, critic.
 
