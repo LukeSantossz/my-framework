@@ -44,9 +44,11 @@ Sample is n=5, one run per cell — directional, not statistically significant. 
 three tiers saturated recall, so the benchmark establishes that Terra is not worse
 than Sol for this gate, not that it is universally better. Auth mode was ChatGPT, so
 per-token dollar cost was not billed locally; the $2.50/$15 and $5/$30 per-1M rates
-are OpenAI's published Terra/Sol prices supplied by the Developer. The per-cell
-review transcripts were generated locally and are not committed; `manifest.csv` is
-the committed scoring record.
+are OpenAI's published Terra/Sol prices supplied by the Developer. Each cell's actual
+reviewer verdict is committed in [`verdicts.md`](verdicts.md); `manifest.csv` is the
+machine-readable scoring record. The full tool-trace transcripts were not retained,
+and because an LLM reviewer is stochastic the exact verdicts and latencies are not
+byte-for-byte reproducible.
 
 ## Reproduce
 

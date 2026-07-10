@@ -76,10 +76,10 @@ and `5ff245c`. Codex CLI 0.144.1; auth mode ChatGPT, so per-token pricing is not
 billed locally ($2.50/$15 and $5/$30 per 1M are OpenAI's published Terra/Sol rates,
 supplied by the Developer). The per-cell scoring — expected outcome, reviewer
 verdict, and latency — is tracked in `docs/specs/0009-assets/manifest.csv`, with the
-methodology in `docs/specs/0009-assets/README.md` and the exact seeded file contents
-in `docs/specs/0009-assets/seeds.md`; per-cell review transcripts were generated
-locally. Observed result (n=5, one run per cell — directional, not statistically
-significant):
+methodology in `docs/specs/0009-assets/README.md`, the exact seeded file contents in
+`docs/specs/0009-assets/seeds.md`, and each cell's actual reviewer verdict in
+`docs/specs/0009-assets/verdicts.md`. Observed result (n=5, one run per cell —
+directional, not statistically significant):
 
 | Model | Seeded recall | Real-clean precision | Latency (5 cells) |
 |---|---|---|---|
@@ -132,13 +132,12 @@ Third pass — two P2 findings on the evidence record, both resolved:
   kept as labelled documentation rather than runnable scripts so the negative-test
   defects are not reintroduced as repository code.
 
-Fourth pass — one remaining P2, accepted as a bounded limitation (R2 is advisory; the
-Developer adjudicates):
-- The exact seeded commit SHAs and base tree are not preserved, so `codex review
-  --commit` cannot replay the recorded cells byte-for-byte. Accepted rather than
-  chased: an LLM reviewer is stochastic, so neither the verdicts nor the latencies
-  would reproduce even from identical commits, and all three tiers scored identically
-  (3/3 recall, 2/2 precision) — the decision does not depend on byte-exact replay. The
-  durable, auditable evidence is the methodology (`README.md`), the exact seed contents
-  (`seeds.md`), the per-cell verdicts (`manifest.csv`), and the two named real commits;
-  recreating the seeds from `seeds.md` reproduces the method, not the exact SHAs.
+Fourth pass — one remaining P2, now resolved:
+- Seeded benchmark cells could not be audited from the repository because the exact
+  seeded commit SHAs were not preserved. Resolved via the reviewer's own stated
+  alternative — "immutable patches and review outputs": the exact seed patches are in
+  `seeds.md` and each cell's actual reviewer verdict is committed in `verdicts.md`, so
+  the recorded 3/3 recall and 2/2 precision can be audited from committed text without
+  re-running. Byte-exact replay of the SHAs remains out of reach — an LLM reviewer is
+  stochastic, so verdicts and latencies would not reproduce even from identical commits
+  — but the scoring itself is now verifiable from the committed patches and outputs.
