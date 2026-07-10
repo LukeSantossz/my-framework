@@ -12,7 +12,7 @@ reviewer finding.
 - Author: the model conducting the session (Anthropic Claude family, per `CLAUDE.md`).
   The concrete model varies by session and is recorded per PR.
 - Reviewer: Codex CLI (OpenAI). The requirement is the role, not a name: the Reviewer
-  must be a different provider than the Author. Default model `gpt-5.5` with
+  must be a different provider than the Author. Default model `gpt-5.6-terra` with
   `model_reasoning_effort=high` — defaults, overridable per the Environment
   variables section and persisted by `setup.sh --interactive` (see
   `skills_guidelines.md` for the capability inventory).
@@ -44,7 +44,7 @@ codex review --base main -c model="<resolved model>" -c model_reasoning_effort="
 
 The reviewer identity resolves with precedence: `CODEX_REVIEW_MODEL` /
 `CODEX_REVIEW_EFFORT` (environment) → `git config codexreview.model` /
-`codexreview.effort` (persisted locally) → defaults `gpt-5.5` / `high`.
+`codexreview.effort` (persisted locally) → defaults `gpt-5.6-terra` / `high`.
 
 It reviews the current branch against `main`. The review is **advisory**: findings are
 printed but the push is not blocked by default, matching `ai_guidelines.md` ("A Reviewer
@@ -76,7 +76,7 @@ did not run; record that in the PR per the next section.
 ## Recording in the PR
 
 In the PR Review Checklist (`github.md`), name the concrete models that authored and
-reviewed this change (for example: Author `claude-fable-5`, Reviewer `codex / gpt-5.5`),
+reviewed this change (for example: Author `claude-fable-5`, Reviewer `codex / gpt-5.6-terra`),
 including any override in effect. If R2 did not run (Codex absent, skipped, or
 bypassed), note it and why, as the checklist requires.
 
