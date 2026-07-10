@@ -19,8 +19,8 @@ the more expensive Sol tier for this gate; only the single default literal moves
   better severity calibration (it flagged the seeded inverted-guard defect as P1,
   not P2) and lower latency in the sample, and it gives API-key adopters a defined
   GPT-5.6 price point.
-- **Adopt `gpt-5.6-sol`**: rejected — Sol caught nothing Terra missed (Terra caught
-  more, flagging two real commit-process violations), so its 2× price
+- **Adopt `gpt-5.6-sol`**: rejected — Sol caught nothing Terra missed; both reached
+  3/3 seeded recall and 2/2 clean-diff precision, so its 2× price
   ($5/$30 vs $2.50/$15 per 1M) buys no additional detection for a recurring gate.
 - **Adopt `gpt-5.6` (the API alias of `gpt-5.6-sol`)**: rejected — the bare alias
   resolves to the Sol tier; pinning Terra requires the explicit `gpt-5.6-terra` id,
@@ -76,9 +76,10 @@ and `5ff245c`. Codex CLI 0.144.1; auth mode ChatGPT, so per-token pricing is not
 billed locally ($2.50/$15 and $5/$30 per 1M are OpenAI's published Terra/Sol rates,
 supplied by the Developer). The per-cell scoring — expected outcome, reviewer
 verdict, and latency — is tracked in `docs/specs/0009-assets/manifest.csv`, with the
-methodology in `docs/specs/0009-assets/README.md`; per-cell review transcripts were
-generated locally. Observed result (n=5, one run per cell — directional, not
-statistically significant):
+methodology in `docs/specs/0009-assets/README.md` and the exact seeded file contents
+in `docs/specs/0009-assets/seeds.md`; per-cell review transcripts were generated
+locally. Observed result (n=5, one run per cell — directional, not statistically
+significant):
 
 | Model | Seeded recall | Real-clean precision | Latency (5 cells) |
 |---|---|---|---|
@@ -121,3 +122,12 @@ Second pass — on the newly tracked benchmark assets:
 - Claim that the spec was committed after the test and implementation commits:
   rejected as verified false — the spec was added in `3cc2ba0`, before the test
   (`83db7b6`) and implementation (`914b760`) commits.
+
+Third pass — two P2 findings on the evidence record, both resolved:
+- Internal contradiction — the Sol-rejection rationale said "Terra caught more" while
+  the results record 2/2 clean precision. Fixed: the rationale now rests only on the
+  scored recall and precision (both tiers 3/3 and 2/2), dropping the unscored aside.
+- Seeded diffs not reproducible from the repository — fixed by committing the exact
+  seeded file contents as immutable fixtures in `docs/specs/0009-assets/seeds.md`,
+  kept as labelled documentation rather than runnable scripts so the negative-test
+  defects are not reintroduced as repository code.

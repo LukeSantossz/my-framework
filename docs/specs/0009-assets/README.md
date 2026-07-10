@@ -50,8 +50,9 @@ the committed scoring record.
 
 ## Reproduce
 
-Recreate the three seeded defects above as single-file commits, then, for each of the
-three models and each of the five commit SHAs:
+The exact seeded file contents are in [`seeds.md`](seeds.md). Commit each as a single
+new file under `scripts/bench/`, then, for each of the three models and each of the
+five commit SHAs (the three seeded commits plus the real `c3a891b` and `5ff245c`):
 
 ```sh
 codex review --commit <SHA> -c model="<model>" -c model_reasoning_effort="high"

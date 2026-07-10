@@ -23,8 +23,8 @@ Accepted.
   on every push.
 - **Stay on `gpt-5.5`**: rejected — Terra was equal-or-better on every measured axis
   and gives API-key adopters a defined GPT-5.6 price point.
-- **`gpt-5.6-sol`**: rejected — it caught nothing Terra missed (Terra caught more), so
-  its 2× price buys no additional detection here.
+- **`gpt-5.6-sol`**: rejected — it caught nothing Terra missed; both scored 3/3 seeded
+  recall and 2/2 clean-diff precision, so its 2× price buys no additional detection here.
 - **`gpt-5.6` (alias)**: rejected — the bare alias resolves to the Sol tier; pinning
   Terra needs the explicit `gpt-5.6-terra` id.
 
