@@ -42,7 +42,7 @@ A development-standards framework: versioned Markdown standards under `docs/stan
 - git >= 2.40
 - bash (Git for Windows works)
 - gh CLI
-- Optional: Codex CLI 0.132.0, for the R2 cross-provider gate
+- Optional: Codex CLI 0.144.1, for the R2 cross-provider gate
 
 ### Installation
 
