@@ -62,7 +62,7 @@ else
 fi
 
 # review_model_default_when_unset (dry-run prints the default command)
-expected='codex review --base main -c model="gpt-5.5" -c model_reasoning_effort="high"'
+expected='codex review --base main -c model="gpt-5.6-terra" -c model_reasoning_effort="high"'
 repo="$(new_repo default)"
 out=$(cd "$repo" && PATH="$STUB_DIR:$PATH" CODEX_REVIEW_MODEL= CODEX_REVIEW_EFFORT= CODEX_REVIEW_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
 if [ "$code" -eq 0 ] && printf '%s\n' "$out" | grep -qxF "$expected"; then

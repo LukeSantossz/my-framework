@@ -227,7 +227,7 @@ log="$SANDBOX/globalscope.log"; : > "$log"
 globalcfg="$SANDBOX/globalconfig"
 git config --file "$globalcfg" codexreview.model global-model
 out=$(cd "$repo" && printf '\n\n\n' | GIT_CONFIG_GLOBAL="$globalcfg" GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" --interactive 2>&1); code=$?
-if [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "reviewer=gpt-5.5" \
+if [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "reviewer=gpt-5.6-terra" \
   && ! printf '%s' "$out" | grep -q "global-model"; then
   ok "setup_interactive_ignores_global_scope"
 else
