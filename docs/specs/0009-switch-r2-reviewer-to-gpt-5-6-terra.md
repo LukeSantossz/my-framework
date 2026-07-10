@@ -131,3 +131,14 @@ Third pass — two P2 findings on the evidence record, both resolved:
   seeded file contents as immutable fixtures in `docs/specs/0009-assets/seeds.md`,
   kept as labelled documentation rather than runnable scripts so the negative-test
   defects are not reintroduced as repository code.
+
+Fourth pass — one remaining P2, accepted as a bounded limitation (R2 is advisory; the
+Developer adjudicates):
+- The exact seeded commit SHAs and base tree are not preserved, so `codex review
+  --commit` cannot replay the recorded cells byte-for-byte. Accepted rather than
+  chased: an LLM reviewer is stochastic, so neither the verdicts nor the latencies
+  would reproduce even from identical commits, and all three tiers scored identically
+  (3/3 recall, 2/2 precision) — the decision does not depend on byte-exact replay. The
+  durable, auditable evidence is the methodology (`README.md`), the exact seed contents
+  (`seeds.md`), the per-cell verdicts (`manifest.csv`), and the two named real commits;
+  recreating the seeds from `seeds.md` reproduces the method, not the exact SHAs.
