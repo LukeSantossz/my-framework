@@ -36,16 +36,19 @@ the more expensive Sol tier for this gate; only the single default literal moves
     pinned default literal used by the dry-run and parity guards.
   - `docs/standards/codex_review.md` and `CONTEXT.md`: the stated default model
     and the worked example.
-  - `docs/specs/0009-*.md`, `docs/adr/0003-*.md`, and the README Engineering
-    Decisions row: the decision record.
+  - `README.md`: the Engineering Decisions row indexing ADR 0003, and correcting
+    the stale `Codex CLI` prerequisite version to the `0.144.1` the gate is now
+    verified against (folded in at the Developer's in-task request; see the R2
+    adjudication note below).
+  - `docs/specs/0009-assets/`: the tracked benchmark harness and its result
+    manifest, so the reported numbers are reproducible.
+  - `docs/specs/0009-*.md` and `docs/adr/0003-*.md`: the decision record.
 - Does NOT include:
   - Any change to the resolution precedence (env → git config → default) or to the
     `high` reasoning effort.
   - Making the gate blocking, or any other behavior change.
-  - The historical specs 0001/0004/0005 that cite `gpt-5.5` as the then-current
-    default (durable archive; not rewritten).
-  - The README's `Codex CLI 0.132.0` prerequisite line (a separate version-drift
-    concern: the installed CLI is 0.144.1).
+  - The historical specs 0001/0004/0005/0006/0007 that cite `gpt-5.5` or the older
+    `Codex CLI 0.132.0`/`0.140.0` as then-current (durable archive; not rewritten).
 
 ## Acceptance Criteria
 - review_model_default_when_unset_is_terra: with no env or git-config override,
@@ -55,6 +58,9 @@ the more expensive Sol tier for this gate; only the single default literal moves
   empty answers reports `reviewer=gpt-5.6-terra` in its summary.
 - reviewer_defaults_match_across_scripts_holds: the runner-side and setup-side
   default literals remain equal (the parity guard passes) at `gpt-5.6-terra`.
+- readme_codex_prerequisite_is_current: `README.md` states the `Codex CLI`
+  prerequisite as `0.144.1`, and no living (non-archive) file leaves a `0.132.0`
+  prerequisite.
 - all_suites_green: `bash scripts/test/codex-review.test.sh`,
   `bash scripts/test/setup.test.sh`, `bash scripts/test/docs-consistency.test.sh`,
   and `bash scripts/test/docs-consistency.sh` pass on the final tree.
@@ -63,12 +69,15 @@ the more expensive Sol tier for this gate; only the single default literal moves
 Benchmark command, per cell:
 `codex review --commit <SHA> -c model="<model>" -c model_reasoning_effort="high"`
 for each of `{gpt-5.5, gpt-5.6-terra, gpt-5.6-sol}` over five diffs — three seeded
-by the harness `scratchpad/bench/run_benchmark.sh` (categories: inverted-guard
-correctness, invented CLI symbols, `eval` command injection) and two real commits
-`c3a891b` and `5ff245c`. Codex CLI 0.144.1; auth mode ChatGPT, so per-token pricing
-is not billed locally ($2.50/$15 and $5/$30 per 1M are OpenAI's published Terra/Sol
-rates, supplied by the Developer). Observed result (n=5, one run per cell —
-directional, not statistically significant):
+by the tracked harness `docs/specs/0009-assets/run_benchmark.sh` (categories:
+inverted-guard correctness, invented CLI symbols, `eval` command injection; the
+harness regenerates the seeded commits on each run, so their SHAs are not fixed)
+and two real commits `c3a891b` and `5ff245c`. Codex CLI 0.144.1; auth mode ChatGPT,
+so per-token pricing is not billed locally ($2.50/$15 and $5/$30 per 1M are
+OpenAI's published Terra/Sol rates, supplied by the Developer). Raw per-cell
+timings and exit codes are tracked in `docs/specs/0009-assets/manifest.csv`;
+per-cell review transcripts were generated locally. Observed result (n=5, one run
+per cell — directional, not statistically significant):
 
 | Model | Seeded recall | Real-clean precision | Latency (5 cells) |
 |---|---|---|---|
@@ -88,3 +97,14 @@ All three model ids were validated live against CLI 0.144.1 before the run.
   id, or a harder defect set showing Sol catches defects Terra misses — the
   benchmark saturated recall and cannot rank the tiers above the floor it
   established.
+
+## R2 Adjudication
+The R2 gate (`gpt-5.6-terra`) reviewed this branch and raised two P2 findings, both
+accepted and resolved here rather than silently dropped:
+- README prerequisite flagged as scope creep — the version line was in this spec's
+  "Does NOT include" list. Resolved by folding the Developer-approved correction
+  into Scope > Includes, not by reverting it.
+- Benchmark not reproducible from the repository — the harness lived in an untracked
+  scratch path and the seeded commit SHAs were ephemeral. Resolved by tracking the
+  harness and the result manifest under `docs/specs/0009-assets/` and pointing
+  Reproducibility at them.
