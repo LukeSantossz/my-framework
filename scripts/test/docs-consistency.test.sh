@@ -167,14 +167,19 @@ CONTEXT_DOC="$REPO_ROOT/CONTEXT.md"
 durable_spec_missing=""
 grep -q "docs/specs/" "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_docs_specs"
 grep -q "spec-lite" "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_spec_lite"
-for n in 0001 0002 0003 0004 0005 0006 0007; do
-  match="$(ls "$REPO_ROOT/docs/specs/${n}"*.md 2>/dev/null | head -1)"
-  if [ -z "$match" ]; then
-    durable_spec_missing="$durable_spec_missing specs_${n}_missing"
-  elif ! head -1 "$match" | grep -q "^# SPEC:"; then
-    durable_spec_missing="$durable_spec_missing specs_${n}_header"
+# Every spec present under docs/specs/ must carry the "# SPEC:" header. Globbed
+# (not a frozen number list) so specs added after this guard are covered too;
+# the archive_pins block below stays the byte-exact integrity check for the
+# backfilled 0001-0006.
+spec_count=0
+for match in "$REPO_ROOT"/docs/specs/*.md; do
+  [ -f "$match" ] || continue
+  spec_count=$((spec_count + 1))
+  if ! head -1 "$match" | grep -q "^# SPEC:"; then
+    durable_spec_missing="$durable_spec_missing specs_$(basename "$match")_header"
   fi
 done
+[ "$spec_count" -gt 0 ] || durable_spec_missing="$durable_spec_missing specs_none_found"
 # The backfilled archive is verbatim history: each committed blob must equal
 # the blob at its pinned extraction commit (blob-to-blob, immune to eol
 # conversion; needs full history — CI fetches with fetch-depth: 0).
