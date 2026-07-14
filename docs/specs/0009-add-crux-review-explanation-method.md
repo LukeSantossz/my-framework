@@ -48,6 +48,10 @@ deleted before implementation without losing the format:
   `white-space: pre` or `pre-wrap`; each code block's CSS is confirmed before
   the file is saved so newlines are not collapsed.
 - Callouts: used for key concepts, definitions, and important edge cases.
+- Security: all change-derived text (diff content, code, identifiers) is
+  context-appropriately escaped for its HTML, CSS, or JavaScript insertion
+  point, and any generated URL is sanitized or allowlisted, so reviewed content
+  cannot inject markup or scripts into the explainer.
 - Prose: written in a clear, flowing classic style with smooth transitions
   between sections.
 

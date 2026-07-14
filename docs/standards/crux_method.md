@@ -26,8 +26,11 @@ and figures), Code (a high-level, grouped walkthrough of the changes), and Quiz
 (five interactive multiple-choice questions testing real understanding, not
 gotchas). Diagrams reuse a small number of families and are HTML, never ASCII;
 code blocks use `<pre>` or a `div` with `white-space: pre`/`pre-wrap`, confirmed
-before saving; callouts mark key concepts and edge cases. The full artifact
-contract is recorded verbatim in
+before saving; callouts mark key concepts and edge cases. All change-derived text (diff
+content, code, identifiers) is context-appropriately escaped for its HTML, CSS,
+or JavaScript insertion point and any generated URL is sanitized or allowlisted
+before rendering, so reviewed content cannot inject markup or scripts into the
+explainer. The full artifact contract is recorded verbatim in
 `docs/specs/0009-add-crux-review-explanation-method.md`.
 
 ## Behaviors
