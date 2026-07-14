@@ -43,7 +43,9 @@ contract is recorded verbatim in
 ## Placement and Fallback
 
 CRUX feeds R1 and the CRURA Review; it is not R1, R2, or R3, and it never blocks
-a ship. If the generating skill (or `humanizer`) is absent, the Method degrades
-deliberately, never silently: the reviewer reads the diff directly, and the Pull
-Request notes the CRUX aid was absent — mirroring the R2 Codex-absent fallback.
-The skill and its install/verify path are recorded in `skills_guidelines.md`.
+a ship. Fallbacks degrade deliberately, never silently. If the generating skill
+is absent, no explainer is produced: the reviewer reads the diff directly and the
+Pull Request notes the CRUX aid was absent — mirroring the R2 Codex-absent
+fallback. If only `humanizer` is absent, the explainer is still produced and its
+prose gets a manual anti-slop pass; the degraded step is flagged, not silent. The
+skill and its install/verify path are recorded in `skills_guidelines.md`.
