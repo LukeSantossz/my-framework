@@ -13,6 +13,7 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - `token_economy.md`: controlled token consumption (Caveman), with the scope boundary against versioned artifacts.
 - `skills_guidelines.md`: external-capability inventory — pipeline stage, install/verify, and declared fallback per skill.
 - `codex_review.md`: operational R2 cross-provider gate (Codex CLI pre-push review).
+- `crux_method.md`: the CRUX review-time explanation aid — a transient, interactive explainer of an implemented change that feeds R1 and the CRURA Review.
 
 ## System Rules
 
@@ -24,6 +25,7 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - Naming flows from `code_conventions.md` (general) to `var_method.md` (suffixes); the suffix guide is the lowest layer of precedence.
 - Test-first order (red-green-refactor) is project policy, enforced by the Superpowers TDD phase and recorded in `code_conventions.md` and `ai_guidelines.md`.
 - Review composes across three layers meeting at the PR: R1 internal Superpowers review, R2 cross-provider review, R3 automated PR review, per `ai_guidelines.md` Review Composition. Human review follows `crura_method.md`.
+- CRUX explanation aid: at review time an implemented change may be explained by a transient CRUX explainer (`crux_method.md`) that feeds R1 and the CRURA Review; it is advisory, never a review layer and never a blocking gate, and adds no versioned record.
 - Token economy per `token_economy.md`: `CLAUDE.md` is kept compressed; terse mode is allowed in conversation but never in `SPEC.md`, PR, Issue, or commit artifacts. It never overrides Safety or Correctness.
 - Conflict resolution follows the precedence order in `code_conventions.md`.
 - Authority between sources: a repository's standards override user-global defaults (per the Precedence section of `code_conventions.md`); Safety and Correctness are never overridden.
@@ -43,3 +45,4 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 7. `token_economy.md`
 8. `skills_guidelines.md`
 9. `codex_review.md`
+10. `crux_method.md`

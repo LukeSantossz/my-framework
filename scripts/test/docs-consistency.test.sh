@@ -342,6 +342,63 @@ else
   fi
 fi
 
+# crux_method_and_skill_recorded (guard: the CRUX review-explanation method is
+# recorded as an advisory review aid, indexed, with its skill entry, glossary
+# term, and its three behavior requirements — humanizer pass, medium-default
+# quiz difficulty, and skippable wrong-answer remediation)
+CRUX_DOC="$REPO_ROOT/docs/standards/crux_method.md"
+CRUX_INDEX="$REPO_ROOT/docs/standards/INDEX.md"
+CRUX_SKILLS="$REPO_ROOT/docs/standards/skills_guidelines.md"
+CRUX_CONTEXT="$REPO_ROOT/CONTEXT.md"
+crux_missing=""
+[ -f "$CRUX_DOC" ] || crux_missing="$crux_missing crux_method_file"
+# INDEX must list the standard in both the Documents list and the Reading Order.
+grep -qF '`crux_method.md`:' "$CRUX_INDEX" 2>/dev/null || crux_missing="$crux_missing index_documents"
+grep -qF '10. `crux_method.md`' "$CRUX_INDEX" 2>/dev/null || crux_missing="$crux_missing index_reading_order"
+# Advisory placement, both fallbacks (generator-absent vs humanizer-only-absent),
+# and the three behavior requirements, asserted by exact clause so a reworded
+# default or a dropped fallback is caught rather than passing on a stray keyword.
+grep -q "advisory" "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing advisory"
+grep -qi "never blocks" "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing not_blocking"
+grep -qF '`humanizer` skill' "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing humanizer_in_method"
+grep -qF 'only `humanizer` is absent' "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing humanizer_only_fallback"
+grep -qF 'defaulting to `medium`' "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing difficulty_medium"
+grep -qF 'skip it and proceed' "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing remediation_skip"
+# The skill entry, scoped to its own section so a generic label from a different
+# skill's section cannot satisfy the check.
+grep -qF '## Explain-Change (CRUX)' "$CRUX_SKILLS" 2>/dev/null || crux_missing="$crux_missing skills_header"
+crux_skill_section="$(awk '/^## Explain-Change \(CRUX\)$/{flag=1; next} /^## /{flag=0} flag' "$CRUX_SKILLS" 2>/dev/null)"
+printf '%s' "$crux_skill_section" | grep -qF 'Pipeline stage:' || crux_missing="$crux_missing skills_pipeline"
+printf '%s' "$crux_skill_section" | grep -qF 'Install/verify:' || crux_missing="$crux_missing skills_installverify"
+printf '%s' "$crux_skill_section" | grep -qF 'Fallback:' || crux_missing="$crux_missing skills_fallback"
+printf '%s' "$crux_skill_section" | grep -qF 'humanizer' || crux_missing="$crux_missing skills_humanizer"
+# The glossary defines the term and lists CRUX among the framework's Methods.
+grep -qF 'CRUX Method' "$CRUX_CONTEXT" 2>/dev/null || crux_missing="$crux_missing glossary_term"
+grep -qF 'CRUX (review explanation)' "$CRUX_CONTEXT" 2>/dev/null || crux_missing="$crux_missing context_method_lists_crux"
+# Security: the artifact contract must require escaping change-derived text and
+# sanitizing generated URLs, so a reviewed diff cannot inject into the explainer.
+grep -qi 'escap' "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing artifact_escaping"
+grep -qiE 'sanitiz|allowlist' "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing artifact_url_sanitize"
+if [ -z "$crux_missing" ]; then
+  ok "crux_method_and_skill_recorded"
+else
+  no "crux_method_and_skill_recorded" "missing:$crux_missing"
+fi
+
+# crux_decision_promoted_to_adr (guard: the transient-explainer decision is a
+# durable ADR, indexed in the README Engineering Decisions table)
+CRUX_ADR="$REPO_ROOT/docs/adr/0003-crux-explainers-are-transient.md"
+CRUX_README="$REPO_ROOT/README.md"
+crux_adr_missing=""
+[ -f "$CRUX_ADR" ] || crux_adr_missing="$crux_adr_missing adr_file"
+grep -q "docs/adr/0003-crux-explainers-are-transient.md" "$CRUX_README" 2>/dev/null \
+  || crux_adr_missing="$crux_adr_missing readme_row"
+if [ -z "$crux_adr_missing" ]; then
+  ok "crux_decision_promoted_to_adr"
+else
+  no "crux_decision_promoted_to_adr" "missing:$crux_adr_missing"
+fi
+
 # passes_on_current_tree (the real docs/standards must be consistent)
 out=$(bash "$CHECK" 2>&1); code=$?
 if [ "$code" -eq 0 ]; then

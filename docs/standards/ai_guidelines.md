@@ -67,6 +67,8 @@ with a defined hierarchy so none is duplicated or skipped:
 
 When no second-provider tool is available, R1 plus the human PR review (per `crura_method.md`) stand in for R2; note its absence in the PR.
 
+At review time an implemented change may also carry a transient CRUX explainer (see `crux_method.md`) that feeds R1 and the CRURA Review. It is an aid, not a review layer, and never blocks a ship.
+
 ## Cross-Provider Review
 
 Two roles: the Author model develops the code; the Reviewer model, when a second provider is available, reviews it before the PR. This is layer R2 above.

@@ -33,6 +33,7 @@ A development-standards framework: versioned Markdown standards under `docs/stan
 |---|---|
 | Decision records flow: SPEC → ADR → README | [`docs/adr/0001-decision-records-flow.md`](docs/adr/0001-decision-records-flow.md) |
 | Specs become durable under `docs/specs/`; ADRs stay the curated rationale home | [`docs/adr/0002-durable-spec-archive.md`](docs/adr/0002-durable-spec-archive.md) |
+| CRUX review explainers are transient; ADRs stay the durable record | [`docs/adr/0003-crux-explainers-are-transient.md`](docs/adr/0003-crux-explainers-are-transient.md) |
 
 ## Getting Started
 

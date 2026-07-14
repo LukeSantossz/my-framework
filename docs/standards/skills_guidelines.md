@@ -40,6 +40,24 @@ the process.
 - Fallback: per `ai_guidelines.md` Review Composition — R1 plus the human PR
   review stand in for R2, and the PR notes the absence.
 
+## Explain-Change (CRUX)
+
+- Pipeline stage: the CRUX Method review aid (`crux_method.md`) — at review time,
+  generates a transient, interactive HTML explainer of an implemented change.
+- How to use: invoke on a diff, branch, or Pull Request; the skill explores the
+  surrounding code and writes a self-contained, date-prefixed HTML file outside
+  the repository. Quiz difficulty is `easy`, `medium`, or `hard`, defaulting to
+  `medium`; a wrong quiz answer reveals a deeper, skippable explanation.
+- Required: optional. It is a review aid, never a blocking gate.
+- Install/verify: the `explain-change` skill has no marketplace package; create
+  it at user scope (`~/.claude/skills/`) from the artifact contract in
+  `crux_method.md`, then verify it appears in the session's skill list.
+- Fallback: if the skill is absent, the reviewer reads the diff directly and the
+  Pull Request notes the CRUX aid was absent, per `crux_method.md`.
+- Composition: the explainer's prose is passed through the `humanizer` skill to
+  remove AI-writing signs before the final render; if `humanizer` is absent,
+  flag the AI-slop risk and do a manual pass — never a silent skip.
+
 ## Caveman
 
 - Pipeline stage: token economy, conversation style only (`token_economy.md`).
