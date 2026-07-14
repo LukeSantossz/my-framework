@@ -156,7 +156,7 @@ _Avoid_: norm, guideline, rule, policy (as the umbrella term).
 
 **Method**:
 A named discipline original to this framework, identified by an acronym — SPEC (design
-before code), VAR (naming suffixes), CRURA (human review). A subtype of Standard; the
+before code), VAR (naming suffixes), CRURA (human review), CRUX (review explanation). A subtype of Standard; the
 other Standards (conventions, AI guidelines, GitHub, token economy) are not Methods.
 _Avoid_: process, methodology, framework.
 
