@@ -342,6 +342,31 @@ else
   fi
 fi
 
+# crux_method_and_skill_recorded (guard: the CRUX review-explanation method is
+# recorded as an advisory review aid, indexed, with its skill entry, glossary
+# term, and its three behavior requirements — humanizer pass, medium-default
+# quiz difficulty, and skippable wrong-answer remediation)
+CRUX_DOC="$REPO_ROOT/docs/standards/crux_method.md"
+CRUX_INDEX="$REPO_ROOT/docs/standards/INDEX.md"
+CRUX_SKILLS="$REPO_ROOT/docs/standards/skills_guidelines.md"
+CRUX_CONTEXT="$REPO_ROOT/CONTEXT.md"
+crux_missing=""
+[ -f "$CRUX_DOC" ] || crux_missing="$crux_missing crux_method_file"
+grep -q "crux_method.md" "$CRUX_INDEX" || crux_missing="$crux_missing index_ref"
+grep -q "advisory" "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing advisory"
+grep -qi "never blocks" "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing not_blocking"
+grep -q "humanizer" "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing humanizer_in_method"
+grep -q "medium" "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing difficulty_medium"
+grep -qi "skip" "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing remediation_skip"
+grep -q "explain-change" "$CRUX_SKILLS" 2>/dev/null || crux_missing="$crux_missing skills_entry"
+grep -q "humanizer" "$CRUX_SKILLS" 2>/dev/null || crux_missing="$crux_missing skills_humanizer"
+grep -q "CRUX Method" "$CRUX_CONTEXT" 2>/dev/null || crux_missing="$crux_missing glossary_term"
+if [ -z "$crux_missing" ]; then
+  ok "crux_method_and_skill_recorded"
+else
+  no "crux_method_and_skill_recorded" "missing:$crux_missing"
+fi
+
 # passes_on_current_tree (the real docs/standards must be consistent)
 out=$(bash "$CHECK" 2>&1); code=$?
 if [ "$code" -eq 0 ]; then
