@@ -49,8 +49,9 @@ the process.
   the repository. Quiz difficulty is `easy`, `medium`, or `hard`, defaulting to
   `medium`; a wrong quiz answer reveals a deeper, skippable explanation.
 - Required: optional. It is a review aid, never a blocking gate.
-- Install/verify: install the `explain-change` skill at user scope
-  (`~/.claude/skills/`); verify it appears in the session's skill list.
+- Install/verify: the `explain-change` skill has no marketplace package; create
+  it at user scope (`~/.claude/skills/`) from the artifact contract in
+  `crux_method.md`, then verify it appears in the session's skill list.
 - Fallback: if the skill is absent, the reviewer reads the diff directly and the
   Pull Request notes the CRUX aid was absent, per `crux_method.md`.
 - Composition: the explainer's prose is passed through the `humanizer` skill to
