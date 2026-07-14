@@ -367,6 +367,20 @@ else
   no "crux_method_and_skill_recorded" "missing:$crux_missing"
 fi
 
+# crux_decision_promoted_to_adr (guard: the transient-explainer decision is a
+# durable ADR, indexed in the README Engineering Decisions table)
+CRUX_ADR="$REPO_ROOT/docs/adr/0003-crux-explainers-are-transient.md"
+CRUX_README="$REPO_ROOT/README.md"
+crux_adr_missing=""
+[ -f "$CRUX_ADR" ] || crux_adr_missing="$crux_adr_missing adr_file"
+grep -q "docs/adr/0003-crux-explainers-are-transient.md" "$CRUX_README" 2>/dev/null \
+  || crux_adr_missing="$crux_adr_missing readme_row"
+if [ -z "$crux_adr_missing" ]; then
+  ok "crux_decision_promoted_to_adr"
+else
+  no "crux_decision_promoted_to_adr" "missing:$crux_adr_missing"
+fi
+
 # passes_on_current_tree (the real docs/standards must be consistent)
 out=$(bash "$CHECK" 2>&1); code=$?
 if [ "$code" -eq 0 ]; then
