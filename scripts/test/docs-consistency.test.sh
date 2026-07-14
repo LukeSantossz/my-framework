@@ -375,6 +375,10 @@ printf '%s' "$crux_skill_section" | grep -qF 'humanizer' || crux_missing="$crux_
 # The glossary defines the term and lists CRUX among the framework's Methods.
 grep -qF 'CRUX Method' "$CRUX_CONTEXT" 2>/dev/null || crux_missing="$crux_missing glossary_term"
 grep -qF 'CRUX (review explanation)' "$CRUX_CONTEXT" 2>/dev/null || crux_missing="$crux_missing context_method_lists_crux"
+# Security: the artifact contract must require escaping change-derived text and
+# sanitizing generated URLs, so a reviewed diff cannot inject into the explainer.
+grep -qi 'escap' "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing artifact_escaping"
+grep -qiE 'sanitiz|allowlist' "$CRUX_DOC" 2>/dev/null || crux_missing="$crux_missing artifact_url_sanitize"
 if [ -z "$crux_missing" ]; then
   ok "crux_method_and_skill_recorded"
 else
