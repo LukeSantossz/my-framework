@@ -1,8 +1,8 @@
 # CRUX Method
 
 Change Review Understanding eXplanation. The review-time discipline that makes
-comprehension of an implemented change a produced, checkable outcome: before a
-change is reviewed, it is explained by a transient, interactive HTML explainer
+comprehension of an implemented change a produced, checkable outcome: a change
+under review may be explained by a transient, interactive HTML explainer
 generated outside version control. CRUX is an aid feeding the R1 and CRURA
 review layers (see `ai_guidelines.md` Review Composition and `crura_method.md`);
 it is advisory only, never a review layer and never a blocking gate. Durable
