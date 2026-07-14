@@ -167,6 +167,15 @@ classes — use sparingly), Handler (event-reacting functions — use sparingly)
 suffix only when it names the real responsibility; drop it when a specific name is clearer.
 _Avoid_: Hungarian notation, type prefixes.
 
+**CRUX Method**:
+The review-time discipline that explains an implemented change with a transient,
+interactive HTML explainer (Background, Intuition, Code, Quiz) generated outside
+version control, to make comprehension a produced, checkable outcome before
+review. An aid feeding R1 and the CRURA Review — never a review layer and never
+a blocking gate; durable rationale stays in ADRs. Acronym: Change Review
+Understanding eXplanation.
+_Avoid_: explainer (the artifact, not the method), code walkthrough, tutorial.
+
 ### Token Economy
 
 **Token Economy**:
