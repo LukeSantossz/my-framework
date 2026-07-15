@@ -173,15 +173,15 @@ else
   no "crura_composes_with_review_layers" "crura_method.md does not reference the review layers or the checklist"
 fi
 
-# codex_review_doc_depinned (guard: role-based doc — no stale Author pin,
-# override variables documented)
+# codex_review_doc_depinned (guard: role-based doc — no concrete Anthropic model
+# id anywhere, so no Author pin can go stale; override variables documented)
 CODEX_DOC="$REPO_ROOT/docs/standards/codex_review.md"
-if ! grep -q "claude-opus-4-8" "$CODEX_DOC" \
+if ! grep -Eq "claude-[a-z]+-[0-9]" "$CODEX_DOC" \
   && grep -q "CODEX_REVIEW_MODEL" "$CODEX_DOC" \
   && grep -q "CODEX_REVIEW_EFFORT" "$CODEX_DOC"; then
   ok "codex_review_doc_depinned"
 else
-  no "codex_review_doc_depinned" "codex_review.md still pins models or lacks the override variables"
+  no "codex_review_doc_depinned" "codex_review.md pins a concrete Anthropic model id or lacks the override variables"
 fi
 
 # standards_authority_and_ambiguity_recorded (guard: repo-over-global rule in
