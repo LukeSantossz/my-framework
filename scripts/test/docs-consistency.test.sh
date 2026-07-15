@@ -387,7 +387,8 @@ fi
 # framework_readme_and_license_recorded (guard: root README.md exists in
 # canonical section order, links both decision-flow ADRs, Known Issues &
 # Limitations is present, the MIT LICENSE exists and is named in the README
-# License section, and no HTML comments or {...} placeholders remain)
+# License section, the Codex CLI prerequisite reads as a minimum rather than an
+# exact pin, and no HTML comments or {...} placeholders remain)
 README_DOC="$REPO_ROOT/README.md"
 LICENSE_FILE="$REPO_ROOT/LICENSE"
 readme_order_ok=0
@@ -431,13 +432,14 @@ if [ "$readme_order_ok" -eq 1 ] \
   && grep -q "CONTEXT.md" "$README_DOC" \
   && grep -q "self-test" "$README_DOC" \
   && grep -q "token-economy choice is informational" "$README_DOC" \
+  && grep -qE 'Codex CLI >= [0-9]' "$README_DOC" \
   && grep -q "MIT" "$README_DOC" \
   && [ -f "$LICENSE_FILE" ] \
   && ! grep -q "<!--" "$README_DOC" \
   && ! grep -qE '\{[^}]*\}' "$README_DOC"; then
   ok "framework_readme_and_license_recorded"
 else
-  no "framework_readme_and_license_recorded" "README missing/out of canonical order, missing ADR links, MIT naming, LICENSE file, or contains comments/placeholders"
+  no "framework_readme_and_license_recorded" "README missing/out of canonical order, missing ADR links, MIT naming, LICENSE file, a minimum-version (>=) Codex CLI prerequisite, or contains comments/placeholders"
 fi
 
 # repo_scripts_are_executable (guard: every shell entry point carries the
