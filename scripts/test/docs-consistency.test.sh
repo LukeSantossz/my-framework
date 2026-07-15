@@ -13,6 +13,51 @@ FAIL=0
 ok() { PASS=$((PASS + 1)); printf 'ok   - %s\n' "$1"; }
 no() { FAIL=$((FAIL + 1)); printf 'FAIL - %s\n' "$1"; printf '       %s\n' "$2"; }
 
+# numbering_violation <dir>: prints a violation token when the NNNN-<slug>.md
+# numbering in <dir> is not a contiguous run 0001..N with no gap and no
+# duplicate, and prints nothing when it is clean. This is the durability
+# invariant in a form that does not decay: a frozen number list would need an
+# edit per new record, while contiguity holds for every record ever added and
+# still fails the moment one is deleted. Only for directories that use the
+# NNNN-<slug>.md convention (docs/specs/, docs/adr/) — docs/standards/ does not
+# and must never be checked this way.
+numbering_violation() {
+  nv_dir="$1"
+  nv_nums=""
+  nv_count=0
+  for nv_match in "$nv_dir"/*.md; do
+    [ -f "$nv_match" ] || continue
+    nv_base="$(basename "$nv_match")"
+    case "$nv_base" in
+      [0-9][0-9][0-9][0-9]-*) : ;;
+      *) continue ;;
+    esac
+    nv_nums="$nv_nums ${nv_base%%-*}"
+    nv_count=$((nv_count + 1))
+  done
+  if [ "$nv_count" -eq 0 ]; then
+    printf 'no_numbered_files'
+    return 0
+  fi
+  # Compared as strings, never as integers: a leading-zero number like 0008 is
+  # an invalid octal literal in shell arithmetic.
+  nv_expected=1
+  nv_prev=""
+  for nv_num in $(printf '%s\n' $nv_nums | sort); do
+    if [ "$nv_num" = "$nv_prev" ]; then
+      printf 'duplicate_%s' "$nv_num"
+      return 0
+    fi
+    nv_want="$(printf '%04d' "$nv_expected")"
+    if [ "$nv_num" != "$nv_want" ]; then
+      printf 'expected_%s_found_%s' "$nv_want" "$nv_num"
+      return 0
+    fi
+    nv_prev="$nv_num"
+    nv_expected=$((nv_expected + 1))
+  done
+}
+
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
 
@@ -180,6 +225,12 @@ for match in "$REPO_ROOT"/docs/specs/*.md; do
   fi
 done
 [ "$spec_count" -gt 0 ] || durable_spec_missing="$durable_spec_missing specs_none_found"
+# The header check above only inspects whatever files happen to be present, so a
+# deleted spec passes it silently. Contiguity is what makes a deletion fail:
+# the numbers must run 0001..N with no gap and no duplicate.
+durable_numbering_violation="$(numbering_violation "$REPO_ROOT/docs/specs")"
+[ -z "$durable_numbering_violation" ] \
+  || durable_spec_missing="$durable_spec_missing specs_numbering_$durable_numbering_violation"
 # The backfilled archive is verbatim history: each committed blob must equal
 # the blob at its pinned extraction commit (blob-to-blob, immune to eol
 # conversion; needs full history — CI fetches with fetch-depth: 0).
@@ -208,6 +259,61 @@ if [ -z "$durable_spec_missing" ]; then
   ok "durable_spec_archive_recorded"
 else
   no "durable_spec_archive_recorded" "missing:$durable_spec_missing"
+fi
+
+# spec_numbering_is_contiguous (guard: the durable spec numbers run 0001..N with
+# no gap and no duplicate, so deleting an archived spec cannot pass silently.
+# Proven on throwaway fixtures first, so a toothless helper cannot pass this by
+# reporting every tree clean.)
+spec_numbering_missing=""
+spec_gap_dir="$SANDBOX/numbering-specs-gap"
+mkdir -p "$spec_gap_dir"
+for n in 0001 0002 0004; do
+  printf '# SPEC: sample\n' > "$spec_gap_dir/$n-sample.md"
+done
+[ -n "$(numbering_violation "$spec_gap_dir")" ] \
+  || spec_numbering_missing="$spec_numbering_missing gap_fixture_not_flagged"
+spec_dup_dir="$SANDBOX/numbering-specs-dup"
+mkdir -p "$spec_dup_dir"
+printf '# SPEC: sample\n' > "$spec_dup_dir/0001-sample.md"
+printf '# SPEC: sample\n' > "$spec_dup_dir/0002-sample.md"
+printf '# SPEC: sample\n' > "$spec_dup_dir/0002-other.md"
+[ -n "$(numbering_violation "$spec_dup_dir")" ] \
+  || spec_numbering_missing="$spec_numbering_missing duplicate_fixture_not_flagged"
+spec_real_violation="$(numbering_violation "$REPO_ROOT/docs/specs")"
+[ -z "$spec_real_violation" ] \
+  || spec_numbering_missing="$spec_numbering_missing real_tree:$spec_real_violation"
+if [ -z "$spec_numbering_missing" ]; then
+  ok "spec_numbering_is_contiguous"
+else
+  no "spec_numbering_is_contiguous" "missing:$spec_numbering_missing"
+fi
+
+# adr_numbering_is_contiguous (guard: the same durability invariant over the ADR
+# archive, which shares the NNNN-<slug>.md convention. docs/standards/ does not
+# use that convention and is deliberately never checked this way.)
+adr_numbering_missing=""
+adr_gap_dir="$SANDBOX/numbering-adr-gap"
+mkdir -p "$adr_gap_dir"
+for n in 0001 0002 0004; do
+  printf '# Decision\n' > "$adr_gap_dir/$n-sample.md"
+done
+[ -n "$(numbering_violation "$adr_gap_dir")" ] \
+  || adr_numbering_missing="$adr_numbering_missing gap_fixture_not_flagged"
+adr_dup_dir="$SANDBOX/numbering-adr-dup"
+mkdir -p "$adr_dup_dir"
+printf '# Decision\n' > "$adr_dup_dir/0001-sample.md"
+printf '# Decision\n' > "$adr_dup_dir/0002-sample.md"
+printf '# Decision\n' > "$adr_dup_dir/0002-other.md"
+[ -n "$(numbering_violation "$adr_dup_dir")" ] \
+  || adr_numbering_missing="$adr_numbering_missing duplicate_fixture_not_flagged"
+adr_real_violation="$(numbering_violation "$REPO_ROOT/docs/adr")"
+[ -z "$adr_real_violation" ] \
+  || adr_numbering_missing="$adr_numbering_missing real_tree:$adr_real_violation"
+if [ -z "$adr_numbering_missing" ]; then
+  ok "adr_numbering_is_contiguous"
+else
+  no "adr_numbering_is_contiguous" "missing:$adr_numbering_missing"
 fi
 
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
