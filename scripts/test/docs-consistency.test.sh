@@ -212,6 +212,11 @@ CONTEXT_DOC="$REPO_ROOT/CONTEXT.md"
 durable_spec_missing=""
 grep -q "docs/specs/" "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_docs_specs"
 grep -q "spec-lite" "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_spec_lite"
+# The rule the contiguity check below enforces must be stated in the standard, or
+# the guard polices something no document requires. Pinned by exact clause so a
+# reworded or dropped rule is caught rather than passing on a stray keyword.
+grep -qF 'never reused' "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_number_never_reused"
+grep -qF 'marked Retired' "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_retired_in_place"
 # Every spec present under docs/specs/ must carry the "# SPEC:" header. Globbed
 # (not a frozen number list) so specs added after this guard are covered too;
 # the archive_pins block below stays the byte-exact integrity check for the
