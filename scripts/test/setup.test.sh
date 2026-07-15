@@ -197,6 +197,20 @@ else
   no "setup_interactive_enter_keeps_defaults" "code=$code out=$out"
 fi
 
+# setup_interactive_reports_script_defaults (pin: with nothing persisted and
+# empty answers, the summary must report the script's own reviewer and effort
+# defaults. The suite that owns setup.sh pins both literals it prints, so
+# neither can drift without this suite saying so.)
+repo="$(new_repo scriptdefaults)"
+log="$SANDBOX/scriptdefaults.log"; : > "$log"
+out=$(cd "$repo" && printf '\n\n\n' | GH_LOG="$log" STUB_GH_LABELS="$ALL_LABELS" PATH="$STUB_DIR:$PATH" bash "$RUNNER" --interactive 2>&1); code=$?
+if [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "reviewer=gpt-5.6-terra" \
+  && printf '%s' "$out" | grep -qE "effort=high( |$)"; then
+  ok "setup_interactive_reports_script_defaults"
+else
+  no "setup_interactive_reports_script_defaults" "code=$code out=$out"
+fi
+
 # setup_noninteractive_never_prompts (no flag: no prompt text, no keys, exit 0
 # even with stdin closed)
 repo="$(new_repo noninteractive)"
