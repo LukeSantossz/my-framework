@@ -399,6 +399,27 @@ else
   no "crux_decision_promoted_to_adr" "missing:$crux_adr_missing"
 fi
 
+# reviewer_switch_adr_restored (guard: the gpt-5.5 → gpt-5.6-terra reviewer
+# decision deleted by PR #10 is restored as a durable ADR at 0004, carries its
+# numbering history, and is indexed in the README Engineering Decisions table)
+REVIEWER_ADR="$REPO_ROOT/docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md"
+REVIEWER_README="$REPO_ROOT/README.md"
+reviewer_adr_missing=""
+[ -f "$REVIEWER_ADR" ] || reviewer_adr_missing="$reviewer_adr_missing adr_file"
+grep -qF "gpt-5.6-terra" "$REVIEWER_ADR" 2>/dev/null \
+  || reviewer_adr_missing="$reviewer_adr_missing chosen_default"
+grep -qF "PR #10" "$REVIEWER_ADR" 2>/dev/null \
+  || reviewer_adr_missing="$reviewer_adr_missing deletion_recorded"
+grep -qF "0009" "$REVIEWER_ADR" 2>/dev/null \
+  || reviewer_adr_missing="$reviewer_adr_missing reused_numbers_recorded"
+grep -qF "docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md" "$REVIEWER_README" 2>/dev/null \
+  || reviewer_adr_missing="$reviewer_adr_missing readme_row"
+if [ -z "$reviewer_adr_missing" ]; then
+  ok "reviewer_switch_adr_restored"
+else
+  no "reviewer_switch_adr_restored" "missing:$reviewer_adr_missing"
+fi
+
 # passes_on_current_tree (the real docs/standards must be consistent)
 out=$(bash "$CHECK" 2>&1); code=$?
 if [ "$code" -eq 0 ]; then
