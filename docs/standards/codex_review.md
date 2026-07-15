@@ -76,7 +76,7 @@ did not run; record that in the PR per the next section.
 ## Recording in the PR
 
 In the PR Review Checklist (`github.md`), name the concrete models that authored and
-reviewed this change (for example: Author `claude-fable-5`, Reviewer `codex / gpt-5.6-terra`),
+reviewed this change (for example: Author `<author-model>`, Reviewer `codex / <reviewer-model>`),
 including any override in effect. If R2 did not run (Codex absent, skipped, or
 bypassed), note it and why, as the checklist requires.
 
