@@ -58,6 +58,25 @@ Assumptions declared in one line each (per `ai_guidelines.md` Declare Assumption
 and what would invalidate this spec.
 ```
 
+## Durable Numbers Are Never Reused
+
+A number, once assigned to a spec under `docs/specs/` or to an ADR under
+`docs/adr/`, is never reused. The number is part of every reference to that
+record — in a README row, in another spec, in a commit message, in a review
+thread — so handing it to a different record silently rewrites what all of those
+references mean. A record that is superseded or withdrawn is marked Retired in
+place: it keeps its number and its file, and its text says what superseded it.
+It is not deleted. Deleting a durable record and reusing its number makes every
+existing reference to that number ambiguous, because the same citation resolves
+to a different decision depending on when it was written, and nothing in the
+text tells the reader which one was meant.
+
+This rule is enforced rather than trusted: the contiguity check in the
+docs-consistency suite requires spec and ADR numbers to run from `0001` with no
+gaps, so a deletion fails CI. It is the never-overwritten rule of
+`docs/adr/0002-durable-spec-archive.md` made explicit for the case of deleting a
+record and reusing its number.
+
 ## Spec-lite
 
 A lighter tier for a change that needs no Design Decision worth recording —
