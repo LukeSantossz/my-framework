@@ -474,6 +474,63 @@ else
   ok "no_attribution_in_branch_commits"
 fi
 
+# token_economy_claims_match_reality (guard: the token-economy documents describe
+# the capability that exists rather than the one the standard wished for. The
+# installed Caveman skill is 49 lines of conversational terse mode: it contains no
+# `caveman-compress`, never mentions `CLAUDE.md`, and cannot rewrite a context
+# file. Three claims were false at once — `CLAUDE.md` said it was kept in its
+# caveman-compress form while being full prose with articles and complete
+# sentences, exactly what a compression would strip; Policy §1 called that
+# compression a default that is always on; and `skills_guidelines.md` reported the
+# skill as not installed at the very path where it is installed, stale in the
+# inverted direction. The framework's only always-on policy described a capability
+# that does not exist.
+#
+# The claims are pinned in both directions, because a guard that only asserted the
+# false wording was gone would pass on a document that says nothing at all. The
+# absence checks cover every file that carried the claim or could inherit it; the
+# presence check pins the Developer's decision of 2026-07-15 — the token economy is
+# an opt-in the adopter chooses at initialization, not a default the framework
+# imposes — by exact clause, so a reworded always-on default cannot satisfy it on a
+# stray keyword.
+#
+# The percentages are guarded as a bare `[0-9]+%` rather than by literal, so no new
+# unreproducible number can be written where the old ones stood. `ai_guidelines.md`
+# requires every reported number to carry the means to reproduce it; the dropped
+# figures carried no command, no versions and no citation, which is No Fabricated
+# Evidence, and the fix is to drop them rather than dress them up.
+#
+# What this guard deliberately does NOT do is grep `~/.claude/skills/` to prove the
+# skill's contents: that pins the suite to one machine's home directory and fails in
+# CI, where no skills are installed. The inventory documents an external
+# environment, it does not manage it. What is checkable from inside the repo is that
+# the documents agree with each other and assert nothing unreproducible.
+TOKEN_DOC="$REPO_ROOT/docs/standards/token_economy.md"
+TOKEN_SKILLS_DOC="$REPO_ROOT/docs/standards/skills_guidelines.md"
+TOKEN_CLAUDE_DOC="$REPO_ROOT/CLAUDE.md"
+TOKEN_CONTEXT_DOC="$REPO_ROOT/CONTEXT.md"
+TOKEN_INDEX_DOC="$REPO_ROOT/docs/standards/INDEX.md"
+token_economy_missing=""
+# The claim is caught by meaning, not by one phrasing: it first survived here as
+# INDEX.md's "CLAUDE.md is kept compressed", which said the same false thing in
+# different words while a literal-scoped check passed green — the same failure
+# codex_review_doc_depinned had.
+for te_file in "$TOKEN_CLAUDE_DOC" "$TOKEN_DOC" "$TOKEN_CONTEXT_DOC" "$TOKEN_INDEX_DOC"; do
+  grep -qEi 'caveman-compress form|is kept compressed|kept in (its )?compressed' "$te_file" 2>/dev/null \
+    && token_economy_missing="$token_economy_missing compressed_claim_in:$(basename "$te_file")"
+done
+grep -qE '[0-9]+%' "$TOKEN_DOC" 2>/dev/null \
+  && token_economy_missing="$token_economy_missing unreproducible_percentage"
+grep -qF 'opt-in the adopter chooses when initializing the framework in a project' "$TOKEN_DOC" 2>/dev/null \
+  || token_economy_missing="$token_economy_missing policy_not_stated_as_opt_in"
+grep -qF 'Not currently installed' "$TOKEN_SKILLS_DOC" 2>/dev/null \
+  && token_economy_missing="$token_economy_missing skills_claim_not_installed"
+if [ -z "$token_economy_missing" ]; then
+  ok "token_economy_claims_match_reality"
+else
+  no "token_economy_claims_match_reality" "documents contradict the installed Caveman skill:$token_economy_missing"
+fi
+
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
 # any standard's body must fail, not only in INDEX.md)
 root="$(make_fixture bodyrefs)"
