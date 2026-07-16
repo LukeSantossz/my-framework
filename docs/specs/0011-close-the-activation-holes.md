@@ -30,11 +30,18 @@ aspirationally. Caveman is installed at `~/.claude/skills/caveman`, is 49 lines,
 and provides terse conversational mode only: `caveman-compress` does not exist in
 it. So `CLAUDE.md` is not in compressed form and cannot be — the sentence claiming
 it is, is simply false, and `skills_guidelines.md` compounds it by reporting the
-skill as not installed. Policy §1 becomes what the rest of the framework already
-does with an absent capability: a declared target with a declared fallback, not an
-always-on policy resting on a capability nobody has. The reported benchmark
-percentages lose the reproducibility they never had and are dropped rather than
-dressed up, per `ai_guidelines.md` No Fabricated Evidence.
+skill as not installed.
+
+Policy §1 stops being always-on, on the Developer's decision of 2026-07-15: the
+whole token economy is an opt-in the adopter chooses when initializing the
+framework in a project, not a default the framework imposes. This resolves the
+claim on the side that is both true and wanted — Caveman is optional, so a
+repository that never opts in is fully conformant, and the policy describes what
+happens when it is chosen rather than asserting a compression that never ran. The
+capability's absence is recorded where the framework already records absent
+capabilities, with a declared fallback. The reported benchmark percentages lose
+the reproducibility they never had and are dropped rather than dressed up, per
+`ai_guidelines.md` No Fabricated Evidence.
 
 The remaining two are corrections of fact. The skills inventory names `grilling`
 and `diagnosing-bugs`, which match nothing installed (the real names are
@@ -88,9 +95,9 @@ one rule at different scope.
     now guarded.
   - `CLAUDE.md`: the false "kept in its caveman-compress form" sentence removed;
     the English rule scoped as `INDEX.md` scopes it.
-  - `docs/standards/token_economy.md`: Policy §1 restated as a target with a
-    declared fallback, naming the capability as absent; the unreproducible
-    percentages dropped.
+  - `docs/standards/token_economy.md`: Policy §1 restated as an opt-in chosen at
+    initialization rather than an always-on default, naming `caveman-compress` as
+    absent and declaring the fallback; the unreproducible percentages dropped.
   - `docs/standards/skills_guidelines.md`: Caveman recorded as installed and
     providing terse mode only, with `caveman-compress` absent and its fallback
     declared; `grilling` → `grill-me`, `diagnosing-bugs` → `diagnose`; the three
@@ -114,6 +121,14 @@ one rule at different scope.
     this clone is an operational finding, recorded here, not a code defect.
   - Any change to the R2/R3 layers, the Type Table, or the spec/ADR numbering
     rules landed by spec `0010`.
+  - Building the interactive initialization the Developer proposed on 2026-07-15
+    — a CLI that asks which capabilities to install and wires the skills, hooks
+    and configs the framework needs. This spec only makes the token economy
+    opt-in in the standards; making the choice real, and extending
+    `setup.sh --interactive` beyond the informational prompt it has today, is a
+    feature with its own design decisions (what may be installed, what a
+    declined capability leaves behind, how a choice is persisted and re-run) and
+    earns its own spec and Spec Gate.
 
 ## Acceptance Criteria
 
@@ -128,7 +143,8 @@ one rule at different scope.
 - readme_records_attributed_history: Known Issues & Limitations names the
   attributed commits and why they stand.
 - caveman_compress_claim_removed: no document states that `CLAUDE.md` is kept in
-  compressed form; `token_economy.md` names `caveman-compress` as absent and
+  compressed form; `token_economy.md` names `caveman-compress` as absent, states
+  that the token economy is opt-in at initialization rather than always on, and
   declares the fallback; `skills_guidelines.md` records Caveman as installed with
   terse mode only.
 - token_economy_drops_unreproducible_numbers: `token_economy.md` contains no
