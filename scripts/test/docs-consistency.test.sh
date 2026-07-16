@@ -474,25 +474,55 @@ for att_neg in "fix(scripts): read reviewer config from local scope only" \
   printf '%s\n' "$att_neg" | grep -Eqi "$ATTRIBUTION_RE" \
     && attribution_probe="$attribution_probe false_positive:$att_neg"
 done
-attribution_base=""
-for att_cand in main origin/main; do
-  if (cd "$REPO_ROOT" && git rev-parse --verify --quiet "$att_cand^{commit}") >/dev/null 2>&1; then
-    attribution_base="$att_cand"
-    break
-  fi
-done
-# Per commit, not one blob grep: the failure has to name the offending commit, or
-# it tells the Author that a rule broke without saying where.
-attributed_commits=""
-if [ -n "$attribution_base" ]; then
-  for att_sha in $(cd "$REPO_ROOT" && git log "$attribution_base..HEAD" --format=%H 2>/dev/null); do
-    att_body="$(cd "$REPO_ROOT" && git log -1 --format=%B "$att_sha" 2>/dev/null)"
-    if printf '%s' "$att_body" | grep -Eqi "$ATTRIBUTION_RE"; then
-      attributed_commits="$attributed_commits
-       $(cd "$REPO_ROOT" && git log -1 --format='%h %s' "$att_sha" 2>/dev/null)"
+# attributed_commits_in <repo>: prints the commits <repo>'s HEAD adds over its
+# base that carry an attribution line, one per line, and nothing when clean.
+# Extracted so the range traversal itself is testable against a fixture
+# repository (R2 finding, PR #13): probing the pattern against isolated strings
+# left base selection, range handling and per-commit lookup unexercised, so a
+# regression in any of them would have passed green on a clean branch — the same
+# vacuity this file guards against everywhere else.
+attributed_commits_in() {
+  ac_repo="$1"
+  ac_base=""
+  for ac_cand in main origin/main; do
+    if (cd "$ac_repo" && git rev-parse --verify --quiet "$ac_cand^{commit}") >/dev/null 2>&1; then
+      ac_base="$ac_cand"
+      break
     fi
   done
-fi
+  [ -n "$ac_base" ] || return 0
+  # Per commit, not one blob grep: the failure has to name the offending commit,
+  # or it tells the Author that a rule broke without saying where.
+  for ac_sha in $(cd "$ac_repo" && git log "$ac_base..HEAD" --format=%H 2>/dev/null); do
+    ac_body="$(cd "$ac_repo" && git log -1 --format=%B "$ac_sha" 2>/dev/null)"
+    if printf '%s' "$ac_body" | grep -Eqi "$ATTRIBUTION_RE"; then
+      printf '       %s\n' "$(cd "$ac_repo" && git log -1 --format='%h %s' "$ac_sha" 2>/dev/null)"
+    fi
+  done
+}
+# Fixture repositories prove the traversal, not only the pattern: one whose
+# feature branch adds an attributed commit must be flagged, one whose feature
+# branch is clean must not, and an attributed commit already on main must be
+# ignored — the exact exclusion that keeps 859daf2 and 757695d from reddening CI.
+att_fixture() {
+  af_dir="$SANDBOX/attr-$1"
+  mkdir -p "$af_dir"
+  (cd "$af_dir" && git init -q -b main . \
+    && git -c user.email=t@example.com -c user.name=T commit -q --allow-empty -m "$2" -m "$3" \
+    && git checkout -q -b feature \
+    && git -c user.email=t@example.com -c user.name=T commit -q --allow-empty -m "$4" -m "$5")
+  printf '%s\n' "$af_dir"
+}
+att_dirty="$(att_fixture dirty "chore: base" "" "feat: thing" "Co-Authored-By: X <x@example.com>")"
+[ -n "$(attributed_commits_in "$att_dirty")" ] \
+  || attribution_probe="$attribution_probe branch_violation_not_flagged"
+att_clean="$(att_fixture clean "chore: base" "" "feat: thing" "a normal body")"
+[ -z "$(attributed_commits_in "$att_clean")" ] \
+  && : || attribution_probe="$attribution_probe clean_branch_flagged"
+att_hist="$(att_fixture hist "chore: base" "Co-Authored-By: X <x@example.com>" "feat: thing" "a normal body")"
+[ -z "$(attributed_commits_in "$att_hist")" ] \
+  && : || attribution_probe="$attribution_probe merged_history_not_ignored"
+attributed_commits="$(attributed_commits_in "$REPO_ROOT")"
 if [ -n "$attribution_probe" ]; then
   no "no_attribution_in_branch_commits" "the attribution pattern is broken:$attribution_probe"
 elif [ -n "$attributed_commits" ]; then
