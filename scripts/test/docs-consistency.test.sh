@@ -481,15 +481,23 @@ done
 # left base selection, range handling and per-commit lookup unexercised, so a
 # regression in any of them would have passed green on a clean branch — the same
 # vacuity this file guards against everywhere else.
-attributed_commits_in() {
-  ac_repo="$1"
-  ac_base=""
-  for ac_cand in main origin/main; do
-    if (cd "$ac_repo" && git rev-parse --verify --quiet "$ac_cand^{commit}") >/dev/null 2>&1; then
-      ac_base="$ac_cand"
-      break
+# attribution_base_in <repo>: prints the base the range is taken against, or
+# nothing when none resolves. origin/main is preferred over a local main: a stale
+# local main makes main..HEAD reach back over commits already published, which
+# would re-flag the very historical violations this guard exists to exclude
+# (R3 finding, PR #13).
+attribution_base_in() {
+  ab_repo="$1"
+  for ab_cand in origin/main main; do
+    if (cd "$ab_repo" && git rev-parse --verify --quiet "$ab_cand^{commit}") >/dev/null 2>&1; then
+      printf '%s' "$ab_cand"
+      return 0
     fi
   done
+}
+attributed_commits_in() {
+  ac_repo="$1"
+  ac_base="$(attribution_base_in "$ac_repo")"
   [ -n "$ac_base" ] || return 0
   # Per commit, not one blob grep: the failure has to name the offending commit,
   # or it tells the Author that a rule broke without saying where.
@@ -522,6 +530,11 @@ att_clean="$(att_fixture clean "chore: base" "" "feat: thing" "a normal body")"
 att_hist="$(att_fixture hist "chore: base" "Co-Authored-By: X <x@example.com>" "feat: thing" "a normal body")"
 [ -z "$(attributed_commits_in "$att_hist")" ] \
   && : || attribution_probe="$attribution_probe merged_history_not_ignored"
+# The failing branch below reports the base, so it must be resolved here too —
+# reading a variable the extraction left behind inside the function crashed the
+# suite under `set -u` at the exact moment it found a violation, and only the
+# clean path had been re-tested after the refactor (R3 finding, PR #13).
+attribution_base="$(attribution_base_in "$REPO_ROOT")"
 attributed_commits="$(attributed_commits_in "$REPO_ROOT")"
 if [ -n "$attribution_probe" ]; then
   no "no_attribution_in_branch_commits" "the attribution pattern is broken:$attribution_probe"
