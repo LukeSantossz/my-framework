@@ -180,15 +180,17 @@ _Avoid_: explainer (the artifact, not the method), code walkthrough, tutorial.
 
 **Token Economy**:
 The Standard governing controlled token consumption — compress the loaded context file
-(always on), allow bounded Terse mode in conversation, forbid terseness in versioned
-artifacts. Sits below Safety and Correctness and never justifies skipping a required step.
-_Avoid_: token budget, cost control.
+(opt-in, chosen at initialization), allow bounded Terse mode in conversation, forbid
+terseness in versioned artifacts. Sits below Safety and Correctness and never justifies
+skipping a required step. A repository that never opts in is conformant.
+_Avoid_: token budget, cost control, always on.
 
 **caveman-compress**:
-The Caveman capability that rewrites `CLAUDE.md` into a compressed, always-loaded form,
-preserving standards paths, code blocks, and URLs byte-for-byte. Targets input cost —
-the dominant recurring cost.
-_Avoid_: minify, summarize.
+The not-yet-available capability the Token Economy's compression opt-in would use: it
+would rewrite `CLAUDE.md` into a compressed, loaded form, preserving standards paths,
+code blocks, and URLs byte-for-byte, targeting input cost — the dominant recurring cost.
+The installed Caveman does not provide it, so the context file stays uncompressed.
+_Avoid_: minify, summarize; naming it as a capability the framework has today.
 
 **Terse mode**:
 Caveman's conversational compression — drops filler from the agent's replies. A
@@ -199,8 +201,9 @@ _Avoid_: brief mode, caveman mode (ambiguous with the tool).
 ### External dependencies
 
 **Caveman**:
-External skill / rule set for coding agents that compresses output and context files.
-Supplies caveman-compress and Terse mode to the Token Economy.
+External skill / rule set for coding agents that compresses the agent's output.
+Supplies Terse mode to the Token Economy; it does not supply caveman-compress, so the
+Token Economy's context-file compression has no capability behind it today.
 _Avoid_: compressor, minifier.
 
 **Superpowers**:

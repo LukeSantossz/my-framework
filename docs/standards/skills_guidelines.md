@@ -63,10 +63,19 @@ the process.
 - Pipeline stage: token economy, conversation style only (`token_economy.md`).
 - How to use: compressed terse replies in conversation; never in `SPEC.md`,
   PR, Issue, or commit artifacts.
-- Required: optional. Not currently installed; if adopted, install at user
-  scope (`~/.claude/skills/`) and record the source in this section.
-- Fallback: plain terse mode in conversation. `token_economy.md` is unchanged
-  either way.
+- Required: optional, and the whole token economy is optional with it — opting
+  in is a choice the adopter makes when initializing the framework in a project,
+  not a default the framework imposes. A repository that never opts in is fully
+  conformant.
+- Install/verify: installed at user scope (`~/.claude/skills/caveman`); verify
+  that `caveman` appears in the session's skill list. What is installed provides
+  conversational terse mode only: the `caveman-compress` capability that
+  `token_economy.md` §1 scopes — the one that would rewrite `CLAUDE.md` into a
+  compressed form — is absent from it, so §1's compression cannot be performed
+  today by this skill.
+- Fallback: plain terse mode in conversation, which the installed skill supplies;
+  the context file stays uncompressed, per the fallback `token_economy.md` §1
+  declares. `token_economy.md` is unchanged either way.
 
 ## Matt Pocock Engineering Skills
 

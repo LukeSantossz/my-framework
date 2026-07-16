@@ -10,24 +10,43 @@ first and treats conversational terseness as a secondary, bounded measure.
 
 ## Tool
 
-Caveman (skill / rule set for coding agents): compresses agent output and can
-rewrite context files into a terser form. Two capabilities are in scope here:
+Caveman (skill / rule set for coding agents) supplies the compression this norm
+governs. Two capabilities are in scope, and only one of them exists today:
 
-- `caveman-compress`: rewrites `CLAUDE.md` into a compressed form, cutting input
-  tokens every session while preserving code, URLs, and paths byte-for-byte.
-- Caveman terse mode: makes the agent's conversational replies drop filler.
+- Caveman terse mode: makes the agent's conversational replies drop filler. This
+  is what the installed skill provides, and it is the whole of what it provides.
+- `caveman-compress`: would rewrite `CLAUDE.md` into a compressed form, cutting
+  input tokens every session while preserving code, URLs, and paths byte-for-byte.
+  The installed Caveman does not have it. The skill is a conversational mode: it
+  never mentions `CLAUDE.md`, context files, or byte-for-byte preservation, and
+  nothing in it rewrites a file. `caveman-compress` is therefore a capability this
+  policy scopes for the day it arrives, not one the framework can invoke now.
 
-Reported reductions (author benchmarks and third-party tests, treated as orders of
-magnitude, not guarantees): compress ~46% of input tokens per session; terse mode
-50–75% of conversational output. Terse mode does not affect thinking or generated
-code, so per-session savings are smaller than the headline output figure.
+The distinction matters because the policy below is written against both: §1
+describes what compressing the context file requires *if* an adopter opts into it
+and a capability exists to do it, while §2 governs the terse mode that is real and
+available. Naming a capability the framework does not have is only honest while the
+document says plainly that it does not have it.
 
 ## Policy
 
-### 1. Compress the context file (default, always on)
+### 1. Compress the context file (opt-in)
 
-- `CLAUDE.md` is maintained in its `caveman-compress` form. The compressed file is
-  the committed source of truth the agent loads.
+Compressing the context file is not a default this framework imposes. It is an
+opt-in the adopter chooses when initializing the framework in a project, and a
+repository that never opts in is fully conformant: it is not carrying a violation,
+it simply declined a cost optimization it was free to decline. The rules below
+govern the compression when it is chosen; they assert nothing about a repository
+that has not chosen it.
+
+- The capability the opt-in depends on is `caveman-compress`, and it does not exist
+  in the installed Caveman (see Tool, above). The declared fallback, which is
+  today's situation in every repository including this one, is that the context file
+  is not compressed and stays in full prose. That is the conformant resting state,
+  not a defect to be fixed by hand.
+- When the opt-in is taken and a capability exists to honor it, `CLAUDE.md` is
+  maintained in its compressed form, and that compressed file is the committed
+  source of truth the agent loads.
 - Compression must preserve, byte-for-byte: standards paths (`docs/standards/...`),
   the precedence reference to `code_conventions.md`, code blocks, and URLs.
 - After compressing, verify the standards still resolve: the agent must still read
@@ -35,6 +54,11 @@ code, so per-session savings are smaller than the headline output figure.
   activation (the Gap this framework closes) is rejected.
 - Keep a human-readable copy if the compressed form is hard to review (e.g.
   `CLAUDE.full.md`), but only the loaded file needs to be compressed.
+
+The two preservation rules above are the reason this policy does not invite a
+hand-rolled substitute. Compressing the context file by hand, with no skill to
+repeat the transformation and no check to prove it preserved activation, trades a
+cost saving for the exact failure the framework exists to prevent.
 
 ### 2. Terse conversational mode (permitted, bounded)
 
