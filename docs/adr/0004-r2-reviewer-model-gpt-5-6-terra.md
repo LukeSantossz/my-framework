@@ -9,8 +9,10 @@ default to `gpt-5.6-terra`: it matched the more expensive `gpt-5.6-sol` tier on
 detection at half the token price ($2.50/$15 vs $5/$30 per 1M), so the cheaper tier is
 the correct recurring-gate default. Only the default literal changes; the resolution
 chain (env → git config → default) and the `high` effort are untouched. The benchmark
-spec that carried the full run was retired by PR #10, so the numbers recorded below are
-the surviving record of it.
+spec that carried the full run, `docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md`,
+was deleted by PR #10 and is not in the tree; it is recoverable from history at
+`git show 4164120^:docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md`, and the
+numbers recorded below are the surviving curated record of it.
 
 ## Status
 
