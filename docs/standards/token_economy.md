@@ -40,10 +40,12 @@ govern the compression when it is chosen; they assert nothing about a repository
 that has not chosen it.
 
 - The capability the opt-in depends on is `caveman-compress`, and it does not exist
-  in the installed Caveman (see Tool, above). The declared fallback, which is
-  today's situation in every repository including this one, is that the context file
-  is not compressed and stays in full prose. That is the conformant resting state,
-  not a defect to be fixed by hand.
+  in the Caveman installed here (see Tool, above). Where it is absent the declared
+  fallback applies: the context file is not compressed and stays in full prose.
+  That is the conformant resting state, not a defect to be fixed by hand, and it
+  is this repository's state today. What an adopter's environment provides is
+  theirs to verify — `skills_guidelines.md` records what is installed here, and
+  no check inside this repository can see another machine's skills.
 - When the opt-in is taken and a capability exists to honor it, `CLAUDE.md` is
   maintained in its compressed form, and that compressed file is the committed
   source of truth the agent loads.
