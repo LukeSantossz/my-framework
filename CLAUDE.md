@@ -17,8 +17,8 @@ the documents it lists. Treat them as binding:
   PR, Issue, and README templates. No co-author or AI-attribution lines in commits.
 - Token economy per `docs/standards/token_economy.md`: terse mode is allowed in
   conversation but never in `SPEC.md`, PR, Issue, or commit artifacts; it never
-  overrides Safety or Correctness. This file is kept in its caveman-compress form.
-- All output in English.
+  overrides Safety or Correctness.
+- All output in English: identifiers, comments, commit/PR/issue text, documentation.
 
 Adjust the `docs/standards/` path above if you place the standards elsewhere.
 

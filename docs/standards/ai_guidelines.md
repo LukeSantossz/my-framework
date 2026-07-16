@@ -1,6 +1,6 @@
 # AI Guidelines
 
-AI assistant behavior when generating or modifying code. Counterpart to `crura_method.md`. All output in English.
+AI assistant behavior when generating or modifying code. Counterpart to `crura_method.md`. All output in English: identifiers, comments, commit/PR/issue text, documentation.
 
 ## Correctness Before Volume
 
@@ -54,7 +54,7 @@ AI assistant behavior when generating or modifying code. Counterpart to `crura_m
 
 - Write the test before the implementation: red (test fails), green (minimal implementation passes), refactor.
 - An implementation commit without a preceding failing-test commit is a process violation.
-- This order is enforced by the Superpowers orchestrator's TDD phase; this section records it as project policy so it is auditable independently of the tool.
+- This order is run by the Superpowers orchestrator's TDD phase when that plugin is installed, but the phase is not what makes it binding; `skills_guidelines.md` records whether the plugin is present and declares the fallback. This section records the order as project policy so it holds either way, and stays auditable independently of the tool.
 
 ## Review Composition
 

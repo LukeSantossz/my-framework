@@ -98,6 +98,7 @@ In development. Versioning policy: semver git tags, with `v0.1.0` tagged when th
 - Executable bits are trusted from the git index, not the filesystem, because the Windows filesystem does not reliably report them; `git ls-files -s` is the source of truth instead.
 - The R2 cross-provider gate requires a locally installed Codex CLI. Without it, R2 does not run for that push, and CRURA human review substitutes per `docs/standards/crura_method.md`.
 - The standards assume a single repository. A multi-repo setup with conflicting standards would need an authority hierarchy this framework does not yet define.
+- Two commits reachable from `main` — `859daf2` and `757695d` — carry AI-attribution trailers, in violation of this repository's own rule against them. They are not rewritten, because both are already published and force-pushing over shared history to correct a commit message costs more than the defect it would fix; the honest record of the violation is itself useful. Recurrence is guarded instead: `scripts/test/docs-consistency.test.sh` fails a branch that adds a commit carrying such a line, so the rule holds going forward without reddening CI over two commits nobody will rewrite. The guard covers what a branch adds over `origin/main` or `main`, which is how work reaches this repository; a commit pushed straight to `main`, or a checkout where neither base resolves, is outside its range and stays uncovered.
 - Small deferred follow-ups (documented gaps not yet closed) are tracked in the issue backlog rather than in this README.
 
 ## Contributing

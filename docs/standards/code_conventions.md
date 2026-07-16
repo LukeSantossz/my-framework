@@ -68,7 +68,7 @@ even if it works.
 
 ## Testing
 
-- Write the test before the implementation: red (watch it fail), green (minimal implementation passes), refactor. An implementation commit without a preceding failing-test commit is a process violation. This order is enforced by the Superpowers TDD phase and recorded here as project policy.
+- Write the test before the implementation: red (watch it fail), green (minimal implementation passes), refactor. An implementation commit without a preceding failing-test commit is a process violation. This order is run by the Superpowers TDD phase when that plugin is installed, and recorded here as project policy so it binds with or without the tool.
 - A test asserts behavior, not implementation detail.
 - Test names describe scenario and expected outcome (returns_empty_list_when_no_matches).
 - Cover meaningful branches and edge cases (empty, boundary, error path), not just the happy path.
