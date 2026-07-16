@@ -402,6 +402,78 @@ else
 $actual_pre_rule"
 fi
 
+# no_attribution_in_branch_commits (guard: no commit a branch adds over main
+# carries a co-author or AI-attribution line. The rule is stated four times —
+# CLAUDE.md, docs/standards/github.md, docs/standards/ai_guidelines.md and
+# AGENTS.md — and was the only rule in the repo with violations already merged:
+# 859daf2 and 757695d both carry Co-Authored-By trailers because nothing checked
+# them. Repetition is not activation; this is the check those four restatements
+# never bought.
+#
+# Scoped to <base>..HEAD, which excludes those two BY CONSTRUCTION: both are
+# ancestors of main, so they are never among the commits a branch adds and can
+# never redden this guard. That is deliberate — they are published, a force-push
+# over shared history costs more than the defect, and a permanently red check is
+# a disabled check. They are recorded in README Known Issues & Limitations
+# instead.
+#
+# The base resolves as main, then origin/main, because a pull_request checkout
+# (actions/checkout@v4, fetch-depth: 0) fetches +refs/heads/*:refs/remotes/origin/*
+# and lands on the PR merge ref DETACHED: refs/remotes/origin/main exists but no
+# local main branch does, so a bare `main` does not resolve there. Without the
+# fallback this guard would find no base and pass vacuously in CI — dead in the
+# one place the rule must hold.
+#
+# Limitation: when neither base resolves, or the range is empty (running on main
+# itself), the branch adds nothing and the guard passes rather than erroring. A
+# direct push to main is therefore unguarded. Accepted: the repo works through
+# PRs, and CI also runs on pull_request, where the range is non-empty.
+ATTRIBUTION_RE='co-authored-by|generated with|claude-session:'
+# Proven on fixtures first: on a clean branch this guard passes whether or not
+# the pattern works, so a typo would sail through green forever — the same hazard
+# codex_review_doc_depinned guards against above.
+attribution_probe=""
+for att_pos in "Co-Authored-By: Claude Fable 5 <noreply@anthropic.com>" \
+  "co-authored-by: someone <s@example.com>" \
+  "🤖 Generated with [Claude Code](https://claude.com/claude-code)" \
+  "Generated with an agent" \
+  "Claude-Session: https://claude.ai/code/session_01AW1"; do
+  printf '%s\n' "$att_pos" | grep -Eqi "$ATTRIBUTION_RE" \
+    || attribution_probe="$attribution_probe missed:$att_pos"
+done
+for att_neg in "fix(scripts): read reviewer config from local scope only" \
+  "docs(standards): record the number-reuse rule in the index" \
+  "test(scripts): pin the reviewer session default"; do
+  printf '%s\n' "$att_neg" | grep -Eqi "$ATTRIBUTION_RE" \
+    && attribution_probe="$attribution_probe false_positive:$att_neg"
+done
+attribution_base=""
+for att_cand in main origin/main; do
+  if (cd "$REPO_ROOT" && git rev-parse --verify --quiet "$att_cand^{commit}") >/dev/null 2>&1; then
+    attribution_base="$att_cand"
+    break
+  fi
+done
+# Per commit, not one blob grep: the failure has to name the offending commit, or
+# it tells the Author that a rule broke without saying where.
+attributed_commits=""
+if [ -n "$attribution_base" ]; then
+  for att_sha in $(cd "$REPO_ROOT" && git log "$attribution_base..HEAD" --format=%H 2>/dev/null); do
+    att_body="$(cd "$REPO_ROOT" && git log -1 --format=%B "$att_sha" 2>/dev/null)"
+    if printf '%s' "$att_body" | grep -Eqi "$ATTRIBUTION_RE"; then
+      attributed_commits="$attributed_commits
+       $(cd "$REPO_ROOT" && git log -1 --format='%h %s' "$att_sha" 2>/dev/null)"
+    fi
+  done
+fi
+if [ -n "$attribution_probe" ]; then
+  no "no_attribution_in_branch_commits" "the attribution pattern is broken:$attribution_probe"
+elif [ -n "$attributed_commits" ]; then
+  no "no_attribution_in_branch_commits" "commits added over $attribution_base carry a co-author or AI-attribution line, forbidden by CLAUDE.md, github.md, ai_guidelines.md and AGENTS.md:$attributed_commits"
+else
+  ok "no_attribution_in_branch_commits"
+fi
+
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
 # any standard's body must fail, not only in INDEX.md)
 root="$(make_fixture bodyrefs)"
