@@ -4,10 +4,11 @@
 
 PR #10 deleted the approved spec and the ADR that recorded the `gpt-5.5` →
 `gpt-5.6-terra` reviewer switch, so the durable archive states the old default
-while the scripts run the new one with nothing reconciling them; the same commit
-weakened the guard that would have caught the deletion, the deleted numbers were
-reused for unrelated records, and three further guards pin claims that are stale,
-literal-scoped, or incomplete.
+while the scripts run the new one with nothing reconciling them; no guard caught
+the deletion, and the same commit replaced the frozen number list that was the
+archive's only presence check with a glob that requires nothing, so no guard
+would catch the next one either; the deleted numbers were reused for unrelated
+records; and two further guards pin claims that are stale or literal-scoped.
 
 ## Design Decision
 
@@ -23,12 +24,20 @@ rewritten, so the benchmark rationale survives as authored.
 
 The rule the deletion broke is then made explicit and guarded. `spec_method.md`
 gains one rule: a durable number is never reused, and a record that is retired
-stays in place marked Retired rather than being deleted. The
-`durable_spec_archive_recorded` guard regains its teeth in a form that survives
-new records: instead of a frozen number list (which PR #10 replaced with a glob
-that requires nothing), it asserts that spec and ADR numbers run contiguously
-from `0001` with no gaps and no duplicates, so any future deletion fails CI
-without the guard needing an edit per record.
+stays in place marked Retired rather than being deleted.
+
+The archive regains a presence check, and it is checked against git history
+rather than against itself. Every spec and ADR ever committed must still exist,
+unless it is listed in the guard as deliberately retired with a stated reason —
+which makes retiring a record a conscious act that leaves a trace, and is the
+check that actually catches the PR #10 shape. Numbering contiguity is added
+alongside it, for gaps and duplicates, but it is deliberately not the
+load-bearing check: contiguity cannot see the deletion of the highest-numbered
+record, and spec `0009` and ADR `0003` were each the highest of their series, so
+a contiguity-only guard would have passed PR #10 clean. Neither check is the
+frozen list PR #10 removed: both survive new records without an edit per record,
+while the frozen list covered `0001`–`0007` and had already stopped covering the
+archive's newest entries.
 
 The R3 discrepancy is closed by changing the repository rather than the document.
 `codex_review.md` claims CodeRabbit is this repository's R3, while
@@ -63,9 +72,16 @@ effort default alongside the model default it already pins.
   a note records the accident without preventing the next one; the guard is what
   makes the rule binding, and the framework's own premise is that an unactivated
   standard is no standard.
-- **Restore the guard's frozen number list (`0001`–`0009`)**: rejected — it needs
-  a manual edit per new spec and silently rots, which is why PR #10 removed it.
-  Contiguity is the same invariant expressed in a form that does not decay.
+- **Restore the guard's frozen number list**: rejected — it needs a manual edit
+  per new record and silently rots, which is why PR #10 removed it. The list it
+  removed reached only `0001`–`0007`, so it had already stopped covering the
+  archive and would not have caught the deletion of `0009` either. Checking
+  against git history gives the same presence guarantee without an entry per
+  record.
+- **Rely on numbering contiguity alone**: rejected — it cannot see the deletion
+  of the highest-numbered record, which is the shape PR #10 had. It is kept for
+  gaps and duplicates, which the history check does not cover, but it is not
+  what makes a deletion fail.
 - **Complete the R3 claim by documenting both wired reviewers**: rejected by the
   Developer — a stale claim can be closed from either side, by correcting the
   document or by correcting the repository, and the Developer wants one automated
@@ -81,9 +97,12 @@ effort default alongside the model default it already pins.
 - Includes:
   - `docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md`: the reviewer-switch
     decision restored verbatim from `3cc2ba0`, with a numbering-history note
-    recording the PR #10 deletion and the `0003`/`0009` reuse, and its
-    `docs/specs/0009-...` benchmark pointer corrected to name the retired spec
-    rather than dangle.
+    recording the PR #10 deletion and the `0003`/`0009` reuse; its
+    `docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md` benchmark pointer
+    rewritten to name that spec as retired rather than dangle as a live link;
+    and its final Consequences bullet extended to say which archived specs cite
+    `gpt-5.5` and that they are history, not the live default. Those three are
+    the only deviations from the recovered text.
   - `README.md`: an Engineering Decisions row linking ADR 0004; the
     `Codex CLI 0.144.1` prerequisite relaxed to a minimum (`>=`) to match the
     `git`/`gh` entries beside it.
@@ -96,10 +115,13 @@ effort default alongside the model default it already pins.
     document's existing "R3 is CodeRabbit" claim describes the repository. There
     is no ruleset and no REST API for this toggle; it is a settings change only
     the Developer can make.
-  - `scripts/test/docs-consistency.test.sh`: `durable_spec_archive_recorded`
-    asserts contiguous, gapless, duplicate-free spec and ADR numbering;
+  - `scripts/test/docs-consistency.test.sh`: a guard asserts that every spec and
+    ADR ever committed is still present, with an allowlist of deliberately
+    retired records each carrying its reason; `durable_spec_archive_recorded`
+    also asserts contiguous, gapless, duplicate-free spec and ADR numbering;
     `codex_review_doc_depinned` forbids the Anthropic-model-id pattern rather
-    than one literal; a guard pins the ADR 0004 file, its README row, and the
+    than one literal, and proves that pattern on fixtures so it cannot pass
+    vacuously; a guard pins the ADR 0004 file, its README row, and the
     spec_method numbering rule.
   - `scripts/test/setup.test.sh`: a pin on the `high` effort default.
   - Every change lands test-first (red, then green), per `code_conventions.md`
@@ -130,13 +152,19 @@ effort default alongside the model default it already pins.
 - spec_method_forbids_number_reuse: `spec_method.md` states in a grep-detectable
   form that a durable number is never reused and a retired record is marked, not
   deleted.
+- deleted_durable_record_fails: removing any spec or ADR that git history shows
+  was committed — including the highest-numbered one, the shape contiguity
+  cannot see — fails the suite, naming the missing record, unless it is
+  allowlisted as retired with a reason.
 - spec_numbering_is_contiguous: the guard fails on a fixture whose spec numbers
   skip a value or repeat one, and passes on the real tree.
 - adr_numbering_is_contiguous: the guard fails on a fixture whose ADR numbers
   skip a value or repeat one, and passes on the real tree.
 - codex_review_doc_rejects_any_model_pin: the guard fails when `codex_review.md`
-  contains any concrete Anthropic model id (not only `claude-opus-4-8`), and the
-  current document contains none.
+  contains any concrete Anthropic model id, verified on fixtures covering the
+  `claude-3` family and the current families, and rejecting none of the
+  legitimate `claude-code` / `claude-agent-sdk` prose; the current document
+  contains no model id.
 - r3_is_coderabbit_alone: the automatic Copilot code review is disabled in the
   repository settings, so that no reviewer other than CodeRabbit posts an
   automated review on a new PR. Verified on the first PR opened after the change,
