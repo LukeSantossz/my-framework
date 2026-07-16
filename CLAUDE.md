@@ -18,7 +18,7 @@ the documents it lists. Treat them as binding:
 - Token economy per `docs/standards/token_economy.md`: terse mode is allowed in
   conversation but never in `SPEC.md`, PR, Issue, or commit artifacts; it never
   overrides Safety or Correctness.
-- All output in English.
+- All output in English: identifiers, comments, commit/PR/issue text, documentation.
 
 Adjust the `docs/standards/` path above if you place the standards elsewhere.
 

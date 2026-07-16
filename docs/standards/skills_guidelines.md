@@ -18,7 +18,12 @@ the process.
 - How to use: invoke the phase's skill before acting in that phase; the
   orchestrator's phases map one-to-one onto `spec_method.md` (Brainstorm feeds
   the SPEC, the Plan turns Acceptance Criteria into failing tests).
-- Required: yes for the agentic flow.
+- Required: by the agentic flow, when that flow is the one orchestrating — its
+  phases are the pipeline, so a session that runs them cannot skip it. It is not
+  installed today: `~/.claude/plugins/` carries no `superpowers` plugin, so no
+  session is orchestrated by it and the fallback below is what runs. The
+  requirement is on the flow, not on the framework: the phases can be executed by
+  hand, and a session that does so is fully conformant.
 - Install/verify: Claude Code plugin `superpowers` (claude-plugins-official
   marketplace); verify that `superpowers:*` skills appear in the session's
   skill list.
@@ -88,9 +93,9 @@ their stages:
 | --- | --- |
 | Intake | `to-prd`, `to-issues` |
 | Triage | `triage` (five canonical labels state machine) |
-| Before the Spec Gate | `grilling`, `grill-with-docs` |
-| Design | `domain-modeling`, `codebase-design`, `design-an-interface`, `improve-codebase-architecture` |
-| Implementation | `tdd`, `diagnosing-bugs` |
+| Before the Spec Gate | `grill-me`, `grill-with-docs` |
+| Design | `improve-codebase-architecture` |
+| Implementation | `tdd`, `diagnose` |
 | Support | `find-skills`, `handoff`, `setup-matt-pocock-skills` |
 
 - Install/verify: `ls ~/.claude/skills/` shows the set; recover with
@@ -117,7 +122,7 @@ their stages:
 ## Overlap Precedence
 
 - Superpowers process skills govern the pipeline whenever the agentic flow is
-  orchestrating; the Matt Pocock equivalents (`tdd`, `diagnosing-bugs`) apply
+  orchestrating; the Matt Pocock equivalents (`tdd`, `diagnose`) apply
   in standalone or manual use. One skill per concern per session, never both.
 - User instructions and the repo `CLAUDE.md` outrank skills; skills outrank
   default behavior. Conflicts between standards resolve per the precedence
