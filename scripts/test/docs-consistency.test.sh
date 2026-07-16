@@ -175,13 +175,32 @@ fi
 
 # codex_review_doc_depinned (guard: role-based doc — no concrete Anthropic model
 # id anywhere, so no Author pin can go stale; override variables documented)
+# The id shape is anchored on the family names plus the legacy claude-<digit>
+# ids. A bare claude-<word>-<digit> is wrong in both directions: it misses the
+# whole claude-3 family (a digit follows claude-, not a word) and it rejects
+# legitimate prose such as claude-code-2. Case-insensitive; `claude-` with the
+# hyphen never matches the CLAUDE.md reference or the "Claude family" prose.
+ANTHROPIC_MODEL_RE='claude-(opus|sonnet|haiku|fable|instant|[0-9])'
+# Proven on fixtures first: grepping only the real doc (which pins no id) passes
+# whether or not the pattern works, so a typo would sail through green.
+depin_missing=""
+for depin_pos in claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5 \
+  claude-3-opus-20240229 claude-3-5-sonnet-20241022 claude-2.1 Claude-Opus-4-8; do
+  printf '%s\n' "$depin_pos" | grep -Eqi "$ANTHROPIC_MODEL_RE" \
+    || depin_missing="$depin_missing missed:$depin_pos"
+done
+for depin_neg in claude-code-2 claude-agent-sdk-2 claude-plugins-official CLAUDE.md; do
+  printf '%s\n' "$depin_neg" | grep -Eqi "$ANTHROPIC_MODEL_RE" \
+    && depin_missing="$depin_missing false_positive:$depin_neg"
+done
 CODEX_DOC="$REPO_ROOT/docs/standards/codex_review.md"
-if ! grep -Eq "claude-[a-z]+-[0-9]" "$CODEX_DOC" \
-  && grep -q "CODEX_REVIEW_MODEL" "$CODEX_DOC" \
-  && grep -q "CODEX_REVIEW_EFFORT" "$CODEX_DOC"; then
+grep -Eqi "$ANTHROPIC_MODEL_RE" "$CODEX_DOC" && depin_missing="$depin_missing doc_pins_a_model"
+grep -q "CODEX_REVIEW_MODEL" "$CODEX_DOC" || depin_missing="$depin_missing no_model_override_documented"
+grep -q "CODEX_REVIEW_EFFORT" "$CODEX_DOC" || depin_missing="$depin_missing no_effort_override_documented"
+if [ -z "$depin_missing" ]; then
   ok "codex_review_doc_depinned"
 else
-  no "codex_review_doc_depinned" "codex_review.md pins a concrete Anthropic model id or lacks the override variables"
+  no "codex_review_doc_depinned" "missing:$depin_missing"
 fi
 
 # standards_authority_and_ambiguity_recorded (guard: repo-over-global rule in
@@ -319,6 +338,47 @@ if [ -z "$adr_numbering_missing" ]; then
   ok "adr_numbering_is_contiguous"
 else
   no "adr_numbering_is_contiguous" "missing:$adr_numbering_missing"
+fi
+
+# durable_records_are_never_deleted (guard: a spec or ADR, once committed, is
+# never removed. Contiguity cannot see this on its own: deleting the
+# highest-numbered record leaves 0001..N-1 contiguous and clean, which is the
+# exact shape of the PR #10 incident — spec 0009 and ADR 0003 were each the
+# highest of their series. So the archive is checked against git history, not
+# only against itself: every NNNN-<slug>.md ever added under docs/specs/ or
+# docs/adr/ must still be present.
+# Deliberately retired records are listed here; each entry needs a
+# justification, and adding one is the conscious act this guard exists to force:
+# - docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md: the benchmark spec
+#   retired by PR #10 as disproportionate to the decision it carried; that
+#   decision survives in docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md.
+# - docs/adr/0003-r2-reviewer-model-gpt-5-6-terra.md: deleted by PR #10 and
+#   restored at docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md.
+# Needs full history; CI checks out with fetch-depth: 0.
+RETIRED_RECORDS='docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md
+docs/adr/0003-r2-reviewer-model-gpt-5-6-terra.md'
+deleted_records=""
+ever_added="$(cd "$REPO_ROOT" && git log --diff-filter=A --name-only --format= -- docs/specs docs/adr 2>/dev/null \
+  | grep -E '^docs/(specs|adr)/[0-9]{4}-[^/]*\.md$' | sort -u)"
+if [ -z "$ever_added" ]; then
+  deleted_records=" history_unavailable"
+else
+  for rec in $ever_added; do
+    [ -f "$REPO_ROOT/$rec" ] && continue
+    case "
+$RETIRED_RECORDS
+" in
+      *"
+$rec
+"*) continue ;;
+    esac
+    deleted_records="$deleted_records $rec"
+  done
+fi
+if [ -z "$deleted_records" ]; then
+  ok "durable_records_are_never_deleted"
+else
+  no "durable_records_are_never_deleted" "deleted without a recorded retirement:$deleted_records"
 fi
 
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
