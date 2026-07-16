@@ -347,15 +347,21 @@ fi
 # highest of their series. So the archive is checked against git history, not
 # only against itself: every NNNN-<slug>.md ever added under docs/specs/ or
 # docs/adr/ must still be present.
-# Deliberately retired records are listed here; each entry needs a
-# justification, and adding one is the conscious act this guard exists to force:
+# The list below is CLOSED and records only the two deletions that happened
+# before the rule existed (PR #10) and cannot be undone:
 # - docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md: the benchmark spec
-#   retired by PR #10 as disproportionate to the decision it carried; that
+#   deleted by PR #10 as disproportionate to the decision it carried; that
 #   decision survives in docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md.
 # - docs/adr/0003-r2-reviewer-model-gpt-5-6-terra.md: deleted by PR #10 and
 #   restored at docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md.
+# It is NOT the retirement mechanism. Under `spec_method.md` a retired record
+# stays in place marked Retired, keeping its number and its file, so retiring a
+# record never requires an entry here. Treating a missing path as a valid
+# retirement would reopen the PR #10 failure mode (R2 finding, PR #12), so the
+# closed_pre_rule_deletions assertion below pins this list to exactly those two
+# paths: adding a third fails the suite rather than waving a deletion through.
 # Needs full history; CI checks out with fetch-depth: 0.
-RETIRED_RECORDS='docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md
+PRE_RULE_DELETIONS='docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md
 docs/adr/0003-r2-reviewer-model-gpt-5-6-terra.md'
 deleted_records=""
 ever_added="$(cd "$REPO_ROOT" && git log --diff-filter=A --name-only --format= -- docs/specs docs/adr 2>/dev/null \
@@ -366,7 +372,7 @@ else
   for rec in $ever_added; do
     [ -f "$REPO_ROOT/$rec" ] && continue
     case "
-$RETIRED_RECORDS
+$PRE_RULE_DELETIONS
 " in
       *"
 $rec
@@ -378,7 +384,22 @@ fi
 if [ -z "$deleted_records" ]; then
   ok "durable_records_are_never_deleted"
 else
-  no "durable_records_are_never_deleted" "deleted without a recorded retirement:$deleted_records"
+  no "durable_records_are_never_deleted" "deleted with no record left in place:$deleted_records"
+fi
+
+# closed_pre_rule_deletions (guard on the guard: the pre-rule deletion list must
+# stay exactly the two PR #10 paths. Without this, retiring a record could be
+# done by deleting the file and appending its path above — which both the
+# history check and the contiguity check would then pass, recreating the very
+# failure mode the rule forbids. R2 finding on PR #12, accepted.)
+expected_pre_rule='docs/adr/0003-r2-reviewer-model-gpt-5-6-terra.md
+docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md'
+actual_pre_rule="$(printf '%s\n' "$PRE_RULE_DELETIONS" | sed '/^$/d' | sort)"
+if [ "$actual_pre_rule" = "$expected_pre_rule" ]; then
+  ok "closed_pre_rule_deletions"
+else
+  no "closed_pre_rule_deletions" "the pre-rule deletion list changed; a retired record stays in place marked Retired, it is not appended here:
+$actual_pre_rule"
 fi
 
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
