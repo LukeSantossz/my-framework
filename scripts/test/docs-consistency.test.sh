@@ -601,6 +601,13 @@ grep -qE '[0-9]+%' "$TOKEN_DOC" 2>/dev/null \
   && token_economy_missing="$token_economy_missing measurement_in_a_policy_doc"
 grep -qF 'opt-in the adopter chooses when initializing the framework in a project' "$TOKEN_DOC" 2>/dev/null \
   || token_economy_missing="$token_economy_missing policy_not_stated_as_opt_in"
+# Pinned positively as well as negatively (R3 finding, PR #13): rejecting the
+# stale phrase alone leaves the guard green if the true installation clause is
+# simply deleted, which resolves the contradiction by removing the fact rather
+# than the error — the same asymmetry that let INDEX.md's "kept compressed"
+# survive a literal-scoped check.
+grep -qF '`~/.claude/skills/caveman`' "$TOKEN_SKILLS_DOC" 2>/dev/null \
+  || token_economy_missing="$token_economy_missing skills_install_path_not_recorded"
 grep -qF 'Not currently installed' "$TOKEN_SKILLS_DOC" 2>/dev/null \
   && token_economy_missing="$token_economy_missing skills_claim_not_installed"
 if [ -z "$token_economy_missing" ]; then
@@ -656,7 +663,10 @@ fi
 # name is worse than a name that may age.
 SKILLS_INV_DOC="$REPO_ROOT/docs/standards/skills_guidelines.md"
 skills_inventory_missing=""
-for inv_present in '`grill-me`' '`diagnose`'; do
+# Every installed skill the inventory requires, not only the two that were
+# renamed (R3 finding, PR #13): checking a subset lets an unchecked name be
+# dropped silently, which is the same stale-inventory defect in reverse.
+for inv_present in '`grill-me`' '`diagnose`' '`improve-codebase-architecture`' '`tdd`'; do
   grep -qF "$inv_present" "$SKILLS_INV_DOC" 2>/dev/null \
     || skills_inventory_missing="$skills_inventory_missing missing:$inv_present"
 done
@@ -690,6 +700,13 @@ superpowers_claim_missing=""
 for sp_file in "$SP_INDEX_DOC" "$SP_CONV_DOC" "$SP_AI_DOC"; do
   grep -qF 'enforced by the Superpowers' "$sp_file" 2>/dev/null \
     && superpowers_claim_missing="$superpowers_claim_missing claims_enforcement_in:$(basename "$sp_file")"
+  # The qualification is what makes the verb true, so it is required, not merely
+  # preferred (R3 finding, PR #13): rejecting one former phrase while leaving the
+  # conditional optional lets enforcement return under different wording, or the
+  # "when installed" caveat be dropped, with the guard still green — reopening
+  # the activation gap this block exists to close.
+  grep -qF 'when that plugin is installed' "$sp_file" 2>/dev/null \
+    || superpowers_claim_missing="$superpowers_claim_missing conditional_dropped_from:$(basename "$sp_file")"
 done
 grep -qF 'Test-first order (red-green-refactor) is project policy' "$SP_INDEX_DOC" 2>/dev/null \
   || superpowers_claim_missing="$superpowers_claim_missing rule_dropped_from:INDEX.md"
