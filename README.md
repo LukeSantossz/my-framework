@@ -34,6 +34,7 @@ A development-standards framework: versioned Markdown standards under `docs/stan
 | Decision records flow: SPEC → ADR → README | [`docs/adr/0001-decision-records-flow.md`](docs/adr/0001-decision-records-flow.md) |
 | Specs become durable under `docs/specs/`; ADRs stay the curated rationale home | [`docs/adr/0002-durable-spec-archive.md`](docs/adr/0002-durable-spec-archive.md) |
 | CRUX review explainers are transient; ADRs stay the durable record | [`docs/adr/0003-crux-explainers-are-transient.md`](docs/adr/0003-crux-explainers-are-transient.md) |
+| The R2 reviewer default is `gpt-5.6-terra`, chosen on benchmark | [`docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md`](docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md) |
 
 ## Getting Started
 
@@ -42,7 +43,7 @@ A development-standards framework: versioned Markdown standards under `docs/stan
 - git >= 2.40
 - bash (Git for Windows works)
 - gh CLI
-- Optional: Codex CLI 0.144.1, for the R2 cross-provider gate
+- Optional: Codex CLI >= 0.144.1, for the R2 cross-provider gate
 
 ### Installation
 

@@ -13,6 +13,51 @@ FAIL=0
 ok() { PASS=$((PASS + 1)); printf 'ok   - %s\n' "$1"; }
 no() { FAIL=$((FAIL + 1)); printf 'FAIL - %s\n' "$1"; printf '       %s\n' "$2"; }
 
+# numbering_violation <dir>: prints a violation token when the NNNN-<slug>.md
+# numbering in <dir> is not a contiguous run 0001..N with no gap and no
+# duplicate, and prints nothing when it is clean. This is the durability
+# invariant in a form that does not decay: a frozen number list would need an
+# edit per new record, while contiguity holds for every record ever added and
+# still fails the moment one is deleted. Only for directories that use the
+# NNNN-<slug>.md convention (docs/specs/, docs/adr/) — docs/standards/ does not
+# and must never be checked this way.
+numbering_violation() {
+  nv_dir="$1"
+  nv_nums=""
+  nv_count=0
+  for nv_match in "$nv_dir"/*.md; do
+    [ -f "$nv_match" ] || continue
+    nv_base="$(basename "$nv_match")"
+    case "$nv_base" in
+      [0-9][0-9][0-9][0-9]-*) : ;;
+      *) continue ;;
+    esac
+    nv_nums="$nv_nums ${nv_base%%-*}"
+    nv_count=$((nv_count + 1))
+  done
+  if [ "$nv_count" -eq 0 ]; then
+    printf 'no_numbered_files'
+    return 0
+  fi
+  # Compared as strings, never as integers: a leading-zero number like 0008 is
+  # an invalid octal literal in shell arithmetic.
+  nv_expected=1
+  nv_prev=""
+  for nv_num in $(printf '%s\n' $nv_nums | sort); do
+    if [ "$nv_num" = "$nv_prev" ]; then
+      printf 'duplicate_%s' "$nv_num"
+      return 0
+    fi
+    nv_want="$(printf '%04d' "$nv_expected")"
+    if [ "$nv_num" != "$nv_want" ]; then
+      printf 'expected_%s_found_%s' "$nv_want" "$nv_num"
+      return 0
+    fi
+    nv_prev="$nv_num"
+    nv_expected=$((nv_expected + 1))
+  done
+}
+
 SANDBOX="$(mktemp -d)"
 trap 'rm -rf "$SANDBOX"' EXIT
 
@@ -128,15 +173,34 @@ else
   no "crura_composes_with_review_layers" "crura_method.md does not reference the review layers or the checklist"
 fi
 
-# codex_review_doc_depinned (guard: role-based doc — no stale Author pin,
-# override variables documented)
+# codex_review_doc_depinned (guard: role-based doc — no concrete Anthropic model
+# id anywhere, so no Author pin can go stale; override variables documented)
+# The id shape is anchored on the family names plus the legacy claude-<digit>
+# ids. A bare claude-<word>-<digit> is wrong in both directions: it misses the
+# whole claude-3 family (a digit follows claude-, not a word) and it rejects
+# legitimate prose such as claude-code-2. Case-insensitive; `claude-` with the
+# hyphen never matches the CLAUDE.md reference or the "Claude family" prose.
+ANTHROPIC_MODEL_RE='claude-(opus|sonnet|haiku|fable|instant|[0-9])'
+# Proven on fixtures first: grepping only the real doc (which pins no id) passes
+# whether or not the pattern works, so a typo would sail through green.
+depin_missing=""
+for depin_pos in claude-opus-4-8 claude-fable-5 claude-sonnet-4-6 claude-haiku-4-5 \
+  claude-3-opus-20240229 claude-3-5-sonnet-20241022 claude-2.1 Claude-Opus-4-8; do
+  printf '%s\n' "$depin_pos" | grep -Eqi "$ANTHROPIC_MODEL_RE" \
+    || depin_missing="$depin_missing missed:$depin_pos"
+done
+for depin_neg in claude-code-2 claude-agent-sdk-2 claude-plugins-official CLAUDE.md; do
+  printf '%s\n' "$depin_neg" | grep -Eqi "$ANTHROPIC_MODEL_RE" \
+    && depin_missing="$depin_missing false_positive:$depin_neg"
+done
 CODEX_DOC="$REPO_ROOT/docs/standards/codex_review.md"
-if ! grep -q "claude-opus-4-8" "$CODEX_DOC" \
-  && grep -q "CODEX_REVIEW_MODEL" "$CODEX_DOC" \
-  && grep -q "CODEX_REVIEW_EFFORT" "$CODEX_DOC"; then
+grep -Eqi "$ANTHROPIC_MODEL_RE" "$CODEX_DOC" && depin_missing="$depin_missing doc_pins_a_model"
+grep -q "CODEX_REVIEW_MODEL" "$CODEX_DOC" || depin_missing="$depin_missing no_model_override_documented"
+grep -q "CODEX_REVIEW_EFFORT" "$CODEX_DOC" || depin_missing="$depin_missing no_effort_override_documented"
+if [ -z "$depin_missing" ]; then
   ok "codex_review_doc_depinned"
 else
-  no "codex_review_doc_depinned" "codex_review.md still pins models or lacks the override variables"
+  no "codex_review_doc_depinned" "missing:$depin_missing"
 fi
 
 # standards_authority_and_ambiguity_recorded (guard: repo-over-global rule in
@@ -167,6 +231,11 @@ CONTEXT_DOC="$REPO_ROOT/CONTEXT.md"
 durable_spec_missing=""
 grep -q "docs/specs/" "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_docs_specs"
 grep -q "spec-lite" "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_spec_lite"
+# The rule the contiguity check below enforces must be stated in the standard, or
+# the guard polices something no document requires. Pinned by exact clause so a
+# reworded or dropped rule is caught rather than passing on a stray keyword.
+grep -qF 'never reused' "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_number_never_reused"
+grep -qF 'marked Retired' "$SPEC_METHOD_DOC" || durable_spec_missing="$durable_spec_missing spec_method_retired_in_place"
 # Every spec present under docs/specs/ must carry the "# SPEC:" header. Globbed
 # (not a frozen number list) so specs added after this guard are covered too;
 # the archive_pins block below stays the byte-exact integrity check for the
@@ -180,6 +249,12 @@ for match in "$REPO_ROOT"/docs/specs/*.md; do
   fi
 done
 [ "$spec_count" -gt 0 ] || durable_spec_missing="$durable_spec_missing specs_none_found"
+# The header check above only inspects whatever files happen to be present, so a
+# deleted spec passes it silently. Contiguity is what makes a deletion fail:
+# the numbers must run 0001..N with no gap and no duplicate.
+durable_numbering_violation="$(numbering_violation "$REPO_ROOT/docs/specs")"
+[ -z "$durable_numbering_violation" ] \
+  || durable_spec_missing="$durable_spec_missing specs_numbering_$durable_numbering_violation"
 # The backfilled archive is verbatim history: each committed blob must equal
 # the blob at its pinned extraction commit (blob-to-blob, immune to eol
 # conversion; needs full history — CI fetches with fetch-depth: 0).
@@ -208,6 +283,123 @@ if [ -z "$durable_spec_missing" ]; then
   ok "durable_spec_archive_recorded"
 else
   no "durable_spec_archive_recorded" "missing:$durable_spec_missing"
+fi
+
+# spec_numbering_is_contiguous (guard: the durable spec numbers run 0001..N with
+# no gap and no duplicate, so deleting an archived spec cannot pass silently.
+# Proven on throwaway fixtures first, so a toothless helper cannot pass this by
+# reporting every tree clean.)
+spec_numbering_missing=""
+spec_gap_dir="$SANDBOX/numbering-specs-gap"
+mkdir -p "$spec_gap_dir"
+for n in 0001 0002 0004; do
+  printf '# SPEC: sample\n' > "$spec_gap_dir/$n-sample.md"
+done
+[ -n "$(numbering_violation "$spec_gap_dir")" ] \
+  || spec_numbering_missing="$spec_numbering_missing gap_fixture_not_flagged"
+spec_dup_dir="$SANDBOX/numbering-specs-dup"
+mkdir -p "$spec_dup_dir"
+printf '# SPEC: sample\n' > "$spec_dup_dir/0001-sample.md"
+printf '# SPEC: sample\n' > "$spec_dup_dir/0002-sample.md"
+printf '# SPEC: sample\n' > "$spec_dup_dir/0002-other.md"
+[ -n "$(numbering_violation "$spec_dup_dir")" ] \
+  || spec_numbering_missing="$spec_numbering_missing duplicate_fixture_not_flagged"
+spec_real_violation="$(numbering_violation "$REPO_ROOT/docs/specs")"
+[ -z "$spec_real_violation" ] \
+  || spec_numbering_missing="$spec_numbering_missing real_tree:$spec_real_violation"
+if [ -z "$spec_numbering_missing" ]; then
+  ok "spec_numbering_is_contiguous"
+else
+  no "spec_numbering_is_contiguous" "missing:$spec_numbering_missing"
+fi
+
+# adr_numbering_is_contiguous (guard: the same durability invariant over the ADR
+# archive, which shares the NNNN-<slug>.md convention. docs/standards/ does not
+# use that convention and is deliberately never checked this way.)
+adr_numbering_missing=""
+adr_gap_dir="$SANDBOX/numbering-adr-gap"
+mkdir -p "$adr_gap_dir"
+for n in 0001 0002 0004; do
+  printf '# Decision\n' > "$adr_gap_dir/$n-sample.md"
+done
+[ -n "$(numbering_violation "$adr_gap_dir")" ] \
+  || adr_numbering_missing="$adr_numbering_missing gap_fixture_not_flagged"
+adr_dup_dir="$SANDBOX/numbering-adr-dup"
+mkdir -p "$adr_dup_dir"
+printf '# Decision\n' > "$adr_dup_dir/0001-sample.md"
+printf '# Decision\n' > "$adr_dup_dir/0002-sample.md"
+printf '# Decision\n' > "$adr_dup_dir/0002-other.md"
+[ -n "$(numbering_violation "$adr_dup_dir")" ] \
+  || adr_numbering_missing="$adr_numbering_missing duplicate_fixture_not_flagged"
+adr_real_violation="$(numbering_violation "$REPO_ROOT/docs/adr")"
+[ -z "$adr_real_violation" ] \
+  || adr_numbering_missing="$adr_numbering_missing real_tree:$adr_real_violation"
+if [ -z "$adr_numbering_missing" ]; then
+  ok "adr_numbering_is_contiguous"
+else
+  no "adr_numbering_is_contiguous" "missing:$adr_numbering_missing"
+fi
+
+# durable_records_are_never_deleted (guard: a spec or ADR, once committed, is
+# never removed. Contiguity cannot see this on its own: deleting the
+# highest-numbered record leaves 0001..N-1 contiguous and clean, which is the
+# exact shape of the PR #10 incident — spec 0009 and ADR 0003 were each the
+# highest of their series. So the archive is checked against git history, not
+# only against itself: every NNNN-<slug>.md ever added under docs/specs/ or
+# docs/adr/ must still be present.
+# The list below is CLOSED and records only the two deletions that happened
+# before the rule existed (PR #10) and cannot be undone:
+# - docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md: the benchmark spec
+#   deleted by PR #10 as disproportionate to the decision it carried; that
+#   decision survives in docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md.
+# - docs/adr/0003-r2-reviewer-model-gpt-5-6-terra.md: deleted by PR #10 and
+#   restored at docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md.
+# It is NOT the retirement mechanism. Under `spec_method.md` a retired record
+# stays in place marked Retired, keeping its number and its file, so retiring a
+# record never requires an entry here. Treating a missing path as a valid
+# retirement would reopen the PR #10 failure mode (R2 finding, PR #12), so the
+# closed_pre_rule_deletions assertion below pins this list to exactly those two
+# paths: adding a third fails the suite rather than waving a deletion through.
+# Needs full history; CI checks out with fetch-depth: 0.
+PRE_RULE_DELETIONS='docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md
+docs/adr/0003-r2-reviewer-model-gpt-5-6-terra.md'
+deleted_records=""
+ever_added="$(cd "$REPO_ROOT" && git log --diff-filter=A --name-only --format= -- docs/specs docs/adr 2>/dev/null \
+  | grep -E '^docs/(specs|adr)/[0-9]{4}-[^/]*\.md$' | sort -u)"
+if [ -z "$ever_added" ]; then
+  deleted_records=" history_unavailable"
+else
+  for rec in $ever_added; do
+    [ -f "$REPO_ROOT/$rec" ] && continue
+    case "
+$PRE_RULE_DELETIONS
+" in
+      *"
+$rec
+"*) continue ;;
+    esac
+    deleted_records="$deleted_records $rec"
+  done
+fi
+if [ -z "$deleted_records" ]; then
+  ok "durable_records_are_never_deleted"
+else
+  no "durable_records_are_never_deleted" "deleted with no record left in place:$deleted_records"
+fi
+
+# closed_pre_rule_deletions (guard on the guard: the pre-rule deletion list must
+# stay exactly the two PR #10 paths. Without this, retiring a record could be
+# done by deleting the file and appending its path above — which both the
+# history check and the contiguity check would then pass, recreating the very
+# failure mode the rule forbids. R2 finding on PR #12, accepted.)
+expected_pre_rule='docs/adr/0003-r2-reviewer-model-gpt-5-6-terra.md
+docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md'
+actual_pre_rule="$(printf '%s\n' "$PRE_RULE_DELETIONS" | sed '/^$/d' | sort)"
+if [ "$actual_pre_rule" = "$expected_pre_rule" ]; then
+  ok "closed_pre_rule_deletions"
+else
+  no "closed_pre_rule_deletions" "the pre-rule deletion list changed; a retired record stays in place marked Retired, it is not appended here:
+$actual_pre_rule"
 fi
 
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
@@ -276,7 +468,8 @@ fi
 # framework_readme_and_license_recorded (guard: root README.md exists in
 # canonical section order, links both decision-flow ADRs, Known Issues &
 # Limitations is present, the MIT LICENSE exists and is named in the README
-# License section, and no HTML comments or {...} placeholders remain)
+# License section, the Codex CLI prerequisite reads as a minimum rather than an
+# exact pin, and no HTML comments or {...} placeholders remain)
 README_DOC="$REPO_ROOT/README.md"
 LICENSE_FILE="$REPO_ROOT/LICENSE"
 readme_order_ok=0
@@ -320,13 +513,14 @@ if [ "$readme_order_ok" -eq 1 ] \
   && grep -q "CONTEXT.md" "$README_DOC" \
   && grep -q "self-test" "$README_DOC" \
   && grep -q "token-economy choice is informational" "$README_DOC" \
+  && grep -qE 'Codex CLI >= [0-9]' "$README_DOC" \
   && grep -q "MIT" "$README_DOC" \
   && [ -f "$LICENSE_FILE" ] \
   && ! grep -q "<!--" "$README_DOC" \
   && ! grep -qE '\{[^}]*\}' "$README_DOC"; then
   ok "framework_readme_and_license_recorded"
 else
-  no "framework_readme_and_license_recorded" "README missing/out of canonical order, missing ADR links, MIT naming, LICENSE file, or contains comments/placeholders"
+  no "framework_readme_and_license_recorded" "README missing/out of canonical order, missing ADR links, MIT naming, LICENSE file, a minimum-version (>=) Codex CLI prerequisite, or contains comments/placeholders"
 fi
 
 # repo_scripts_are_executable (guard: every shell entry point carries the
@@ -397,6 +591,27 @@ if [ -z "$crux_adr_missing" ]; then
   ok "crux_decision_promoted_to_adr"
 else
   no "crux_decision_promoted_to_adr" "missing:$crux_adr_missing"
+fi
+
+# reviewer_switch_adr_restored (guard: the gpt-5.5 → gpt-5.6-terra reviewer
+# decision deleted by PR #10 is restored as a durable ADR at 0004, carries its
+# numbering history, and is indexed in the README Engineering Decisions table)
+REVIEWER_ADR="$REPO_ROOT/docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md"
+REVIEWER_README="$REPO_ROOT/README.md"
+reviewer_adr_missing=""
+[ -f "$REVIEWER_ADR" ] || reviewer_adr_missing="$reviewer_adr_missing adr_file"
+grep -qF "gpt-5.6-terra" "$REVIEWER_ADR" 2>/dev/null \
+  || reviewer_adr_missing="$reviewer_adr_missing chosen_default"
+grep -qF "PR #10" "$REVIEWER_ADR" 2>/dev/null \
+  || reviewer_adr_missing="$reviewer_adr_missing deletion_recorded"
+grep -qF "0009" "$REVIEWER_ADR" 2>/dev/null \
+  || reviewer_adr_missing="$reviewer_adr_missing reused_numbers_recorded"
+grep -qF "docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md" "$REVIEWER_README" 2>/dev/null \
+  || reviewer_adr_missing="$reviewer_adr_missing readme_row"
+if [ -z "$reviewer_adr_missing" ]; then
+  ok "reviewer_switch_adr_restored"
+else
+  no "reviewer_switch_adr_restored" "missing:$reviewer_adr_missing"
 fi
 
 # passes_on_current_tree (the real docs/standards must be consistent)
