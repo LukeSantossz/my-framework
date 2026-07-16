@@ -147,8 +147,15 @@ one rule at different scope.
   that the token economy is opt-in at initialization rather than always on, and
   declares the fallback; `skills_guidelines.md` records Caveman as installed with
   terse mode only.
-- token_economy_drops_unreproducible_numbers: `token_economy.md` contains no
-  percentage claim lacking a reproduction path.
+- token_economy_carries_no_measurements: `token_economy.md` states no percentage
+  at all. Adjudicated at R2: the guard is absolute rather than scoped to
+  unsupported figures, because a policy document is not a results document — a
+  measured, reproducible figure belongs in a spec's Reproducibility section or an
+  ADR, which carry the command and versions `ai_guidelines.md` requires, as
+  `docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md` does for its benchmark.
+  Inferring from adjacent prose whether a number has a reproduction path is a
+  heuristic that would have passed the very figures this removes, which already
+  cited "author benchmarks and third-party tests".
 - skills_inventory_names_installed_skills: `skills_guidelines.md` names
   `grill-me` and `diagnose`, and no longer names `grilling`, `diagnosing-bugs`,
   `domain-modeling`, `codebase-design` or `design-an-interface`.
