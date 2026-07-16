@@ -71,11 +71,21 @@ existing reference to that number ambiguous, because the same citation resolves
 to a different decision depending on when it was written, and nothing in the
 text tells the reader which one was meant.
 
-This rule is enforced rather than trusted: the contiguity check in the
-docs-consistency suite requires spec and ADR numbers to run from `0001` with no
-gaps, so a deletion fails CI. It is the never-overwritten rule of
-`docs/adr/0002-durable-spec-archive.md` made explicit for the case of deleting a
-record and reusing its number.
+In this repository the rule is enforced rather than trusted, by two checks in
+the docs-consistency self-test. The first reads git history: every spec and ADR
+ever committed must still be present, unless it is listed in the guard as
+deliberately retired with a stated reason, which makes retiring a record a
+conscious act that leaves a trace. The second requires the numbers to run from
+`0001` with no gap and no duplicate. The history check is the load-bearing one:
+contiguity alone cannot see the deletion of the highest-numbered record, which
+leaves the rest contiguous and is the shape the incident behind this rule
+actually had.
+
+An adopting repository copies this standard but runs only `docs-consistency.sh`
+and drops the self-test suite (see the README), so it inherits the rule without
+those checks and carries it on discipline until it wires an equivalent. The
+rule is the never-overwritten rule of `docs/adr/0002-durable-spec-archive.md`
+made explicit for the case of deleting a record and reusing its number.
 
 ## Spec-lite
 
