@@ -554,6 +554,126 @@ else
   no "claude_md_points_to_standards" "CLAUDE.md no longer activates the standards:$claude_md_missing"
 fi
 
+# skills_inventory_names_installed_skills (guard: the capability inventory names
+# skills that exist. It named `grilling` and `diagnosing-bugs`, which match
+# nothing installed — the real skills are `grill-me` and `diagnose` — and
+# `domain-modeling`, `codebase-design` and `design-an-interface`, which match
+# nothing anywhere. An inventory whose entries cannot be invoked is worse than no
+# inventory: it sends the Author to a skill list that has no such skill, which
+# reads as a broken toolchain rather than as the documentation defect it is, and
+# the declared fallback never fires because nothing reports the skill as absent.
+#
+# Names are matched backtick-delimited, exactly as the document writes them,
+# because the wrong names are not separable from the right ones by substring:
+# `grilling` and `grill-me` share a prefix, and a bare `diagnose` would also
+# match prose such as "diagnosed". The backticks are the word boundary the
+# document already supplies.
+#
+# This guard deliberately does NOT grep `~/.claude/skills/` to prove the names
+# resolve: that pins the suite to one machine's home directory and fails in CI,
+# where nothing is installed — the same boundary token_economy_claims_match_reality
+# holds. The inventory documents an external environment, it does not manage it,
+# so what is checkable from inside the repo is that it names the set the record
+# says exists. It will need updating when a skill is renamed upstream; a wrong
+# name is worse than a name that may age.
+SKILLS_INV_DOC="$REPO_ROOT/docs/standards/skills_guidelines.md"
+skills_inventory_missing=""
+for inv_present in '`grill-me`' '`diagnose`'; do
+  grep -qF "$inv_present" "$SKILLS_INV_DOC" 2>/dev/null \
+    || skills_inventory_missing="$skills_inventory_missing missing:$inv_present"
+done
+for inv_absent in '`grilling`' '`diagnosing-bugs`' '`domain-modeling`' '`codebase-design`' '`design-an-interface`'; do
+  grep -qF "$inv_absent" "$SKILLS_INV_DOC" 2>/dev/null \
+    && skills_inventory_missing="$skills_inventory_missing names_uninstalled:$inv_absent"
+done
+if [ -z "$skills_inventory_missing" ]; then
+  ok "skills_inventory_names_installed_skills"
+else
+  no "skills_inventory_names_installed_skills" "skills_guidelines.md names skills that are not installed:$skills_inventory_missing"
+fi
+
+# superpowers_claim_is_not_enforcement (guard: "enforced by" is a claim about an
+# external tool, and Superpowers is not installed — `~/.claude/plugins/` holds no
+# such plugin — so nothing enforced the test-first order in the three documents
+# that said it did. A rule described as enforced by a tool that is absent is the
+# Gap in miniature: the Author reads that the phase has it covered and stops
+# checking, and no phase runs. The true verb is that the TDD phase runs the order
+# when it is installed, while the order itself is project policy and binds either
+# way — which is why each document already records it independently of the tool.
+#
+# Pinned in both directions. An absence-only check passes on a document that
+# dropped the test-first rule altogether, which would close the false claim by
+# deleting the true one; the presence checks hold each document to still stating
+# the rule, by exact clause so a reworded weakening cannot pass on a keyword.
+SP_INDEX_DOC="$REPO_ROOT/docs/standards/INDEX.md"
+SP_CONV_DOC="$REPO_ROOT/docs/standards/code_conventions.md"
+SP_AI_DOC="$REPO_ROOT/docs/standards/ai_guidelines.md"
+superpowers_claim_missing=""
+for sp_file in "$SP_INDEX_DOC" "$SP_CONV_DOC" "$SP_AI_DOC"; do
+  grep -qF 'enforced by the Superpowers' "$sp_file" 2>/dev/null \
+    && superpowers_claim_missing="$superpowers_claim_missing claims_enforcement_in:$(basename "$sp_file")"
+done
+grep -qF 'Test-first order (red-green-refactor) is project policy' "$SP_INDEX_DOC" 2>/dev/null \
+  || superpowers_claim_missing="$superpowers_claim_missing rule_dropped_from:INDEX.md"
+grep -qF 'Write the test before the implementation' "$SP_CONV_DOC" 2>/dev/null \
+  || superpowers_claim_missing="$superpowers_claim_missing rule_dropped_from:code_conventions.md"
+grep -qF 'Write the test before the implementation' "$SP_AI_DOC" 2>/dev/null \
+  || superpowers_claim_missing="$superpowers_claim_missing rule_dropped_from:ai_guidelines.md"
+if [ -z "$superpowers_claim_missing" ]; then
+  ok "superpowers_claim_is_not_enforcement"
+else
+  no "superpowers_claim_is_not_enforcement" "the test-first order is claimed enforced by a tool that is not installed, or the rule itself was dropped:$superpowers_claim_missing"
+fi
+
+# english_rule_scoped_consistently (guard: one rule, one scope. `INDEX.md`,
+# `code_conventions.md` and `AGENTS.md` scope the English rule to the artifacts —
+# identifiers, comments, commit/PR/issue text, documentation — while `CLAUDE.md`
+# and `ai_guidelines.md` stated it unscoped, as a bare "All output in English."
+# Read literally the unscoped form is the wider rule and forbids answering the
+# Developer in Portuguese, which is neither intended nor practiced: the scope is
+# what the framework versions, not the conversation about it.
+#
+# This could not be adjudicated at read time. The precedence order in
+# `code_conventions.md` ranks rule TYPES (Safety, Correctness, idiom, existing
+# pattern, suffixes) and repo-over-global sources; it has no rule for two repo
+# documents stating one rule at two scopes, so it cannot arbitrate them and the
+# conflict has to be removed at the source. The scoped form is the intended one.
+#
+# Pinned in both directions, and the discriminating pattern is proven on fixtures
+# first: the absence check is a regex whose whole job is to separate the scoped
+# form from the unscoped one, and a pattern that matched neither — or both —
+# would pass green while enforcing nothing. The period is the discriminator: it
+# is what makes the sentence end at "English" instead of continuing into its
+# scope.
+ENGLISH_UNSCOPED_RE='All output in English\.'
+ENGLISH_SCOPED='All output in English: identifiers, comments, commit/PR/issue text, documentation.'
+english_probe=""
+for en_pos in "All output in English." "- All output in English." \
+  "Counterpart to \`crura_method.md\`. All output in English."; do
+  printf '%s\n' "$en_pos" | grep -Eq "$ENGLISH_UNSCOPED_RE" \
+    || english_probe="$english_probe missed:$en_pos"
+done
+for en_neg in "$ENGLISH_SCOPED" \
+  "- All output in English: identifiers, comments, commit/PR/issue text, documentation." \
+  "All output in English (identifiers, comments, commit/PR/issue text, documentation)."; do
+  printf '%s\n' "$en_neg" | grep -Eq "$ENGLISH_UNSCOPED_RE" \
+    && english_probe="$english_probe false_positive:$en_neg"
+done
+english_rule_missing=""
+for en_file in "$REPO_ROOT/CLAUDE.md" "$REPO_ROOT/docs/standards/ai_guidelines.md"; do
+  grep -qE "$ENGLISH_UNSCOPED_RE" "$en_file" 2>/dev/null \
+    && english_rule_missing="$english_rule_missing unscoped_in:$(basename "$en_file")"
+  grep -qF "$ENGLISH_SCOPED" "$en_file" 2>/dev/null \
+    || english_rule_missing="$english_rule_missing scope_missing_in:$(basename "$en_file")"
+done
+if [ -n "$english_probe" ]; then
+  no "english_rule_scoped_consistently" "the unscoped-English pattern is broken:$english_probe"
+elif [ -z "$english_rule_missing" ]; then
+  ok "english_rule_scoped_consistently"
+else
+  no "english_rule_scoped_consistently" "the English rule is stated at a scope INDEX.md does not state it at:$english_rule_missing"
+fi
+
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
 # any standard's body must fail, not only in INDEX.md)
 root="$(make_fixture bodyrefs)"
