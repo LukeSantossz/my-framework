@@ -531,6 +531,29 @@ else
   no "token_economy_claims_match_reality" "documents contradict the installed Caveman skill:$token_economy_missing"
 fi
 
+# claude_md_points_to_standards (guard: the Author's entry point still activates
+# the standards. AGENTS.md — the Reviewer's door — has had this guard since the
+# R2 gate landed (agents_file_points_to_standards in codex-review.test.sh);
+# CLAUDE.md, the door the Author reads on every session and the one
+# token_economy.md permits rewriting, had none. That asymmetry is the Gap this
+# framework exists to close, left open at its own front door: an edit that stops
+# CLAUDE.md pointing at INDEX.md silently unloads every standard, and nothing
+# said so. token_economy.md requires a compression to preserve the standards
+# paths and the precedence reference byte-for-byte and declares that a
+# compression breaking activation is rejected — this is what rejects it.)
+CLAUDE_DOC="$REPO_ROOT/CLAUDE.md"
+claude_md_missing=""
+[ -f "$CLAUDE_DOC" ] || claude_md_missing="$claude_md_missing file_absent"
+grep -qF "docs/standards/INDEX.md" "$CLAUDE_DOC" 2>/dev/null \
+  || claude_md_missing="$claude_md_missing no_index_reference"
+grep -qF "code_conventions.md" "$CLAUDE_DOC" 2>/dev/null \
+  || claude_md_missing="$claude_md_missing no_precedence_reference"
+if [ -z "$claude_md_missing" ]; then
+  ok "claude_md_points_to_standards"
+else
+  no "claude_md_points_to_standards" "CLAUDE.md no longer activates the standards:$claude_md_missing"
+fi
+
 # docs_consistency_detects_refs_in_standards_bodies (a dangling reference in
 # any standard's body must fail, not only in INDEX.md)
 root="$(make_fixture bodyrefs)"
