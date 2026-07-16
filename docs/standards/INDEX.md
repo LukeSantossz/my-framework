@@ -19,7 +19,7 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 
 - All output in English: identifiers, comments, commit/PR/issue text, documentation.
 - Specify before building: a non-trivial change starts with a `SPEC.md` that passes the Spec Gate, per `spec_method.md`. The spec is the source of truth for intent and scope.
-- Specs are durable: an approved spec is authored directly under `docs/specs/NNNN-<slug>.md` and archived there, never overwritten by the next change, per `spec_method.md`.
+- Specs are durable: an approved spec is authored directly under `docs/specs/NNNN-<slug>.md` and archived there, never overwritten by the next change, per `spec_method.md`. A spec or ADR number is never reused: a superseded record is marked Retired in place, keeping its number and its file, rather than deleted.
 - Decision records flow: a SPEC's Design Decision is promoted at the Spec Gate to a durable ADR under `docs/adr/` when it is hard to reverse, surprising, and a real trade-off; the SPEC's Alternatives Considered records the rejected options in the durable spec archive while the ADR stays the curated rationale home, and the README Engineering Decisions indexes the ADR. See `docs/adr/0001-decision-records-flow.md` and `docs/adr/0002-durable-spec-archive.md`.
 - The canonical type vocabulary lives only in the Type Table in `github.md`. Commits, PR titles, issue titles, and branch names draw from it. No parallel list exists.
 - Naming flows from `code_conventions.md` (general) to `var_method.md` (suffixes); the suffix guide is the lowest layer of precedence.
