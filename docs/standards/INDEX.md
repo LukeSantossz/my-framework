@@ -13,6 +13,7 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - `token_economy.md`: controlled token consumption (Caveman), with the scope boundary against versioned artifacts.
 - `skills_guidelines.md`: external-capability inventory — pipeline stage, install/verify, and declared fallback per skill.
 - `codex_review.md`: operational R2 cross-provider gate (Codex CLI pre-push review).
+- `status_line.md`: the facts a coding agent's status line must show and in what order, across Claude Code and Codex.
 - `crux_method.md`: the CRUX review-time explanation aid — a transient, interactive explainer of an implemented change that feeds R1 and the CRURA Review.
 
 ## System Rules
@@ -29,6 +30,10 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - Token economy per `token_economy.md`: opt-in, chosen when the framework is initialized in a project, never a default the framework imposes; a repository that declines it is fully conformant. Terse mode is allowed in conversation but never in `SPEC.md`, PR, Issue, or commit artifacts. It never overrides Safety or Correctness.
 - Conflict resolution follows the precedence order in `code_conventions.md`.
 - Authority between sources: a repository's standards override user-global defaults (per the Precedence section of `code_conventions.md`); Safety and Correctness are never overridden.
+- Status line per `status_line.md`: the five facts and their order are fixed across
+  Claude Code and Codex; how a tool draws them is not. Applying the contract is
+  machine state, so it is opt-in — `bash scripts/setup.sh --statusline` — and is the
+  only part of the bootstrap that writes outside the repository.
 - Activation is bootstrapped, not assumed: `bash scripts/setup.sh` applies the local
   activation state (hooks path, triage labels) and reports the toolchain; CI
   (`.github/workflows/ci.yml`) runs the shell tests and the docs-consistency checks
@@ -46,3 +51,4 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 8. `skills_guidelines.md`
 9. `codex_review.md`
 10. `crux_method.md`
+11. `status_line.md`

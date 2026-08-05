@@ -176,6 +176,15 @@ a blocking gate; durable rationale stays in ADRs. Acronym: Change Review
 Understanding eXplanation.
 _Avoid_: explainer (the artifact, not the method), code walkthrough, tutorial.
 
+**Status Line Contract**:
+The Standard fixing which five facts a coding agent's status line shows and in what
+order — model with reasoning effort, context used, tokens spent, quota, location —
+across Claude Code and Codex. It binds the facts and their order, never the colors,
+glyphs, or widths, because the two tools render through mechanisms that are not
+interchangeable: Codex reads a declarative segment list, Claude Code runs a command.
+Applying it is machine state and therefore opt-in.
+_Avoid_: status bar, statusline (as the Standard rather than the rendered line), theme.
+
 ### Token Economy
 
 **Token Economy**:
