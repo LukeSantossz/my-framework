@@ -2,7 +2,7 @@
 # Activation bootstrap: turns the framework's documented activation steps into
 # one idempotent command. Sets core.hooksPath, reports toolchain state
 # (advisory), and creates missing triage labels.
-# See docs/standards/codex_review.md and docs/agents/triage-labels.md.
+# See docs/standards/r2_gate.md and docs/agents/triage-labels.md.
 #
 # With --statusline it also applies the status line contract to this machine's
 # agent configuration, which is the one thing here that writes outside the
@@ -27,12 +27,14 @@ log() { printf '[setup] %s\n' "$1"; }
 # work, so a run with a bad flag changes nothing.
 interactive=0
 statusline=0
+reviewer=0
 for arg in "$@"; do
   case "$arg" in
     --interactive) interactive=1 ;;
     --statusline) statusline=1 ;;
+    --reviewer) reviewer=1 ;;
     *)
-      log "unknown option: $arg (supported: --interactive, --statusline)"
+      log "unknown option: $arg (supported: --interactive, --statusline, --reviewer)"
       exit 1
       ;;
   esac
@@ -215,7 +217,7 @@ log "core.hooksPath -> .githooks (R2 pre-push gate active)."
 if command -v "$codex_bin" >/dev/null 2>&1; then
   log "codex: found."
 else
-  log "codex: not installed; R2 reviews will be skipped until it is (see docs/standards/codex_review.md)."
+  log "codex: not installed; R2 reviews will be skipped until it is (see docs/standards/r2_gate.md)."
 fi
 
 labels_ok=1
@@ -268,6 +270,55 @@ if [ "$statusline" -eq 1 ]; then
     log "activation bootstrap incomplete: the status line could not be applied."
     exit 1
   fi
+fi
+
+# 6. Machine-global reviewer configuration for the R2 gate. This writes the
+#    --global scope on purpose: it is the layer a repository can still override
+#    with --local, which is the authority order code_conventions.md states.
+#    --interactive keeps its own repo-local scope, so each flag owns one.
+if [ "$reviewer" -eq 1 ]; then
+  current_backends="$(git config --global --get r2.backends 2>/dev/null || true)"
+  current_endpoint="$(git config --global --get r2.openai.endpoint 2>/dev/null || true)"
+  current_openai_model="$(git config --global --get r2.openai.model 2>/dev/null || true)"
+  current_key_env="$(git config --global --get r2.openai.apiKeyEnv 2>/dev/null || true)"
+
+  printf '[setup] R2 backend chain, in order [%s]: ' "${current_backends:-codex}"
+  IFS= read -r answer_backends || answer_backends=""
+  printf '[setup] openai-compatible endpoint [%s]: ' "${current_endpoint:-<none>}"
+  IFS= read -r answer_endpoint || answer_endpoint=""
+  printf '[setup] openai-compatible model [%s]: ' "${current_openai_model:-<none>}"
+  IFS= read -r answer_openai_model || answer_openai_model=""
+  printf '[setup] name of the env var holding the API key [%s]: ' "${current_key_env:-<none>}"
+  IFS= read -r answer_key_env || answer_key_env=""
+
+  # The setting holds the NAME of the variable, never the key. `git config
+  # --list` output ends up in bug reports and screenshots, so a value that is
+  # not a valid environment variable name is refused rather than stored: the
+  # shapes that fail here are exactly the shapes a real credential has.
+  if [ -n "$answer_key_env" ] && ! printf '%s' "$answer_key_env" | grep -qE '^[A-Za-z_][A-Za-z0-9_]*$'; then
+    log "that is not an environment variable name. Give the NAME of the variable holding the key (for example DEEPSEEK_API_KEY), never the key itself. Nothing was persisted."
+    exit 1
+  fi
+
+  persist_global() {
+    [ -n "$2" ] || return 0
+    if ! git config --global "$1" "$2"; then
+      log "failed to persist $1 (is the global git config writable?); activation incomplete."
+      return 1
+    fi
+    log "reviewer config: $1 = $2"
+    return 0
+  }
+
+  reviewer_failures=0
+  persist_global r2.backends "$answer_backends" || reviewer_failures=1
+  persist_global r2.openai.endpoint "$answer_endpoint" || reviewer_failures=1
+  persist_global r2.openai.model "$answer_openai_model" || reviewer_failures=1
+  persist_global r2.openai.apiKeyEnv "$answer_key_env" || reviewer_failures=1
+  if [ "$reviewer_failures" -ne 0 ]; then
+    exit 1
+  fi
+  log "reviewer chain: $(git config --global --get r2.backends 2>/dev/null || echo codex) (see docs/standards/r2_gate.md)."
 fi
 
 # Interactive adoption questionnaire. Enter (or EOF) keeps the current
