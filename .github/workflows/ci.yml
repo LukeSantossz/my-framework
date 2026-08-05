@@ -21,7 +21,7 @@ jobs:
           fetch-depth: 0
       - name: Shell tests
         run: |
-          bash scripts/test/codex-review.test.sh
+          bash scripts/test/r2-review.test.sh
           bash scripts/test/setup.test.sh
           bash scripts/test/statusline.test.sh
           bash scripts/test/docs-consistency.test.sh
