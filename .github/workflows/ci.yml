@@ -23,6 +23,7 @@ jobs:
         run: |
           bash scripts/test/codex-review.test.sh
           bash scripts/test/setup.test.sh
+          bash scripts/test/statusline.test.sh
           bash scripts/test/docs-consistency.test.sh
       - name: Docs consistency
         run: bash scripts/test/docs-consistency.sh
