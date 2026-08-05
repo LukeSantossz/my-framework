@@ -2,3 +2,5 @@
 # (a CRLF shebang breaks `#!/usr/bin/env bash` with "bad interpreter").
 *.sh text eol=lf
 .githooks/* text eol=lf
+# The status line renderer carries a shebang for the same reason.
+*.js text eol=lf

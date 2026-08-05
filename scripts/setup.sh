@@ -3,21 +3,40 @@
 # one idempotent command. Sets core.hooksPath, reports toolchain state
 # (advisory), and creates missing triage labels.
 # See docs/standards/codex_review.md and docs/agents/triage-labels.md.
+#
+# With --statusline it also applies the status line contract to this machine's
+# agent configuration, which is the one thing here that writes outside the
+# repository; see docs/standards/status_line.md.
 set -u
+
+script_dir="$(cd "$(dirname "$0")" && pwd)"
 
 gh_bin="${GH_BIN:-gh}"
 codex_bin="${CODEX_BIN:-codex}"
+node_bin="${NODE_BIN:-node}"
+
+# Where each agent keeps its configuration. Each tool's own override is
+# honored, so a machine that already relocates them is followed rather than
+# overruled.
+claude_home="${CLAUDE_HOME:-${CLAUDE_CONFIG_DIR:-$HOME/.claude}}"
+codex_home="${CODEX_HOME:-$HOME/.codex}"
 
 log() { printf '[setup] %s\n' "$1"; }
 
-# Optional interactive adoption mode; anything else is a usage error.
+# Optional modes; anything else is a usage error. Parsed in full before any
+# work, so a run with a bad flag changes nothing.
 interactive=0
-if [ "${1:-}" = "--interactive" ]; then
-  interactive=1
-elif [ -n "${1:-}" ]; then
-  log "unknown option: $1 (supported: --interactive)"
-  exit 1
-fi
+statusline=0
+for arg in "$@"; do
+  case "$arg" in
+    --interactive) interactive=1 ;;
+    --statusline) statusline=1 ;;
+    *)
+      log "unknown option: $arg (supported: --interactive, --statusline)"
+      exit 1
+      ;;
+  esac
+done
 
 # Canonical triage labels (docs/agents/triage-labels.md): name|color|description.
 LABEL_SPECS='needs-triage|ededed|Maintainer needs to evaluate this issue
@@ -25,6 +44,156 @@ needs-info|d876e3|Waiting on reporter for more information
 ready-for-agent|0e8a16|Fully specified, ready for an AFK agent
 ready-for-human|1d76db|Requires human implementation
 wontfix|ffffff|Will not be actioned'
+
+# The status line contract (docs/standards/status_line.md) in Codex's own
+# vocabulary: the five contract facts, in contract order.
+CODEX_STATUS_LINE='status_line = ["model-with-reasoning", "context-used", "context-window-size", "used-tokens", "five-hour-limit", "weekly-limit", "current-dir", "git-branch"]'
+CODEX_STATUS_COLORS='status_line_use_colors = true'
+RENDERER_NAME='my-framework-statusline.js'
+
+# Windows-native form of a path, for values a Windows-native tool will read
+# back. Claude Code resolves the statusLine command itself, so a POSIX path
+# from this shell would not be one it can run.
+native_path() {
+  if command -v cygpath >/dev/null 2>&1; then
+    cygpath -w "$1"
+  else
+    printf '%s' "$1"
+  fi
+}
+
+# Rewrites the `[tui]` status line keys in place, preserving everything else in
+# the file: other keys in the section, the `[tui.*]` subsections, and every
+# unrelated section. A `[tui]` section that does not exist is appended.
+codex_config_with_contract() {
+  awk -v line="$CODEX_STATUS_LINE" -v colors="$CODEX_STATUS_COLORS" '
+    BEGIN { in_tui = 0; skipping = 0; placed = 0 }
+    # Consume the tail of a multi-line status_line array, which would
+    # otherwise leave its entries and its closing bracket behind.
+    { if (skipping) { if (index($0, "]") > 0) skipping = 0; next } }
+    /^[ \t]*\[/ {
+      header = $0
+      sub(/^[ \t]+/, "", header); sub(/[ \t]+$/, "", header)
+      print
+      if (header == "[tui]") { print line; print colors; in_tui = 1; placed = 1 }
+      else { in_tui = 0 }
+      next
+    }
+    {
+      if (in_tui && $0 ~ /^[ \t]*status_line[ \t]*=/) {
+        if (index($0, "[") > 0 && index($0, "]") == 0) skipping = 1
+        next
+      }
+      if (in_tui && $0 ~ /^[ \t]*status_line_use_colors[ \t]*=/) next
+      print
+    }
+    END { if (!placed) { print ""; print "[tui]"; print line; print colors } }
+  ' "$1"
+}
+
+apply_codex_status_line() {
+  target="$codex_home/config.toml"
+  if ! mkdir -p "$codex_home"; then
+    log "codex: cannot create $codex_home; status line not applied."
+    return 1
+  fi
+  tmp="$target.tmp.$$"
+  if [ -f "$target" ]; then
+    codex_config_with_contract "$target" > "$tmp" || { rm -f "$tmp"; return 1; }
+  else
+    printf '[tui]\n%s\n%s\n' "$CODEX_STATUS_LINE" "$CODEX_STATUS_COLORS" > "$tmp" || {
+      rm -f "$tmp"; return 1
+    }
+  fi
+
+  if [ -f "$target" ] && cmp -s "$target" "$tmp"; then
+    rm -f "$tmp"
+    log "codex status line: already canonical."
+    return 0
+  fi
+
+  # Replacing a divergent config is the point (a machine already configured is
+  # the one that needed standardizing), so the original is kept beside it.
+  if [ -f "$target" ]; then
+    backup="$target.bak.$(date +%Y%m%d%H%M%S)"
+    if ! cp "$target" "$backup"; then
+      rm -f "$tmp"
+      log "codex: cannot back up $target; status line not applied."
+      return 1
+    fi
+    log "codex config backed up -> $(basename "$backup")"
+  fi
+  if ! mv "$tmp" "$target"; then
+    rm -f "$tmp"
+    log "codex: cannot write $target; status line not applied."
+    return 1
+  fi
+  log "codex status line: applied to $target."
+  return 0
+}
+
+# Merges the statusLine key into settings.json, leaving every other key alone.
+# Node does the merge because the file is JSON the user owns: a shell rewrite
+# would have to reproduce it, and reproducing it wrongly loses settings.
+apply_claude_status_line() {
+  if ! command -v "$node_bin" >/dev/null 2>&1; then
+    log "node: not installed; Claude Code status line skipped (the renderer and the settings merge both need it)."
+    return 0
+  fi
+  if ! mkdir -p "$claude_home"; then
+    log "claude: cannot create $claude_home; status line not applied."
+    return 1
+  fi
+
+  # Installed under a framework-scoped name so it never collides with a
+  # hand-written statusline script already in the user's CLAUDE_HOME.
+  source_renderer="$script_dir/statusline/claude-statusline.js"
+  if [ ! -f "$source_renderer" ]; then
+    log "claude: renderer missing at $source_renderer; status line not applied."
+    return 1
+  fi
+
+  installed="$claude_home/$RENDERER_NAME"
+  if ! cmp -s "$source_renderer" "$installed" 2>/dev/null; then
+    if ! cp "$source_renderer" "$installed"; then
+      log "claude: cannot install the renderer into $claude_home; status line not applied."
+      return 1
+    fi
+    log "claude renderer: installed -> $installed"
+  fi
+
+  settings="$claude_home/settings.json"
+  command_value="node \"$(native_path "$installed")\""
+  "$node_bin" -e '
+    const fs = require("fs");
+    const [file, backup, command] = process.argv.slice(1);
+    let settings = {};
+    let original = null;
+    if (fs.existsSync(file)) {
+      original = fs.readFileSync(file, "utf8");
+      try { settings = JSON.parse(original); } catch (e) { process.exit(2); }
+      if (settings === null || typeof settings !== "object" || Array.isArray(settings)) process.exit(2);
+    }
+    const current = settings.statusLine;
+    if (current && current.type === "command" && current.command === command) process.exit(3);
+    if (original !== null) fs.writeFileSync(backup, original);
+    settings.statusLine = { type: "command", command };
+    fs.writeFileSync(file, JSON.stringify(settings, null, 2) + "\n");
+  ' "$settings" "$settings.bak.$(date +%Y%m%d%H%M%S)" "$command_value"
+  case $? in
+    0) log "claude status line: applied to $settings." ;;
+    3) log "claude status line: already canonical." ;;
+    2)
+      log "claude: $settings is not a JSON object; refusing to rewrite it (fix or move it, then re-run). Status line not applied."
+      return 1
+      ;;
+    *)
+      log "claude: failed to write $settings; status line not applied."
+      return 1
+      ;;
+  esac
+  return 0
+}
 
 # 1. Must run inside a git repository; the only hard requirement.
 repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || {
@@ -84,6 +253,19 @@ $LABEL_SPECS
 EOF
   if [ "$label_failures" -gt 0 ]; then
     log "activation bootstrap incomplete: $label_failures label(s) could not be created."
+    exit 1
+  fi
+fi
+
+# 5. Apply the status line contract to this machine. Opt-in, because this is
+#    the only step that writes outside the repository and so governs every
+#    other project on the machine (docs/standards/status_line.md).
+if [ "$statusline" -eq 1 ]; then
+  statusline_failures=0
+  apply_codex_status_line || statusline_failures=$((statusline_failures + 1))
+  apply_claude_status_line || statusline_failures=$((statusline_failures + 1))
+  if [ "$statusline_failures" -gt 0 ]; then
+    log "activation bootstrap incomplete: the status line could not be applied."
     exit 1
   fi
 fi
