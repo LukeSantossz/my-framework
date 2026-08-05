@@ -13,6 +13,7 @@ Turns a set of written development standards into ones an AI coding agent actual
 - Spec-gated design before code: a `SPEC.md` passes the Spec Gate before implementation starts.
 - Layered review: R1 internal (Superpowers), R2 cross-provider (Codex pre-push gate), R3 automated PR review.
 - One-command activation: `bash scripts/setup.sh` wires the R2 gate and the triage labels.
+- One status line across agents: the same five facts, in the same order, in Claude Code and Codex.
 - Docs-consistency invariants enforced in CI, catching orphaned or dangling standards on every push.
 - PR and Issue templates plus triage labels, ready to adopt as-is.
 
@@ -55,6 +56,13 @@ bash scripts/setup.sh
 
 Use `bash scripts/setup.sh --interactive` to persist the reviewer model and reasoning effort locally; the token-economy choice is informational.
 
+Use `bash scripts/setup.sh --statusline` to apply the status line contract
+(`docs/standards/status_line.md`) to this machine's agent configuration: the same five
+facts, in the same order, in Claude Code and Codex. It is the only part of the bootstrap
+that writes outside the repository — to `$CLAUDE_HOME/settings.json` and
+`$CODEX_HOME/config.toml` — which is why it is opt-in. A divergent configuration is
+backed up to a timestamped copy and then replaced; a matching one is left alone.
+
 `scripts/test/docs-consistency.test.sh` is this repository's self-test suite — it pins this repo's spec archive, git history, and README. Adopters validate with `bash scripts/test/docs-consistency.sh` and drop the self-test line from the copied CI workflow.
 
 ### Running
@@ -73,8 +81,12 @@ Once wired by `scripts/setup.sh`, the R2 review gate runs automatically on `git 
 bash scripts/test/docs-consistency.test.sh
 bash scripts/test/docs-consistency.sh
 bash scripts/test/setup.test.sh
+bash scripts/test/statusline.test.sh
 bash scripts/test/codex-review.test.sh
 ```
+
+`statusline.test.sh` needs Node for its two renderer cases; without it they report as
+skipped and the rest of the suite still runs.
 
 ## Project Structure
 
@@ -85,6 +97,7 @@ my-framework/
 │   ├── adr/            # durable architecture decision records
 │   └── specs/           # durable archive of approved SPEC.md changes
 ├── scripts/             # activation bootstrap, docs-consistency checks, test suites
+│   └── statusline/       # the Claude Code renderer of the status line contract
 ├── .githooks/            # versioned pre-push hook wiring the R2 gate
 └── .github/              # PR/Issue templates and the CI workflow
 ```
@@ -99,6 +112,10 @@ In development. Versioning policy: semver git tags, with `v0.1.0` tagged when th
 - The R2 cross-provider gate requires a locally installed Codex CLI. Without it, R2 does not run for that push, and CRURA human review substitutes per `docs/standards/crura_method.md`.
 - The standards assume a single repository. A multi-repo setup with conflicting standards would need an authority hierarchy this framework does not yet define.
 - Two commits reachable from `main` — `859daf2` and `757695d` — carry AI-attribution trailers, in violation of this repository's own rule against them. They are not rewritten, because both are already published and force-pushing over shared history to correct a commit message costs more than the defect it would fix; the honest record of the violation is itself useful. Recurrence is guarded instead: `scripts/test/docs-consistency.test.sh` fails a branch that adds a commit carrying such a line, so the rule holds going forward without reddening CI over two commits nobody will rewrite. The guard covers what a branch adds over `origin/main` or `main`, which is how work reaches this repository; a commit pushed straight to `main`, or a checkout where neither base resolves, is outside its range and stays uncovered.
+- The status line contract is machine state, not repository state, because Codex's `[tui]` section has no per-project scope. Applying it with `--statusline` therefore governs every project on the machine, and a per-repository status line is not available for the Codex side at all.
+- The Claude Code side of the status line needs Node: it runs the renderer and merges `settings.json`. Without Node that side is skipped with a message and only the Codex side is applied, so the two agents diverge on that machine until Node is installed.
+- The Codex segment names written into `config.toml` were read out of the installed Codex build rather than a published schema. An upgrade that renames or drops one would leave the written configuration silently ignored — the line degrades, the tool does not break. The vocabulary as read is recorded in `docs/specs/0012-standardize-agent-status-line.md`.
+- The quota fact on the Claude Code side reads an undocumented OAuth usage endpoint and needs an OAuth session; an API-key session shows `usage n/a`.
 - Small deferred follow-ups (documented gaps not yet closed) are tracked in the issue backlog rather than in this README.
 
 ## Contributing
