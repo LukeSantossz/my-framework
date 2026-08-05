@@ -39,7 +39,7 @@ Accepted.
 - The benchmark saturated recall (all tiers 3/3), so it establishes that Terra is not
   worse than Sol for this gate, not that it is universally better; a harder defect set
   could reopen the Terra-vs-Sol question.
-- `codex_review.md`, `CONTEXT.md`, `scripts/codex-review.sh`, and `scripts/setup.sh`
+- `r2_gate.md`, `CONTEXT.md`, `scripts/r2-review.sh`, and `scripts/setup.sh`
   state `gpt-5.6-terra` as the default; the parity guard pins the runner and setup
   literals equal. The historical specs that cite `gpt-5.5` remain as durable record of
   the prior default: the archived specs `0001`, `0004`, and `0005` cite `gpt-5.5` as the

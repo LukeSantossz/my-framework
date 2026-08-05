@@ -35,9 +35,9 @@ the process.
 ## Codex CLI
 
 - Pipeline stage: R2 cross-provider review, as the pre-push gate defined in
-  `codex_review.md`.
+  `r2_gate.md`.
 - How to use: activated by `bash scripts/setup.sh` (hooks path); runs on every
-  push; also runnable by hand via `bash scripts/codex-review.sh`.
+  push; also runnable by hand via `bash scripts/r2-review.sh`.
 - Required: optional, strongly recommended (it is the only second-provider
   reviewer wired today).
 - Install/verify: `npm install -g @openai/codex`, then `codex login`; verify

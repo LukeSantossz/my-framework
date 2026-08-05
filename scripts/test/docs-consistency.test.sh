@@ -193,7 +193,7 @@ for depin_neg in claude-code-2 claude-agent-sdk-2 claude-plugins-official CLAUDE
   printf '%s\n' "$depin_neg" | grep -Eqi "$ANTHROPIC_MODEL_RE" \
     && depin_missing="$depin_missing false_positive:$depin_neg"
 done
-CODEX_DOC="$REPO_ROOT/docs/standards/codex_review.md"
+CODEX_DOC="$REPO_ROOT/docs/standards/r2_gate.md"
 grep -Eqi "$ANTHROPIC_MODEL_RE" "$CODEX_DOC" && depin_missing="$depin_missing doc_pins_a_model"
 grep -q "CODEX_REVIEW_MODEL" "$CODEX_DOC" || depin_missing="$depin_missing no_model_override_documented"
 grep -q "CODEX_REVIEW_EFFORT" "$CODEX_DOC" || depin_missing="$depin_missing no_effort_override_documented"
@@ -618,7 +618,7 @@ fi
 
 # claude_md_points_to_standards (guard: the Author's entry point still activates
 # the standards. AGENTS.md — the Reviewer's door — has had this guard since the
-# R2 gate landed (agents_file_points_to_standards in codex-review.test.sh);
+# R2 gate landed (agents_file_points_to_standards in r2-review.test.sh);
 # CLAUDE.md, the door the Author reads on every session and the one
 # token_economy.md permits rewriting, had none. That asymmetry is the Gap this
 # framework exists to close, left open at its own front door: an edit that stops
@@ -821,7 +821,7 @@ fi
 # separation in github.md with one canonical Known Issues & Limitations label;
 # CodeRabbit named as this repo's wired R3, with the wiring claim intact)
 GITHUB_DOC="$REPO_ROOT/docs/standards/github.md"
-CODEX_DOC_D="$REPO_ROOT/docs/standards/codex_review.md"
+CODEX_DOC_D="$REPO_ROOT/docs/standards/r2_gate.md"
 if grep -q "honesty duty is discharged" "$GITHUB_DOC" \
   && grep -q "Known Issues & Limitations, Contributing" "$GITHUB_DOC" \
   && grep -q "R3 is CodeRabbit" "$CODEX_DOC_D" \
@@ -829,7 +829,7 @@ if grep -q "honesty duty is discharged" "$GITHUB_DOC" \
   && grep -q "adjudicated in the PR discussion" "$CODEX_DOC_D"; then
   ok "badges_rationale_and_wired_r3_recorded"
 else
-  no "badges_rationale_and_wired_r3_recorded" "missing badges rationale or canonical Known Issues label in github.md, or the wired-R3 claim in codex_review.md"
+  no "badges_rationale_and_wired_r3_recorded" "missing badges rationale or canonical Known Issues label in github.md, or the wired-R3 claim in r2_gate.md"
 fi
 
 # framework_readme_and_license_recorded (guard: root README.md exists in

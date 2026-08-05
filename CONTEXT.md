@@ -23,8 +23,9 @@ _Avoid_: coder, generator, assistant, the AI.
 
 **Reviewer**:
 The model that performs the R2 Cross-Provider Review, drawn from a different Provider
-than the Author (currently Codex / gpt-5.6-terra, OpenAI). Reports findings; never rewrites
-the code.
+than the Author. Which one it is varies per run: the R2 Gate walks a chain of reviewer
+backends and takes the first available, so the Reviewer is whichever backend actually ran
+and is named as such in the PR. Reports findings; never rewrites the code.
 _Avoid_: checker, validator, critic.
 
 **Provider**:
@@ -46,7 +47,7 @@ _Avoid_: self-review, internal QA.
 
 **R2 / Cross-Provider Review**:
 The automated review by the Reviewer, whose Provider differs from the Author's
-(operationally the Codex pre-push gate). Only valid across Providers.
+(operationally the pre-push backend chain). Only valid across Providers.
 _Avoid_: external review, second opinion.
 
 **R2 Gate**:

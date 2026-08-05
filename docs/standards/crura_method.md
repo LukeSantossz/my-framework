@@ -22,7 +22,7 @@ Human review discipline. Counterpart to the Self-Review section of
   changes.
 - U, Upload: run git push with clear, descriptive commit messages
   (Conventional Commits per `github.md`). The push triggers the R2
-  cross-provider gate (`codex_review.md`).
+  cross-provider gate (`r2_gate.md`).
 - RA, Review Again: open a Pull Request and review everything in the Files
   Changed tab before requesting review, backed by the PR Review Checklist of
   `github.md`. Fix overlooked details (logs, bad names).
