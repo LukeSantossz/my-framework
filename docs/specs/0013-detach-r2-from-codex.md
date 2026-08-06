@@ -26,7 +26,7 @@ owns that vendor, instead of smearing a fragile heuristic across the runner.
 Three backends ship. `codex` preserves today's behavior exactly and stays the
 sole default, so an existing clone that upgrades sees no change. `gemini` is a
 second agentic CLI that explores the repository the way Codex does, from a
-different provider, on a free tier. `openai-compatible` is the one that pays for
+different provider, on a free tier. `openai` is the one that pays for
 the seam: a single adapter that speaks the OpenAI chat-completions shape and
 therefore reaches Ollama, LM Studio, llama.cpp, vLLM, DeepSeek, Groq, OpenRouter
 and Together without another line of framework code. It is also the only path to
@@ -46,7 +46,7 @@ review-layers record. Falling back is allowed; falling back quietly is not, and 
 run where every backend was unavailable says so and still does not block the
 push, because a missing reviewer is not a finding.
 
-Secrets stay out of git config. The `openai-compatible` backend is configured
+Secrets stay out of git config. The `openai` backend is configured
 with the *name* of the environment variable holding its key, never the key, since
 `git config --list` output is pasted into bug reports and screenshots.
 
@@ -82,7 +82,7 @@ free, and skipping it would quietly triple the cost of the cheapest backend.
   rename costs edits to `INDEX.md`, the docs-consistency guard that pins the
   path, `crura_method.md`, `skills_guidelines.md`, the pre-push hook, the CI
   workflow and the README; all mechanical, and the guards fail on a missed one.
-- **Require `jq` for the `openai-compatible` adapter's JSON**: rejected — Node is
+- **Require `jq` for the `openai` adapter's JSON**: rejected — Node is
   already the framework's declared soft dependency for the status line, and
   adding a second one to do the same class of work costs an adopter another
   install for no benefit. Node also removes the need for `curl`, since it can
@@ -114,8 +114,11 @@ free, and skipping it would quietly triple the cost of the cheapest backend.
   - `docs/standards/INDEX.md`, `docs/standards/ai_guidelines.md`,
     `docs/standards/crura_method.md`, `docs/standards/skills_guidelines.md`,
     `AGENTS.md`, `CONTEXT.md`, `README.md`, `.github/workflows/ci.yml`,
-    `.github/PULL_REQUEST_TEMPLATE.md`, and the docs-consistency guard that pins
-    the old path: updated for the rename and the seam.
+    `.github/PULL_REQUEST_TEMPLATE.md`, `docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md`,
+    and the docs-consistency guard that pins the old path: updated for the
+    rename and the seam. The ADR's decision is untouched; only the paths it
+    points at are corrected, so a reader following them still lands on files
+    that exist.
 - Does NOT include:
   - Changing the default. `r2.backends` defaults to `codex` alone, so a clone
     that upgrades and configures nothing behaves exactly as it does today.
@@ -186,7 +189,7 @@ Run, from the repository root, with git >= 2.40, bash (Git for Windows), and
 Node >= 18:
 
 ```sh
-bash scripts/test/codex-review.test.sh   # renamed to r2-review.test.sh by this change
+bash scripts/test/r2-review.test.sh
 bash scripts/test/setup.test.sh
 bash scripts/test/statusline.test.sh
 bash scripts/test/docs-consistency.test.sh
@@ -194,7 +197,7 @@ bash scripts/test/docs-consistency.sh
 ```
 
 All pass, 0 failed. The chain cases use stub adapters on a sandboxed
-`R2_REVIEWERS_DIR`, and the `openai-compatible` cases use a stub HTTP server
+`R2_REVIEWERS_DIR`, and the `openai` cases use a stub HTTP server
 started by the suite, so no test reaches a real provider, spends quota, or needs
 a key. `GIT_CONFIG_GLOBAL` and `GIT_CONFIG_SYSTEM` are pinned per test so the
 scope-cascade cases cannot read the operator's real configuration. No randomness
@@ -206,7 +209,7 @@ Ollama 0.17.7 serving on `http://localhost:11434` with `llama3.1:8b` and
 `llama3.2:3b` pulled; hardware is an i5-1135G7 with 19.8 GB RAM and Intel Iris Xe
 integrated graphics, so local inference is CPU-only.
 
-The first configured `openai-compatible` target is DeepSeek, chosen by the
+The first configured `openai` target is DeepSeek, chosen by the
 Developer. Its catalogue was read from the provider rather than assumed —
 `GET https://api.deepseek.com/models` returns exactly `deepseek-v4-flash` and
 `deepseek-v4-pro` — and `deepseek-v4-flash` was exercised against
@@ -238,7 +241,7 @@ value — is what `r2.openai.apiKeyEnv` stores.
   its real invocation is unverified until someone installs it. The invocation is
   therefore configurable rather than hard-coded, so a flag change does not
   require a framework release.
-- Risk: an `openai-compatible` backend pointed at a small local model is a much
+- Risk: an `openai` backend pointed at a small local model is a much
   weaker reviewer than the current default — more false positives, more missed
   defects — and on this hardware also a slow one, which invites `--no-verify` and
   would end with R2 not running at all. Mitigated by the default chain staying

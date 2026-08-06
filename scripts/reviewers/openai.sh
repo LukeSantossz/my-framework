@@ -21,7 +21,12 @@ model="${R2_RESOLVED_MODEL:-}"
 endpoint="${R2_OPENAI_ENDPOINT:-$(git config --get r2.openai.endpoint 2>/dev/null || true)}"
 key_env="${R2_OPENAI_API_KEY_ENV:-$(git config --get r2.openai.apiKeyEnv 2>/dev/null || true)}"
 max_bytes="${R2_OPENAI_MAX_DIFF_BYTES:-$(git config --get r2.openai.maxDiffBytes 2>/dev/null || true)}"
-max_bytes="${max_bytes:-100000}"
+# 40 KB, not the round 100 KB it started at: measured against deepseek-v4-flash,
+# a 30 KB diff drew 9.2k reasoning tokens and took 85s, and 112 KB never
+# returned at all. The cap is what keeps the gate inside its budget.
+max_bytes="${max_bytes:-40000}"
+timeout_seconds="${R2_OPENAI_TIMEOUT_SECONDS:-$(git config --get r2.openai.timeoutSeconds 2>/dev/null || true)}"
+timeout_seconds="${timeout_seconds:-240}"
 
 log() { printf '[r2-review:openai] %s\n' "$1"; }
 
@@ -29,7 +34,7 @@ script_dir="$(cd "$(dirname "$0")" && pwd)"
 agents_file="$script_dir/../../AGENTS.md"
 
 if [ "${R2_DRYRUN:-}" = "1" ]; then
-  printf '%s\n' "POST ${endpoint:-<unset r2.openai.endpoint>}/chat/completions model=\"${model:-<unset>}\" (diff of $branch vs $base, max ${max_bytes}B)"
+  printf '%s\n' "POST ${endpoint:-<unset r2.openai.endpoint>}/chat/completions model=\"${model:-<unset>}\" (diff of $branch vs $base, max ${max_bytes}B, budget ${timeout_seconds}s)"
   exit 0
 fi
 
@@ -76,6 +81,7 @@ R2_OPENAI_ENDPOINT="$endpoint" \
 R2_OPENAI_MODEL="$model" \
 R2_OPENAI_KEY="$api_key" \
 R2_OPENAI_MAX_BYTES="$max_bytes" \
+R2_OPENAI_TIMEOUT_SECONDS="$timeout_seconds" \
 R2_OPENAI_AGENTS="$agents_file" \
 R2_OPENAI_BASE="$base" \
 R2_OPENAI_BRANCH="$branch" \
@@ -87,7 +93,8 @@ const https = require("https");
 const { URL } = require("url");
 
 const endpoint = process.env.R2_OPENAI_ENDPOINT.replace(/\/+$/, "");
-const maxBytes = parseInt(process.env.R2_OPENAI_MAX_BYTES, 10) || 100000;
+const maxBytes = parseInt(process.env.R2_OPENAI_MAX_BYTES, 10) || 40000;
+const budgetMs = (parseInt(process.env.R2_OPENAI_TIMEOUT_SECONDS, 10) || 240) * 1000;
 const UNAVAILABLE = 10;
 
 let diff = process.env.R2_OPENAI_DIFF || "";
@@ -134,7 +141,7 @@ const headers = { "Content-Type": "application/json", "Content-Length": Buffer.b
 if (process.env.R2_OPENAI_KEY) headers.Authorization = "Bearer " + process.env.R2_OPENAI_KEY;
 
 const req = client.request(
-  { hostname: url.hostname, port: url.port, path: url.pathname + url.search, method: "POST", headers, timeout: 300000 },
+  { hostname: url.hostname, port: url.port, path: url.pathname + url.search, method: "POST", headers },
   (res) => {
     let raw = "";
     res.on("data", (c) => (raw += c));
@@ -155,6 +162,7 @@ const req = client.request(
       // reasoning models. It is not the review and must never be reported as
       // findings.
       const content = (choice.message || {}).content || "";
+      clearTimeout(budget);
       if (truncated) {
         console.log("[r2-review:openai] the diff was truncated at " + maxBytes + " bytes; this review is partial.");
       }
@@ -166,11 +174,24 @@ const req = client.request(
     });
   }
 );
+// The budget is total elapsed time, not socket inactivity. Node own request
+// timeout measures the latter, which never fires while a reasoning model is
+// thinking and sending nothing — so it protected nothing, and a real run sat
+// for fifteen minutes before the connection dropped. A pre-push gate that can
+// do that is a gate that gets bypassed.
+let expired = false;
+const budget = setTimeout(() => {
+  expired = true;
+  req.destroy();
+  console.error("[r2-review:openai] no answer within the " + budgetMs / 1000 + "s budget; treating this backend as unavailable.");
+  process.exit(UNAVAILABLE);
+}, budgetMs);
+
 req.on("error", (e) => {
+  if (expired) return;
   console.error("[r2-review:openai] endpoint unreachable: " + e.message);
   process.exit(UNAVAILABLE);
 });
-req.on("timeout", () => { req.destroy(); });
 req.write(body);
 req.end();
 '

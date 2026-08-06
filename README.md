@@ -59,7 +59,7 @@ Use `bash scripts/setup.sh --interactive` to persist the reviewer model and reas
 Use `bash scripts/setup.sh --reviewer` to configure the R2 reviewer chain for the whole
 machine (`git config --global`): which backends to try and in what order, plus the
 endpoint, model, and the *name* of the environment variable holding the API key for the
-`openai-compatible` backend. A repository can still override any of it with
+`openai` backend. A repository can still override any of it with
 `git config --local`. The key itself is never stored — see `docs/standards/r2_gate.md`.
 
 Use `bash scripts/setup.sh --statusline` to apply the status line contract
@@ -104,8 +104,8 @@ my-framework/
 │   ├── adr/            # durable architecture decision records
 │   └── specs/           # durable archive of approved SPEC.md changes
 ├── scripts/             # activation bootstrap, docs-consistency checks, test suites
-│   └── statusline/       # the Claude Code renderer of the status line contract
-│   └── reviewers/        # R2 backend adapters (codex, gemini, openai-compatible)
+│   ├── statusline/       # the Claude Code renderer of the status line contract
+│   └── reviewers/        # R2 backend adapters (codex, gemini, openai)
 ├── .githooks/            # versioned pre-push hook wiring the R2 gate
 └── .github/              # PR/Issue templates and the CI workflow
 ```
@@ -120,7 +120,7 @@ In development. Versioning policy: semver git tags, with `v0.1.0` tagged when th
 - The R2 cross-provider gate needs at least one configured backend to be available. When none is, R2 does not run for that push, the runner says so, and CRURA human review substitutes per `docs/standards/crura_method.md`.
 - The `codex` and `gemini` adapters classify quota, authentication and network failures by matching their tool's error text, which will drift when a vendor rewords it. A drifted pattern reads an unavailable backend as one that reviewed, so the chain stops early and names it rather than falling through silently.
 - The `gemini` adapter is exercised against a stub, not the real CLI, because that CLI is not installed in this repository's development or CI environment. Its dispatch and contract are pinned; its real invocation is unverified, which is why the prompt flag is configurable.
-- A local model behind the `openai-compatible` backend is a much weaker reviewer than a hosted frontier one, and on CPU-only hardware also a slow one. The default chain stays `codex` alone; the reported backend line is what keeps a fallback from passing as an equivalent review.
+- A local model behind the `openai` backend is a much weaker reviewer than a hosted frontier one, and on CPU-only hardware also a slow one. The default chain stays `codex` alone; the reported backend line is what keeps a fallback from passing as an equivalent review.
 - The standards assume a single repository. A multi-repo setup with conflicting standards would need an authority hierarchy this framework does not yet define.
 - Two commits reachable from `main` — `859daf2` and `757695d` — carry AI-attribution trailers, in violation of this repository's own rule against them. They are not rewritten, because both are already published and force-pushing over shared history to correct a commit message costs more than the defect it would fix; the honest record of the violation is itself useful. Recurrence is guarded instead: `scripts/test/docs-consistency.test.sh` fails a branch that adds a commit carrying such a line, so the rule holds going forward without reddening CI over two commits nobody will rewrite. The guard covers what a branch adds over `origin/main` or `main`, which is how work reaches this repository; a commit pushed straight to `main`, or a checkout where neither base resolves, is outside its range and stays uncovered.
 - The status line contract is machine state, not repository state, because Codex's `[tui]` section has no per-project scope. Applying it with `--statusline` therefore governs every project on the machine, and a per-repository status line is not available for the Codex side at all.

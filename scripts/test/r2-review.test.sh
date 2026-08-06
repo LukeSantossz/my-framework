@@ -373,6 +373,29 @@ else
   no "legacy_bypass_still_skips_the_gate" "code=$code code2=$code2"
 fi
 
+# --- legacy_control_variables_still_resolve ---------------------------------
+# Raised by the R2 review of this change: the spec claimed the codex backend
+# preserves today's behavior exactly, but only the model and effort variables
+# had a criterion. These three were implemented and unpinned, which is the
+# shape a later refactor quietly breaks.
+legacy_missing=""
+out=$(run_chain R2_BACKENDS=alpha CODEX_REVIEW_BLOCKING=1 STUB_ALPHA_EXIT=3); code=$?
+[ "$code" -ne 0 ] || legacy_missing="$legacy_missing CODEX_REVIEW_BLOCKING"
+out=$(env R2_REVIEWERS_DIR="$ADAPTERS" R2_BACKENDS=alpha R2_BRANCH=release \
+  CODEX_REVIEW_BASE=release bash "$RUNNER" 2>&1)
+printf '%s' "$out" | grep -qi "nothing to review against itself" \
+  || legacy_missing="$legacy_missing CODEX_REVIEW_BASE"
+repo="$(new_repo legacydry)"
+out=$(cd "$repo" && env R2_REVIEWERS_DIR="$ADAPTERS" R2_BACKENDS=alpha \
+  R2_BRANCH=feature/x CODEX_REVIEW_DRYRUN=1 bash "$RUNNER" 2>&1)
+printf '%s' "$out" | grep -q "DRYRUN_alpha" || legacy_missing="$legacy_missing CODEX_REVIEW_DRYRUN"
+printf '%s' "$out" | grep -q "STUB_ADAPTER_alpha" && legacy_missing="$legacy_missing dryrun_ran_the_backend"
+if [ -z "$legacy_missing" ]; then
+  ok "legacy_control_variables_still_resolve"
+else
+  no "legacy_control_variables_still_resolve" "not honored:$legacy_missing"
+fi
+
 # --- dryrun_prints_the_resolved_chain ---------------------------------------
 # Dry-run must describe the whole chain, not stop at the first backend: the
 # point is to show what would happen, including the fallbacks.
@@ -398,7 +421,7 @@ node_bin="$(command -v node || true)"
 if [ -z "$node_bin" ]; then
   for skipped in openai_adapter_sends_the_contract_payload openai_adapter_reads_content_not_reasoning \
     openai_adapter_reports_a_cut_off_review openai_adapter_reports_truncation \
-    openai_adapter_is_unavailable_on_unreachable_endpoint openai_adapter_is_unavailable_without_node; do
+    openai_adapter_is_unavailable_on_unreachable_endpoint openai_adapter_is_unavailable_without_node \n    openai_adapter_is_unavailable_past_its_time_budget; do
     printf 'skip - %s (node not installed)\n' "$skipped"
   done
 else
@@ -415,6 +438,7 @@ const bodies = {
   normal: { content: "Finding: unquoted variable on line 3.", finish: "stop" },
   reasoning: { content: "Finding: real defect.", reasoning: "internal chain of thought", finish: "stop" },
   cutoff: { content: "Finding: partial", finish: "length" },
+  slow: { content: "Finding: eventually.", finish: "stop", delayMs: 5000 },
 };
 http
   .createServer((req, res) => {
@@ -425,8 +449,11 @@ http
       const b = bodies[mode];
       const message = { role: "assistant", content: b.content };
       if (b.reasoning) message.reasoning_content = b.reasoning;
-      res.writeHead(200, { "Content-Type": "application/json" });
-      res.end(JSON.stringify({ choices: [{ index: 0, message, finish_reason: b.finish }] }));
+      const reply = () => {
+        res.writeHead(200, { "Content-Type": "application/json" });
+        res.end(JSON.stringify({ choices: [{ index: 0, message, finish_reason: b.finish }] }));
+      };
+      if (b.delayMs) setTimeout(reply, b.delayMs); else reply();
     });
   })
   .listen(0, "127.0.0.1", function () {
@@ -526,6 +553,20 @@ SRV
     ok "openai_adapter_reports_truncation"
   else
     no "openai_adapter_reports_truncation" "code=$code out=$out"
+  fi
+
+  # --- openai_adapter_is_unavailable_past_its_time_budget -------------------
+  # A pre-push gate that can run for a quarter of an hour is a gate that gets
+  # bypassed. The budget is total elapsed time, not socket inactivity: a
+  # reasoning model streams nothing while it thinks, so an inactivity timeout
+  # never fires and the request runs until something else drops it.
+  start_stub_endpoint slow slow
+  out=$(run_openai R2_OPENAI_TIMEOUT_SECONDS=1); code=$?
+  kill "$STUB_PID" 2>/dev/null
+  if [ "$code" -eq 10 ] && printf '%s' "$out" | grep -qi "budget\|timed out"; then
+    ok "openai_adapter_is_unavailable_past_its_time_budget"
+  else
+    no "openai_adapter_is_unavailable_past_its_time_budget" "code=$code out=$out"
   fi
 
   # --- openai_adapter_is_unavailable_on_unreachable_endpoint ----------------
