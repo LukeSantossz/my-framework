@@ -21,10 +21,13 @@ model="${R2_RESOLVED_MODEL:-}"
 endpoint="${R2_OPENAI_ENDPOINT:-$(git config --get r2.openai.endpoint 2>/dev/null || true)}"
 key_env="${R2_OPENAI_API_KEY_ENV:-$(git config --get r2.openai.apiKeyEnv 2>/dev/null || true)}"
 max_bytes="${R2_OPENAI_MAX_DIFF_BYTES:-$(git config --get r2.openai.maxDiffBytes 2>/dev/null || true)}"
-# 40 KB, not the round 100 KB it started at: measured against deepseek-v4-flash,
-# a 30 KB diff drew 9.2k reasoning tokens and took 85s, and 112 KB never
-# returned at all. The cap is what keeps the gate inside its budget.
-max_bytes="${max_bytes:-40000}"
+# 30 KB, not the round 100 KB it started at. Measured against
+# deepseek-v4-flash: 8 KB took 27s, 30 KB drew 9.2k reasoning tokens over 85s,
+# 40 KB ran 163s once and blew a 240s budget the next time, and 112 KB never
+# returned at all. A reasoning model's latency is volatile enough that the cap
+# only makes the budget reachable, it does not make it certain — which is why
+# exceeding the budget is unavailability rather than a failure.
+max_bytes="${max_bytes:-30000}"
 timeout_seconds="${R2_OPENAI_TIMEOUT_SECONDS:-$(git config --get r2.openai.timeoutSeconds 2>/dev/null || true)}"
 timeout_seconds="${timeout_seconds:-240}"
 
@@ -93,7 +96,7 @@ const https = require("https");
 const { URL } = require("url");
 
 const endpoint = process.env.R2_OPENAI_ENDPOINT.replace(/\/+$/, "");
-const maxBytes = parseInt(process.env.R2_OPENAI_MAX_BYTES, 10) || 40000;
+const maxBytes = parseInt(process.env.R2_OPENAI_MAX_BYTES, 10) || 30000;
 const budgetMs = (parseInt(process.env.R2_OPENAI_TIMEOUT_SECONDS, 10) || 240) * 1000;
 const UNAVAILABLE = 10;
 

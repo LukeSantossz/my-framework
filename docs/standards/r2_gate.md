@@ -85,6 +85,12 @@ prefix first and the volatile diff last, because providers on this shape bill ca
 prompt tokens at a fraction of fresh ones and a pre-push gate re-sends that prefix on
 every push.
 
+The budget is total elapsed time, not socket inactivity: a reasoning model sends nothing
+while it thinks, so an inactivity timeout never fires and the request runs until something
+else drops it. Exceeding the budget is unavailability, so the chain advances rather than
+holding the push. A reasoning model's latency is volatile enough that the diff cap makes
+the budget reachable, not certain.
+
 Requires Node, which the adapter uses for both the request and the JSON. A diff larger
 than `r2.openai.maxDiffBytes` is truncated and the truncation is reported; a response
 cut off by the output limit is reported as incomplete. The model's `reasoning_content`,
@@ -120,7 +126,8 @@ environment  >  git config --local  >  git config --global  >  built-in default
 | `r2.<backend>.model`, `r2.<backend>.effort` | Override for one backend | — |
 | `r2.openai.endpoint` | Base URL, without `/chat/completions` | — |
 | `r2.openai.apiKeyEnv` | **Name** of the environment variable holding the key | — |
-| `r2.openai.maxDiffBytes` | Diff size limit before truncation | `100000` |
+| `r2.openai.maxDiffBytes` | Diff size limit before truncation | `30000` |
+| `r2.openai.timeoutSeconds` | Total wall-clock budget for one review | `240` |
 | `r2.gemini.promptFlag` | Prompt flag for the Gemini CLI | `--prompt` |
 
 Write the machine-global layer with:
