@@ -123,7 +123,7 @@ every project on the machine, which is what makes the opt-in flag load-bearing.
 
 The framework does not install Node, Codex, or Claude Code. Absence is reported
 and the bootstrap continues, as it already does for `codex` and `gh` in
-`codex_review.md`.
+`r2_gate.md`.
 
 The Codex segment names are read from the installed build rather than from a
 published schema. An upgrade that renames one would leave the written

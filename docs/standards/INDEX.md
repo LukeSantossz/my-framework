@@ -12,7 +12,7 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - `github.md`: Conventional Commits (canonical type vocabulary), branch naming, PR/Issue/README templates.
 - `token_economy.md`: controlled token consumption (Caveman), with the scope boundary against versioned artifacts.
 - `skills_guidelines.md`: external-capability inventory — pipeline stage, install/verify, and declared fallback per skill.
-- `codex_review.md`: operational R2 cross-provider gate (Codex CLI pre-push review).
+- `r2_gate.md`: operational R2 cross-provider gate — the reviewer backend chain, its adapter contract, and its configuration.
 - `status_line.md`: the facts a coding agent's status line must show and in what order, across Claude Code and Codex.
 - `crux_method.md`: the CRUX review-time explanation aid — a transient, interactive explainer of an implemented change that feeds R1 and the CRURA Review.
 
@@ -49,6 +49,6 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 6. `ai_guidelines.md`
 7. `token_economy.md`
 8. `skills_guidelines.md`
-9. `codex_review.md`
+9. `r2_gate.md`
 10. `crux_method.md`
 11. `status_line.md`

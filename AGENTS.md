@@ -1,8 +1,11 @@
 # AGENTS.md
 
-Project context for Codex CLI. Codex runs here as the **R2 cross-provider reviewer**
-(Reviewer model, provider different from the Author), per
-`docs/standards/ai_guidelines.md` Review Composition.
+Project context for the **R2 cross-provider reviewer** (Reviewer model, provider
+different from the Author), per `docs/standards/ai_guidelines.md` Review Composition.
+
+Whichever backend the R2 chain reaches reads this file: an agentic reviewer such as
+Codex CLI or Gemini CLI finds it at the repository root, and a non-agentic one has it
+sent in the request. See `docs/standards/r2_gate.md` for the chain and its adapters.
 
 ## Standards are binding
 
