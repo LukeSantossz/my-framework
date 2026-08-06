@@ -57,8 +57,24 @@ if ! command -v "$node_bin" >/dev/null 2>&1; then
   exit 10
 fi
 
-diff_text="$(git diff "$base"..."$branch" 2>/dev/null || git diff "$base" 2>/dev/null || true)"
-if [ -z "$diff_text" ]; then
+# A ref that does not resolve yields an empty diff, which must not be read as
+# "nothing to review": that answer exits 0 and would make the chain report this
+# backend as having reviewed when it never saw the change.
+for ref in "$base" "$branch"; do
+  if ! git rev-parse --verify --quiet "$ref" >/dev/null 2>&1; then
+    log "'$ref' does not resolve in this repository; cannot build a diff to review."
+    exit 10
+  fi
+done
+
+# The diff goes to the child through a file, never the environment: a Windows
+# process environment block tops out around 32 KB in total, so a diff near the
+# cap would not fit and a larger one would fail outright. Reading one byte past
+# the cap is what detects truncation without holding the whole diff anywhere.
+diff_file="$(mktemp)" || { log "cannot create a temporary file for the diff."; exit 10; }
+trap 'rm -f "$diff_file"' EXIT
+git diff "$base...$branch" 2>/dev/null | head -c "$((max_bytes + 1))" > "$diff_file"
+if [ ! -s "$diff_file" ]; then
   log "no diff of $branch against $base; nothing to review."
   exit 0
 fi
@@ -88,7 +104,7 @@ R2_OPENAI_TIMEOUT_SECONDS="$timeout_seconds" \
 R2_OPENAI_AGENTS="$agents_file" \
 R2_OPENAI_BASE="$base" \
 R2_OPENAI_BRANCH="$branch" \
-R2_OPENAI_DIFF="$diff_text" \
+R2_OPENAI_DIFF_FILE="$diff_file" \
 "$node_bin" -e '
 const fs = require("fs");
 const http = require("http");
@@ -100,12 +116,12 @@ const maxBytes = parseInt(process.env.R2_OPENAI_MAX_BYTES, 10) || 30000;
 const budgetMs = (parseInt(process.env.R2_OPENAI_TIMEOUT_SECONDS, 10) || 240) * 1000;
 const UNAVAILABLE = 10;
 
-let diff = process.env.R2_OPENAI_DIFF || "";
-let truncated = false;
-if (Buffer.byteLength(diff, "utf8") > maxBytes) {
-  diff = Buffer.from(diff, "utf8").slice(0, maxBytes).toString("utf8");
-  truncated = true;
-}
+// The shell read one byte past the cap, so a buffer longer than the cap is
+// exactly the signal that the diff was cut short.
+let buffer = Buffer.alloc(0);
+try { buffer = fs.readFileSync(process.env.R2_OPENAI_DIFF_FILE); } catch (_) {}
+const truncated = buffer.length > maxBytes;
+const diff = buffer.slice(0, maxBytes).toString("utf8");
 
 let agents = "";
 try { agents = fs.readFileSync(process.env.R2_OPENAI_AGENTS, "utf8"); } catch (_) {}

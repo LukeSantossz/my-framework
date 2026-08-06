@@ -26,7 +26,7 @@ owns that vendor, instead of smearing a fragile heuristic across the runner.
 Three backends ship. `codex` preserves today's behavior exactly and stays the
 sole default, so an existing clone that upgrades sees no change. `gemini` is a
 second agentic CLI that explores the repository the way Codex does, from a
-different provider, on a free tier. `openai` is the one that pays for
+different provider. `openai` is the one that pays for
 the seam: a single adapter that speaks the OpenAI chat-completions shape and
 therefore reaches Ollama, LM Studio, llama.cpp, vLLM, DeepSeek, Groq, OpenRouter
 and Together without another line of framework code. It is also the only path to

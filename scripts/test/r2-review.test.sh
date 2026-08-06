@@ -421,7 +421,7 @@ node_bin="$(command -v node || true)"
 if [ -z "$node_bin" ]; then
   for skipped in openai_adapter_sends_the_contract_payload openai_adapter_reads_content_not_reasoning \
     openai_adapter_reports_a_cut_off_review openai_adapter_reports_truncation \
-    openai_adapter_is_unavailable_on_unreachable_endpoint openai_adapter_is_unavailable_without_node \n    openai_adapter_is_unavailable_past_its_time_budget; do
+    openai_adapter_is_unavailable_on_unreachable_endpoint openai_adapter_is_unavailable_without_node \n    openai_adapter_is_unavailable_past_its_time_budget openai_adapter_is_unavailable_when_a_ref_does_not_resolve; do
     printf 'skip - %s (node not installed)\n' "$skipped"
   done
 else
@@ -567,6 +567,20 @@ SRV
     ok "openai_adapter_is_unavailable_past_its_time_budget"
   else
     no "openai_adapter_is_unavailable_past_its_time_budget" "code=$code out=$out"
+  fi
+
+  # --- openai_adapter_is_unavailable_when_a_ref_does_not_resolve ------------
+  # Raised by the R3 review of this change. A ref that does not resolve makes
+  # git print an empty diff, and reading that as "nothing to review" exits 0 —
+  # which stops the chain and reports this backend as having reviewed a change
+  # it never saw. The same shape as the empty-diff defect, one layer down.
+  out=$(cd "$diff_repo" && env R2_BASE=no-such-base R2_BRANCH=feature/x \
+    R2_RESOLVED_MODEL=stub-model R2_OPENAI_ENDPOINT="http://127.0.0.1:$STUB_PORT" \
+    bash "$OPENAI_ADAPTER" 2>&1); code=$?
+  if [ "$code" -eq 10 ] && printf '%s' "$out" | grep -qi "does not resolve"; then
+    ok "openai_adapter_is_unavailable_when_a_ref_does_not_resolve"
+  else
+    no "openai_adapter_is_unavailable_when_a_ref_does_not_resolve" "code=$code out=$out"
   fi
 
   # --- openai_adapter_is_unavailable_on_unreachable_endpoint ----------------

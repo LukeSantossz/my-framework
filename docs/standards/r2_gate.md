@@ -114,7 +114,7 @@ Settings resolve through git's own scope cascade, so a machine-wide default is p
 and a repository can still override it — the authority order `code_conventions.md`
 states:
 
-```
+```text
 environment  >  git config --local  >  git config --global  >  built-in default
 ```
 
