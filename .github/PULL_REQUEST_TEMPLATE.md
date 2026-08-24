@@ -30,3 +30,4 @@
 - [ ] Code follows the project style guide.
 - [ ] New dependencies work without breaking the build.
 - [ ] Review layers recorded: internal review (R1), cross-provider review (R2), automated PR review (R3) where applicable, with Author and Reviewer models named, the backend that actually reviewed, and the cross-provider state (`verified`, `declared` or `unknown`) per `docs/standards/r2_gate.md`. Note any layer that did not run and why.
+- [ ] Human read outcome recorded, in this vocabulary: `not owed`, `found nothing the automated layers missed`, or `found N defects the automated layers missed` (per the Instrumentation section of `docs/standards/crura_method.md`).

@@ -67,7 +67,7 @@ with a defined hierarchy so none is duplicated or skipped:
 
 `superpowers` is one backend of the R1 chain, not the layer itself: it runs inside a coding-agent session and cannot be started as a subprocess, so it contributes an attestation rather than an execution, and a session where it is absent counts as unavailable so the chain advances.
 
-When no second-provider tool is available, R1 plus the human PR review (per `crura_method.md`) stand in for R2; note its absence in the PR.
+When no second-provider tool is available, R1 plus the adjudication stage of CRURA (per `crura_method.md`) stand in for R2; note its absence in the PR. It is the adjudication that substitutes, not the line-by-line read, because adjudication is the part that runs unconditionally.
 
 Layer R1 has no executor yet: the chain is specified here and the runner that walks it is not built, so until it is, R1 is performed by hand against this file and the PR records that. A layer whose executor is absent is declared as such rather than assumed to have run.
 

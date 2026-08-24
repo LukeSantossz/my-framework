@@ -94,10 +94,26 @@ signal; never a substitute for R2.
 _Avoid_: bot review, CI review.
 
 **CRURA Review**:
-The Developer's always-on human review track — Change, Review, Upload, Review Again —
-run on every change and feeding the PR Review Checklist. Distinct from the automated
-R-layers; also substitutes for R2 when no second Provider is available.
-_Avoid_: manual review, human QA, R4.
+The Developer's human review track — Change, Review, Upload, Review Again — feeding the
+PR Review Checklist. Its adjudication of the recorded layers and its merge decision run
+on every change; its line-by-line reads run when a Review Trigger fires or the change is
+drawn as the Untriggered Sample. Distinct from the automated R-layers; its adjudication
+stage also substitutes for R2 when no second Provider is available.
+_Avoid_: manual review, human QA, R4, always-on track.
+
+**Review Trigger**:
+A named condition that makes a CRURA line-by-line read owed for a change — a security or
+blocking finding, a failing deterministic check, a high-risk path, a `unknown`
+Cross-Provider State, or no layer having run. Enumerated in `crura_method.md`, because a
+trigger set left to judgment degrades into never.
+_Avoid_: heuristic, threshold, rule (unqualified).
+
+**Untriggered Sample**:
+The periodic draw of changes that no Review Trigger selected, read and recorded anyway.
+It exists because instrumenting only triggered reads observes the population already
+suspected, which can confirm the trigger set but never correct it. The sample is what
+makes the evidence able to falsify the triggered regime.
+_Avoid_: spot check, audit, random review.
 
 **Self-Review**:
 The Author's pre-delivery checklist over its own change (does it run, are all symbols
