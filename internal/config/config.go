@@ -176,6 +176,15 @@ type MachineFile struct {
 	Review    Review              `toml:"review"`
 	Explain   Explain             `toml:"explain"`
 
+	// Roles let a machine supply a chain for a role the project leaves empty —
+	// a locally reachable reviewer, say, that only exists here. It is modelled
+	// because the deprecated `r2.backends` git-config key was machine state and
+	// migration has to be lossless; a layer that cannot hold what it is handed
+	// writes a file the loader then refuses. A project that declares the same
+	// role still wins, so a machine cannot review a repository with a chain
+	// that repository did not choose.
+	Roles map[string]Role `toml:"roles"`
+
 	// Fingerprints maps an environment variable name to the provider whose
 	// agent sets it, and is how a session can corroborate an Author
 	// Declaration. It is machine state because which agent runs here is a
@@ -378,6 +387,9 @@ func (c *Config) applyMachine(m *MachineFile, source string) {
 		c.set(prefix+"kind", p.Kind, LayerMachine, source)
 		c.set(prefix+"endpoint", p.Endpoint, LayerMachine, source)
 		c.set(prefix+"api_key_env", p.APIKeyEnv, LayerMachine, source)
+	}
+	for name, role := range m.Roles {
+		c.set("roles."+name+".backends", strings.Join(role.Backends, ","), LayerMachine, source)
 	}
 	c.set("explain.dir", m.Explain.Dir, LayerMachine, source)
 	for envVar, provider := range m.Fingerprints {

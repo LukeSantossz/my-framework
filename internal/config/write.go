@@ -94,6 +94,9 @@ func setInDocument(doc, key, value string) (string, error) {
 	}
 	section, leaf := key[:idx], key[idx+1:]
 	assignment := fmt.Sprintf("%s = %q", leaf, value)
+	if isList(key) {
+		assignment = leaf + " = " + tomlArray(value)
+	}
 
 	lines := strings.Split(doc, "\n")
 	header := "[" + section + "]"
@@ -135,6 +138,35 @@ func setInDocument(doc, key, value string) (string, error) {
 
 	trimmedDoc := strings.TrimRight(doc, "\n")
 	return trimmedDoc + "\n\n" + header + "\n" + assignment + "\n", nil
+}
+
+// listKeys are the keys whose value is a sequence rather than a scalar. A chain
+// written as one comma-joined string decodes as a type error and the whole file
+// is refused, so the shape has to be decided at write time — the reader never
+// gets a chance to guess.
+var listKeys = []string{".backends", ".args", ".unavailable_patterns", ".exempt_paths", ".design_surfaces"}
+
+func isList(key string) bool {
+	for _, suffix := range listKeys {
+		if strings.HasSuffix(key, suffix) {
+			return true
+		}
+	}
+	return false
+}
+
+// tomlArray renders a comma-separated value as a TOML array. The command line
+// takes one string because that is what a shell hands over; the file takes a
+// list because that is what the value is.
+func tomlArray(value string) string {
+	parts := strings.Split(value, ",")
+	items := make([]string, 0, len(parts))
+	for _, p := range parts {
+		if p = strings.TrimSpace(p); p != "" {
+			items = append(items, fmt.Sprintf("%q", p))
+		}
+	}
+	return "[" + strings.Join(items, ", ") + "]"
 }
 
 func assignsKey(line, leaf string) bool {

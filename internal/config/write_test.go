@@ -168,3 +168,79 @@ func TestMigrateReportsNothingWhenThereIsNoLegacyConfiguration(t *testing.T) {
 		t.Errorf("moved %v, want nothing", moved)
 	}
 }
+
+// --- list-valued keys and the machine role layer ------------------------------
+
+func TestMigrateProducesAConfigurationThatLoads(t *testing.T) {
+	// The regression this pair of fixes exists for: `mf config migrate` wrote a
+	// machine file the loader then refused, so the command that was supposed to
+	// take over the deprecated keys left every later command unable to start.
+	opts := fixture(t, "version = 1\n", "")
+	opts.GitConfig = func(key string) (string, bool) {
+		switch key {
+		case "r2.backends":
+			return "codex,openai", true
+		case "r2.openai.endpoint":
+			return "https://api.deepseek.com", true
+		case "r2.openai.apiKeyEnv":
+			return "DEEPSEEK_API_KEY", true
+		}
+		return "", false
+	}
+	moved, err := Migrate(opts)
+	if err != nil {
+		t.Fatalf("Migrate: %v", err)
+	}
+	if len(moved) == 0 {
+		t.Fatal("nothing migrated, so the regression cannot be observed")
+	}
+	cfg, err := Load(opts)
+	if err != nil {
+		t.Fatalf("the migrated configuration does not load: %v\n%s", err,
+			readFile(t, opts.MachinePath))
+	}
+	assertValue(t, cfg, "roles.r2.backends", "codex,openai", LayerMachine)
+}
+
+func TestSetWritesAListValuedKeyAsAnArray(t *testing.T) {
+	// A chain is a list. Writing it as one string decodes as a type error, and
+	// the file is refused rather than misread — which is better than the
+	// alternative, but only visible once something tries to load it.
+	opts := fixture(t, "version = 1\n", "version = 1\n")
+	if err := Set(opts, "roles.r2.backends", "codex, gemini ,deepseek", TargetMachine); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	body := readFile(t, opts.MachinePath)
+	if !strings.Contains(body, `backends = ["codex", "gemini", "deepseek"]`) {
+		t.Errorf("the chain was not written as an array:\n%s", body)
+	}
+	assertValue(t, mustLoad(t, opts), "roles.r2.backends", "codex,gemini,deepseek", LayerMachine)
+}
+
+func TestSetReplacesAnExistingArrayRatherThanAppendingBesideIt(t *testing.T) {
+	opts := fixture(t, "version = 1\n", "version = 1\n\n[roles.r2]\nbackends = [\"codex\"]\n")
+	if err := Set(opts, "roles.r2.backends", "gemini", TargetMachine); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	body := readFile(t, opts.MachinePath)
+	if strings.Contains(body, `"codex"`) {
+		t.Errorf("the old chain survived beside the new one:\n%s", body)
+	}
+	assertValue(t, mustLoad(t, opts), "roles.r2.backends", "gemini", LayerMachine)
+}
+
+func TestAProjectChainOutranksAMachineChain(t *testing.T) {
+	// The cascade is unchanged by the machine layer gaining roles: a committed
+	// policy still wins, so a machine cannot quietly review a repository with a
+	// chain that repository did not choose.
+	project := "version = 1\n\n[roles.r2]\nbackends = [\"codex\", \"gemini\"]\n"
+	machine := "version = 1\n\n[roles.r2]\nbackends = [\"openai\"]\n"
+	assertValue(t, mustLoad(t, fixture(t, project, machine)),
+		"roles.r2.backends", "codex,gemini", LayerProject)
+}
+
+func TestAMachineChainAppliesWhenTheProjectDeclaresNone(t *testing.T) {
+	machine := "version = 1\n\n[roles.r3]\nbackends = [\"coderabbit\"]\n"
+	assertValue(t, mustLoad(t, fixture(t, "version = 1\n", machine)),
+		"roles.r3.backends", "coderabbit", LayerMachine)
+}
