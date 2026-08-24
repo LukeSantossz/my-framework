@@ -1094,6 +1094,78 @@ else
   no "unbuilt_behavior_is_declared_as_such" "the standards describe an executor that does not exist without saying so:$unbuilt_missing"
 fi
 
+# crura_review_is_triggered_not_fixed_rate (guard: docs/adr/0008 re-scoped the
+# human track because fixed-rate verification of model output cannot be both
+# effective and worth its cost. The cut is precise, and the guard pins both
+# halves of it: the line-by-line reads become conditional, while adjudicating
+# the recorded layers and deciding the merge stay unconditional, because
+# CONTEXT.md holds the Developer accountable for what ships and accountability
+# without a mandatory decision point is a claim nobody can exercise.
+#
+# Pinned in both directions on purpose. An absence-only check would pass on a
+# tree that deleted the human track altogether, which is not the decision.
+CR_DOC="$REPO_ROOT/docs/standards/crura_method.md"
+CR_CONTEXT="$REPO_ROOT/CONTEXT.md"
+crura_trigger_missing=""
+grep -qF 'triggered rather than unconditional' "$CR_DOC" 2>/dev/null \
+  || crura_trigger_missing="$crura_trigger_missing trigger_claim_missing_from:crura_method.md"
+grep -qF 'adjudication and the merge decision are unconditional' "$CR_DOC" 2>/dev/null \
+  || crura_trigger_missing="$crura_trigger_missing unconditional_half_dropped_from:crura_method.md"
+grep -qF '## Triggers' "$CR_DOC" 2>/dev/null \
+  || crura_trigger_missing="$crura_trigger_missing triggers_not_enumerated_in:crura_method.md"
+grep -qF 'moved to the Spec Gate' "$CR_DOC" 2>/dev/null \
+  || crura_trigger_missing="$crura_trigger_missing relocation_missing_from:crura_method.md"
+grep -qF 'always-on human review track' "$CR_CONTEXT" 2>/dev/null \
+  && crura_trigger_missing="$crura_trigger_missing retired_definition_in:CONTEXT.md"
+if [ -z "$crura_trigger_missing" ]; then
+  ok "crura_review_is_triggered_not_fixed_rate"
+else
+  no "crura_review_is_triggered_not_fixed_rate" "the human track is still fixed-rate, or the unconditional half was dropped:$crura_trigger_missing"
+fi
+
+# crura_instrumentation_can_falsify (guard: instrumenting only the reviews a
+# trigger fired on observes exactly the population already suspected, so the
+# resulting evidence can confirm the trigger set and never correct it — a
+# missing trigger hides in the changes nobody looked at. The periodic sample of
+# untriggered changes is the whole mitigation, so the standard has to require it
+# and has to say why, or a later reader drops it as ceremony.
+crura_evidence_missing=""
+grep -qF 'periodic sample of untriggered changes' "$CR_DOC" 2>/dev/null \
+  || crura_evidence_missing="$crura_evidence_missing sample_not_required_in:crura_method.md"
+grep -qF 'never correct it' "$CR_DOC" 2>/dev/null \
+  || crura_evidence_missing="$crura_evidence_missing rationale_missing_from:crura_method.md"
+grep -qF 'Review Trigger' "$CR_CONTEXT" 2>/dev/null \
+  || crura_evidence_missing="$crura_evidence_missing term_missing_from:CONTEXT.md"
+grep -qF 'Untriggered Sample' "$CR_CONTEXT" 2>/dev/null \
+  || crura_evidence_missing="$crura_evidence_missing term_missing_from:CONTEXT.md"
+if [ -z "$crura_evidence_missing" ]; then
+  ok "crura_instrumentation_can_falsify"
+else
+  no "crura_instrumentation_can_falsify" "the instrumentation can only ratify its own trigger set:$crura_evidence_missing"
+fi
+
+# pr_record_carries_the_review_outcome (guard: the bet is testable only if the
+# outcome of each human review is written down where it can later be counted,
+# in one vocabulary shared by the standard and the template that implements it.
+CR_GITHUB="$REPO_ROOT/docs/standards/github.md"
+CR_TEMPLATE="$REPO_ROOT/.github/PULL_REQUEST_TEMPLATE.md"
+CR_AI="$REPO_ROOT/docs/standards/ai_guidelines.md"
+CR_INDEX="$REPO_ROOT/docs/standards/INDEX.md"
+crura_record_missing=""
+for cr_file in "$CR_GITHUB" "$CR_TEMPLATE"; do
+  grep -qF 'automated layers missed' "$cr_file" 2>/dev/null \
+    || crura_record_missing="$crura_record_missing outcome_missing_from:$(basename "$cr_file")"
+done
+grep -qF 'adjudication stage of CRURA' "$CR_AI" 2>/dev/null \
+  || crura_record_missing="$crura_record_missing standin_unnamed_in:ai_guidelines.md"
+grep -qF 'triggered' "$CR_INDEX" 2>/dev/null \
+  || crura_record_missing="$crura_record_missing rule_missing_from:INDEX.md"
+if [ -z "$crura_record_missing" ]; then
+  ok "pr_record_carries_the_review_outcome"
+else
+  no "pr_record_carries_the_review_outcome" "the review outcome is not recorded in one shared vocabulary:$crura_record_missing"
+fi
+
 # passes_on_current_tree (the real docs/standards must be consistent)
 out=$(bash "$CHECK" 2>&1); code=$?
 if [ "$code" -eq 0 ]; then
