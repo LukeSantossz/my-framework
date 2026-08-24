@@ -220,4 +220,11 @@ func TestCheckRejectsAnUnknownGateName(t *testing.T) {
 	if !strings.Contains(errOut.String(), "vibes") {
 		t.Errorf("stderr %q does not name the unknown gate", errOut.String())
 	}
+	// The message doubles as the only listing of what the gates are, so a gate
+	// added without appearing here is one nobody can discover.
+	for _, gate := range []string{"spec", "commit", "branch", "docs", "records", "agents", "design"} {
+		if !strings.Contains(errOut.String(), gate) {
+			t.Errorf("stderr %q does not offer the %q gate", errOut.String(), gate)
+		}
+	}
 }
