@@ -405,3 +405,20 @@ func TestAnAPIBackendTakesItsOwnModelWhenSet(t *testing.T) {
 		t.Errorf("request %q did not take the per-backend model", body)
 	}
 }
+
+func TestAnExternalBackendIsRecordedButNeverRunHere(t *testing.T) {
+	// The framework knows configuration says a reviewer is wired; it did not
+	// observe a review. Reporting that as a review would be the one claim in the
+	// chain with nothing behind it.
+	b := &External{BackendName: "coderabbit", ProviderName: "coderabbit"}
+	_, err := b.Review(context.Background(), req())
+	if !IsUnavailable(err) {
+		t.Fatalf("err = %v, want Unavailable", err)
+	}
+	if !strings.Contains(err.Error(), "outside this tool") {
+		t.Errorf("error %q does not explain why nothing ran", err)
+	}
+	if !strings.Contains(b.Describe(req()), "recorded but never run here") {
+		t.Errorf("describe does not state the weaker claim: %q", b.Describe(req()))
+	}
+}
