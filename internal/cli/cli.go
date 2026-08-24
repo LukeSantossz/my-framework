@@ -18,6 +18,7 @@ import (
 // instead of the real repository, environment and git configuration.
 type Env struct {
 	Args   []string
+	Stdin  io.Reader
 	Stdout io.Writer
 	Stderr io.Writer
 
@@ -56,6 +57,14 @@ Usage:
   mf models pin|list                record and compare the model ids in use
   mf usage [show|reset]             tokens spent, in disjoint buckets
   mf eval [--role r2] [--backend n]  measure a backend against planted defects
+
+  mf explain [--base <ref>] [--difficulty easy|medium|hard] [--dir <path>]
+             [--dry-run]
+                                   generate the CRUX explainer for this change,
+                                   outside version control; advisory, never a gate
+  mf statusline render|apply|refresh
+                                   the status line contract; apply is the only
+                                   command that writes outside this repository
 `
 
 // Run dispatches a command and returns the process exit code.
@@ -103,6 +112,10 @@ func Run(env Env) int {
 		return runUsage(env, env.Args[1:])
 	case "eval":
 		return runEval(env, env.Args[1:])
+	case "explain":
+		return runExplain(env, env.Args[1:])
+	case "statusline":
+		return runStatusline(env, env.Args[1:])
 	case "help", "-h", "--help":
 		fmt.Fprint(env.Stdout, usageText)
 		return 0

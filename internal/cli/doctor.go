@@ -7,6 +7,7 @@ import (
 
 	"github.com/LukeSantossz/my-framework/internal/activate"
 	"github.com/LukeSantossz/my-framework/internal/config"
+	"github.com/LukeSantossz/my-framework/internal/style"
 	"github.com/LukeSantossz/my-framework/internal/upgrade"
 	"github.com/LukeSantossz/my-framework/internal/vcs"
 	"github.com/LukeSantossz/my-framework/internal/version"
@@ -46,13 +47,16 @@ func runDoctor(env Env) int {
 
 	// Roles.
 	fmt.Fprintln(env.Stdout, "\nroles")
-	for _, roleName := range []string{"r1", "r2", "r3"} {
+	// The explainer is listed beside the review layers because it is a role in
+	// the same configuration. Reporting only the three that review would leave
+	// the one role whose chain is easiest to misconfigure invisible.
+	for _, roleName := range []string{"r1", "r2", "r3", ExplainRole} {
 		names, prov, _ := cfg.Get("roles." + roleName + ".backends")
 		if strings.TrimSpace(names) == "" {
-			fmt.Fprintf(env.Stdout, "  %-3s        no chain configured  [%s]\n", roleName, prov.Layer)
+			fmt.Fprintf(env.Stdout, "  %-10s no chain configured  [%s]\n", roleName, prov.Layer)
 			continue
 		}
-		fmt.Fprintf(env.Stdout, "  %-3s        %s  [%s]\n", roleName, names, prov.Layer)
+		fmt.Fprintf(env.Stdout, "  %-10s %s  [%s]\n", roleName, names, prov.Layer)
 		for _, name := range strings.Split(names, ",") {
 			name = strings.TrimSpace(name)
 			if name == "" {
@@ -115,6 +119,18 @@ func runDoctor(env Env) int {
 	}
 	for _, line := range modelDriftLines(env, cfg) {
 		fmt.Fprintf(env.Stdout, "  models     %s\n", line)
+	}
+
+	// What the Token Economy names, against what exists here. `caveman-compress`
+	// is listed precisely because it does not exist: naming a capability the
+	// framework lacks is honest only while something says plainly it is absent.
+	fmt.Fprintln(env.Stdout, "\ntoken economy")
+	for _, c := range style.Capabilities() {
+		state := "NOT IMPLEMENTED"
+		if c.Implemented {
+			state = "implemented"
+		}
+		fmt.Fprintf(env.Stdout, "  %-18s %-15s %s\n", c.Name, state, c.Note)
 	}
 
 	// Standards drift.

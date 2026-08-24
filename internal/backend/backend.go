@@ -50,6 +50,12 @@ type Request struct {
 	Model        string
 	Effort       string
 	HeadSHA      string
+
+	// System overrides the review system prompt. A role that is not a review —
+	// the CRUX explainer — must not be handed instructions to answer with
+	// findings, and a backend that received them would produce an explainer
+	// shaped like a verdict.
+	System string
 }
 
 // Backend performs a review, or says it could not.
@@ -75,6 +81,16 @@ func (e *Unavailable) Error() string {
 func IsUnavailable(err error) bool {
 	var u *Unavailable
 	return errors.As(err, &u)
+}
+
+// systemFor is the system prompt this request carries, defaulting to the review
+// one. Every backend goes through it so a non-review role cannot reach a wire
+// shape that hardcoded the review instructions.
+func systemFor(req Request) string {
+	if req.System != "" {
+		return req.System
+	}
+	return systemPrompt
 }
 
 const systemPrompt = "You are the review backend for this repository. Report findings only; " +
@@ -312,7 +328,7 @@ func (a *API) Review(ctx context.Context, req Request) (report.Result, error) {
 	// review still stands and the accounting says it does not know.
 	consumed := a.readUsage(raw)
 	if !consumed.Known {
-		consumed = usage.Estimate(len(systemPrompt)+len(req.Instructions)+len(req.Diff), len(content))
+		consumed = usage.Estimate(len(systemFor(req))+len(req.Instructions)+len(req.Diff), len(content))
 	}
 
 	result := report.Result{
@@ -340,7 +356,7 @@ func (a *API) Review(ctx context.Context, req Request) (report.Result, error) {
 func (a *API) buildRequest(req Request) (string, []byte, map[string]string, error) {
 	base := strings.TrimRight(a.Endpoint, "/")
 	headers := map[string]string{"Content-Type": "application/json"}
-	system := systemPrompt + req.Instructions
+	system := systemFor(req) + req.Instructions
 
 	switch a.Shape {
 	case WireAnthropic:

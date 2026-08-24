@@ -10,6 +10,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/LukeSantossz/my-framework/internal/jsonx"
 	"github.com/LukeSantossz/my-framework/internal/usage"
 )
 
@@ -100,7 +101,7 @@ type findingsEnvelope struct {
 // the object in prose or a fenced block, so the object is located rather than
 // required to be the whole message.
 func ParseFindings(body string) ([]Finding, error) {
-	raw, ok := extractObject(body)
+	raw, ok := jsonx.Object(body, "findings")
 	if !ok {
 		return nil, fmt.Errorf("no findings object in the answer")
 	}
@@ -131,37 +132,15 @@ func ParseFindings(body string) ([]Finding, error) {
 	return env.Findings, nil
 }
 
-// extractObject returns the first balanced JSON object containing "findings".
-func extractObject(body string) (string, bool) {
-	idx := strings.Index(body, `"findings"`)
-	if idx < 0 {
-		return "", false
+// Text returns a backend's answer as prose. An unstructured result carries the
+// whole answer in a single finding, which is the right shape for a review and
+// the wrong one for a caller that asked for something other than findings.
+func Text(r Result) string {
+	parts := make([]string, 0, len(r.Findings))
+	for _, f := range r.Findings {
+		parts = append(parts, f.Summary)
 	}
-	start := strings.LastIndex(body[:idx], "{")
-	if start < 0 {
-		return "", false
-	}
-	depth, inString, escaped := 0, false, false
-	for i := start; i < len(body); i++ {
-		c := body[i]
-		switch {
-		case escaped:
-			escaped = false
-		case c == '\\' && inString:
-			escaped = true
-		case c == '"':
-			inString = !inString
-		case inString:
-		case c == '{':
-			depth++
-		case c == '}':
-			depth--
-			if depth == 0 {
-				return body[start : i+1], true
-			}
-		}
-	}
-	return "", false
+	return strings.TrimSpace(strings.Join(parts, "\n"))
 }
 
 // Unstructured records a backend's prose as one finding. Reporting nothing

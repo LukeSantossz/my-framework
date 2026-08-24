@@ -36,6 +36,13 @@ require_cross_provider = true
 [roles.r3]
 backends = []
 
+# The CRUX explainer is a role like every other, so which model explains a
+# change is configuration rather than a second setting nobody remembers exists.
+# Only a prompt-driven backend can serve it: an agentic reviewer answers with a
+# review, and `mf explain` asks for an explainer.
+[roles.explain]
+backends = ["gemini"]
+
 # --- backends ----------------------------------------------------------------
 
 # Runs inside a coding-agent session, so it cannot be started as a subprocess.

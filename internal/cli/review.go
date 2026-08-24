@@ -14,6 +14,7 @@ import (
 	"github.com/LukeSantossz/my-framework/internal/forge"
 	"github.com/LukeSantossz/my-framework/internal/report"
 	"github.com/LukeSantossz/my-framework/internal/role"
+	"github.com/LukeSantossz/my-framework/internal/style"
 	"github.com/LukeSantossz/my-framework/internal/vcs"
 )
 
@@ -134,12 +135,28 @@ func runReview(env Env, args []string) int {
 		return 1
 	}
 
+	// The same review is a conversation when it is printed to a terminal and a
+	// pull request artifact when it is posted, so what the output becomes —
+	// not which command produced it — decides whether terse style may apply.
+	// token_economy.md §3 forbids it for the second, and this is where the
+	// framework can enforce that rather than trust it.
+	artifact := style.Conversation
+	if post {
+		artifact = style.PullRequest
+	}
+	instructions := readInstructions(env.RepoRoot) + pullBody
+	styleNote := "full prose"
+	if styled, styleErr := style.Compose(instructions, artifact); styleErr == nil {
+		instructions = styled
+		styleNote = "terse"
+	}
+
 	maxBytes := intValue(cfg, "review.max_diff_bytes", 30000)
 	req := backend.Request{
 		Role: roleName, Base: base, Head: head,
 		Model:        stringValue(cfg, "review.model", ""),
 		Effort:       stringValue(cfg, "review.effort", config.DefaultEffort),
-		Instructions: readInstructions(env.RepoRoot) + pullBody,
+		Instructions: instructions,
 	}
 
 	runner := &role.Runner{
@@ -156,6 +173,9 @@ func runReview(env Env, args []string) int {
 		// Describe the whole chain rather than stopping at the first backend:
 		// the point is to show what would happen, fallbacks included.
 		fmt.Fprintf(env.Stdout, "[%s] %s against %s\n", roleName, head, base)
+		// Where the terse boundary becomes visible: the same chain, described
+		// twice, differs only in what its output is going to become.
+		fmt.Fprintf(env.Stdout, "  prompt style: %s (%s)\n", styleNote, artifact)
 		for _, line := range runner.Describe(req) {
 			fmt.Fprintf(env.Stdout, "  %s\n", line)
 		}

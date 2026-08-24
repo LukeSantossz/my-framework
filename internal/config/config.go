@@ -156,11 +156,20 @@ type Checks struct {
 	ExemptPaths []string `toml:"exempt_paths"`
 }
 
+// Explain configures the CRUX explainer. Dir is machine state and has no
+// project layer: the artifact is written outside version control by decision,
+// so a committed file naming where it goes would be naming a path that only
+// exists on one machine.
+type Explain struct {
+	Dir string `toml:"dir"`
+}
+
 // MachineFile is the per-user file. It is the only place a provider is defined.
 type MachineFile struct {
 	Version   int                 `toml:"version"`
 	Providers map[string]Provider `toml:"providers"`
 	Review    Review              `toml:"review"`
+	Explain   Explain             `toml:"explain"`
 
 	// Fingerprints maps an environment variable name to the provider whose
 	// agent sets it, and is how a session can corroborate an Author
@@ -331,9 +340,14 @@ func (c *Config) applyDefaults() {
 	// Roles with no shipped chain still need a resolvable key, so that an
 	// environment override lands on them and so that the resolved table shows
 	// them as empty rather than omitting them.
-	for _, key := range []string{"roles.r1.backends", "roles.r3.backends"} {
+	for _, key := range []string{"roles.r1.backends", "roles.r3.backends", "roles.explain.backends"} {
 		c.entries[key] = entry{value: "", prov: Provenance{Layer: LayerDefault, Source: "built-in default (empty chain)"}}
 	}
+	// The explainer's destination resolves to the user cache directory when
+	// nothing sets it. The path is left empty here rather than computed,
+	// because os.UserCacheDir differs per platform and a report that named one
+	// of them would be wrong on the other.
+	c.entries["explain.dir"] = entry{value: "", prov: Provenance{Layer: LayerDefault, Source: "built-in default (the user cache directory)"}}
 }
 
 func (c *Config) applyLegacy(gitConfig func(string) (string, bool)) {
@@ -360,6 +374,7 @@ func (c *Config) applyMachine(m *MachineFile, source string) {
 		c.set(prefix+"endpoint", p.Endpoint, LayerMachine, source)
 		c.set(prefix+"api_key_env", p.APIKeyEnv, LayerMachine, source)
 	}
+	c.set("explain.dir", m.Explain.Dir, LayerMachine, source)
 	for envVar, provider := range m.Fingerprints {
 		c.set("fingerprints."+envVar, provider, LayerMachine, source)
 	}
