@@ -45,7 +45,7 @@ Usage:
                                    walk the role's backend chain and report
                                    which backend actually reviewed
 
-  mf check [spec|commit|branch|docs|records]
+  mf check [spec|commit|branch|docs|records|agents|design]
                                    run the deterministic gates; no model is called
 
   mf doctor                        report what resolves, what is wired, what is missing
