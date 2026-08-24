@@ -36,6 +36,12 @@ A development-standards framework: versioned Markdown standards under `docs/stan
 | Specs become durable under `docs/specs/`; ADRs stay the curated rationale home | [`docs/adr/0002-durable-spec-archive.md`](docs/adr/0002-durable-spec-archive.md) |
 | CRUX review explainers are transient; ADRs stay the durable record | [`docs/adr/0003-crux-explainers-are-transient.md`](docs/adr/0003-crux-explainers-are-transient.md) |
 | The R2 reviewer default is `gpt-5.6-terra`, chosen on benchmark | [`docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md`](docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md) |
+| Go is the substrate; the harness ships as a single binary | [`docs/adr/0005-go-substrate-single-binary.md`](docs/adr/0005-go-substrate-single-binary.md) |
+| Configuration is TOML, split by policy and machine state | [`docs/adr/0006-configuration-split-policy-and-machine.md`](docs/adr/0006-configuration-split-policy-and-machine.md) |
+| Author provenance is a property of the change, not of the push | [`docs/adr/0007-author-provenance-belongs-to-the-change.md`](docs/adr/0007-author-provenance-belongs-to-the-change.md) |
+| CRURA becomes triggered review, shipped instrumented | [`docs/adr/0008-crura-becomes-triggered-review.md`](docs/adr/0008-crura-becomes-triggered-review.md) |
+| Deterministic checks derive their vocabularies from the standards | [`docs/adr/0009-checks-derive-vocabularies-from-standards.md`](docs/adr/0009-checks-derive-vocabularies-from-standards.md) |
+| R1's provider constraint is per-backend, not a layer requirement | [`docs/adr/0010-r1-provider-constraint-is-per-backend.md`](docs/adr/0010-r1-provider-constraint-is-per-backend.md) |
 
 ## Getting Started
 
