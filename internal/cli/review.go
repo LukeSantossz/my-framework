@@ -11,6 +11,7 @@ import (
 
 	"github.com/LukeSantossz/my-framework/internal/backend"
 	"github.com/LukeSantossz/my-framework/internal/config"
+	"github.com/LukeSantossz/my-framework/internal/forge"
 	"github.com/LukeSantossz/my-framework/internal/report"
 	"github.com/LukeSantossz/my-framework/internal/role"
 	"github.com/LukeSantossz/my-framework/internal/vcs"
@@ -25,6 +26,8 @@ func runReview(env Env, args []string) int {
 	roleName := "r2"
 	base := ""
 	dryRun := false
+	prNumber := 0
+	post := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--role":
@@ -39,6 +42,18 @@ func runReview(env Env, args []string) int {
 			}
 		case "--dry-run":
 			dryRun = true
+		case "--post":
+			post = true
+		case "--pr":
+			if i+1 < len(args) {
+				i++
+				n, convErr := strconv.Atoi(args[i])
+				if convErr != nil || n <= 0 {
+					fmt.Fprintf(env.Stderr, "mf review: --pr expects a pull request number, got %q\n", args[i])
+					return 2
+				}
+				prNumber = n
+			}
 		default:
 			fmt.Fprintf(env.Stderr, "mf review: unknown option %q\n", args[i])
 			return 2
@@ -48,6 +63,13 @@ func runReview(env Env, args []string) int {
 	case "r1", "r2", "r3":
 	default:
 		fmt.Fprintf(env.Stderr, "mf review: unknown role %q (expected r1, r2 or r3)\n", roleName)
+		return 2
+	}
+	// Checked before anything runs. Validating it later would make the error
+	// depend on whether a backend happened to be available, so the same wrong
+	// command would sometimes be caught and sometimes pass in silence.
+	if post && prNumber == 0 {
+		fmt.Fprintln(env.Stderr, "mf review: --post needs --pr <number>; there is nowhere to post without one")
 		return 2
 	}
 
@@ -64,6 +86,38 @@ func runReview(env Env, args []string) int {
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "mf review: cannot determine the current branch: %v\n", err)
 		return 1
+	}
+
+	// R3's pull request context: the intent, which is the only thing it has that
+	// R2 does not.
+	var pullBody string
+	var client *forge.Client
+	if prNumber > 0 {
+		client = forgeClient(env)
+		if client == nil {
+			fmt.Fprintln(env.Stderr, "mf review: --pr needs GITHUB_REPOSITORY to name the repository")
+			return 2
+		}
+		pr, prErr := client.PullRequest(prNumber)
+		if prErr != nil {
+			// Misconfiguration is the one thing this command fails on.
+			fmt.Fprintf(env.Stderr, "mf review: %v\n", prErr)
+			return 1
+		}
+		if pr.IsFork {
+			// Secrets are unavailable to fork workflows by design. Saying so is
+			// the honest outcome; exiting zero without a word would look like a
+			// review that found nothing.
+			fmt.Fprintf(env.Stdout, "[%s] pull request #%d comes from a fork, where the credentials this review needs are unavailable by design. R3 did not run.\n", roleName, prNumber)
+			return 0
+		}
+		if pr.BaseRef != "" {
+			base = pr.BaseRef
+		}
+		if pr.HeadRef != "" {
+			head = pr.HeadRef
+		}
+		pullBody = pullContext(pr, repo, base, head)
 	}
 
 	// Nothing to review when the branch is its own base. Answering this here
@@ -85,7 +139,7 @@ func runReview(env Env, args []string) int {
 		Role: roleName, Base: base, Head: head,
 		Model:        stringValue(cfg, "review.model", ""),
 		Effort:       stringValue(cfg, "review.effort", config.DefaultEffort),
-		Instructions: readInstructions(env.RepoRoot),
+		Instructions: readInstructions(env.RepoRoot) + pullBody,
 	}
 
 	runner := &role.Runner{
@@ -135,6 +189,9 @@ func runReview(env Env, args []string) int {
 		// Not a finding, so it never blocks; recorded so the absence reaches the
 		// PR instead of passing for a review that happened.
 		fmt.Fprintf(env.Stdout, "[%s] did not run: no configured backend was available. Record the absence in the PR.\n", roleName)
+		if post && client != nil {
+			postComment(env, client, prNumber, out)
+		}
 		return 0
 	}
 
@@ -145,7 +202,23 @@ func runReview(env Env, args []string) int {
 			fmt.Fprintf(env.Stdout, "R2 is NOT satisfied by this run; note it in the PR.\n")
 		}
 	}
+	if post && client != nil {
+		postComment(env, client, prNumber, out)
+	}
+	// Findings never fail the run. Every layer is advisory, and a blocking R3
+	// would make the reviewer with the least context the strictest gate.
 	return 0
+}
+
+func postComment(env Env, client *forge.Client, prNumber int, out role.Outcome) {
+	action, err := client.UpsertComment(prNumber, renderComment(out))
+	if err != nil {
+		// Posting is reporting, so failing to post must not turn an advisory
+		// review into a failed build.
+		fmt.Fprintf(env.Stderr, "mf review: could not post the comment: %v\n", err)
+		return
+	}
+	fmt.Fprintf(env.Stdout, "comment %s on #%d\n", action, prNumber)
 }
 
 func buildChain(env Env, cfg *config.Config, roleName string) ([]backend.Backend, error) {
@@ -217,9 +290,7 @@ func buildBackend(env Env, cfg *config.Config, name string) (backend.Backend, er
 		return &backend.InProc{BackendName: name}, nil
 
 	case "external":
-		// Declared, executed elsewhere, recorded. It never runs here, so it is
-		// honestly unavailable to this chain rather than silently clean.
-		return &backend.InSession{BackendName: name, ProviderName: spec.Provider}, nil
+		return &backend.External{BackendName: name, ProviderName: spec.Provider}, nil
 	}
 	return nil, fmt.Errorf("mf review: backend %q has unknown kind %q", name, spec.Kind)
 }

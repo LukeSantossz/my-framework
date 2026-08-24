@@ -505,3 +505,28 @@ func (p *InProc) Review(_ context.Context, req Request) (report.Result, error) {
 	}
 	return result, nil
 }
+
+// --- external ---------------------------------------------------------------
+
+// External is a reviewer that runs outside this tool — a forge app wired to the
+// repository, for instance. It is declared so the review-layers record can name
+// it, and it is always unavailable to this chain, because the framework observed
+// no review: it only knows that configuration says one is wired.
+//
+// That is a weaker claim than every other backend makes, and it reads as such.
+type External struct {
+	BackendName  string
+	ProviderName string
+}
+
+func (e *External) Name() string     { return e.BackendName }
+func (e *External) Provider() string { return e.ProviderName }
+
+func (e *External) Describe(Request) string {
+	return fmt.Sprintf("%s (external): declared as wired, executed elsewhere, recorded but never run here", e.BackendName)
+}
+
+func (e *External) Review(context.Context, Request) (report.Result, error) {
+	return report.Result{}, &Unavailable{Backend: e.BackendName,
+		Reason: "declared as external: it runs outside this tool, so no review was observed here"}
+}

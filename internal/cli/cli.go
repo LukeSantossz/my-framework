@@ -36,6 +36,7 @@ Usage:
   mf config migrate                take over the deprecated r2.* git-config keys
 
   mf review --role <r1|r2|r3> [--base <ref>] [--dry-run]
+                     [--pr <number>] [--post]
                                    walk the role's backend chain and report
                                    which backend actually reviewed
 
