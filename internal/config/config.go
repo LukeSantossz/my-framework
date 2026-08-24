@@ -154,6 +154,11 @@ type Agent struct {
 // someone widens it.
 type Checks struct {
 	ExemptPaths []string `toml:"exempt_paths"`
+
+	// DesignSurfaces are the files the design standard governs. The standard
+	// owns the vocabulary; which files render it is this project's own fact, so
+	// an adopter points it at theirs rather than inheriting ours.
+	DesignSurfaces []string `toml:"design_surfaces"`
 }
 
 // Explain configures the CRUX explainer. Dir is machine state and has no

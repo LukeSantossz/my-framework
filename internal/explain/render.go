@@ -179,43 +179,54 @@ var pageTemplate = template.Must(template.New("crux").Parse(`<!doctype html>
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>{{.Title}}</title>
 <style>
-:root { color-scheme: light dark; --ink: #17181c; --paper: #fbfbf9; --muted: #63656d;
-        --rule: #dcdcd6; --accent: #2f5d9e; --callout: #f0f2f6; }
+/* Every colour below is a role declared in docs/standards/design.md, and
+   mf check design fails this file if one appears that is not. There is no
+   accent: emphasis is weight, rule and underline. Both polarities are defined
+   together, neither as the other's afterthought. */
+:root { color-scheme: light dark;
+        --canvas: #faf8f4; --canvas-soft: #f0ece4; --hairline: #ddd6ca;
+        --ink: #1c1a17; --body: #423d36; --mute: #6f675c;
+        --correct: #3f6b4a; --incorrect: #9b3b32; }
 @media (prefers-color-scheme: dark) {
-  :root { --ink: #e7e7e4; --paper: #16171a; --muted: #9a9ca4; --rule: #2e3036;
-          --accent: #8fb4e8; --callout: #202329; }
+  :root { --canvas: #1a1815; --canvas-soft: #262320; --hairline: #35302a;
+          --ink: #f2eee6; --body: #cfc7b9; --mute: #948b7d;
+          --correct: #7fae89; --incorrect: #d98d84; }
 }
 * { box-sizing: border-box; }
-body { margin: 0 auto; padding: 2rem 1.25rem 6rem; max-width: 46rem; background: var(--paper);
-       color: var(--ink); font: 16px/1.65 ui-serif, Georgia, "Times New Roman", serif; }
-h1, h2, h3 { font-family: ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif; line-height: 1.25; }
-h1 { font-size: 1.7rem; margin: 0 0 .4rem; }
-h2 { font-size: 1.25rem; margin: 3rem 0 .75rem; padding-top: .75rem; border-top: 1px solid var(--rule); }
-.meta, .degraded { color: var(--muted); font-size: .85rem; margin: .2rem 0;
+body { margin: 0 auto; padding: 32px 16px 96px; max-width: 46rem; background: var(--canvas);
+       color: var(--body); font: 16px/1.65 ui-serif, Georgia, "Times New Roman", serif; }
+h1, h2, h3 { font-family: ui-sans-serif, system-ui, "Segoe UI", Arial, sans-serif;
+             line-height: 1.25; color: var(--ink); }
+h1 { font-size: 1.7rem; margin: 0 0 4px; }
+h2 { font-size: 1.25rem; margin: 48px 0 12px; padding-top: 12px; border-top: 1px solid var(--hairline); }
+.meta, .degraded { color: var(--mute); font-size: .85rem; margin: 2px 0;
                    font-family: ui-sans-serif, system-ui, sans-serif; }
-.degraded { color: var(--accent); }
-nav ol { padding-left: 1.2rem; margin: 1.5rem 0 0; font-family: ui-sans-serif, system-ui, sans-serif; }
-nav a { color: var(--accent); }
-pre { background: var(--callout); border: 1px solid var(--rule); border-radius: 6px;
-      padding: .8rem 1rem; overflow-x: auto; white-space: pre; }
+.degraded { font-style: italic; }
+nav ol { padding-left: 24px; margin: 24px 0 0; font-family: ui-sans-serif, system-ui, sans-serif; }
+nav a { color: var(--ink); text-decoration: underline; text-underline-offset: 3px; }
+pre { background: var(--canvas-soft); border: 1px solid var(--hairline); border-radius: 6px;
+      padding: 12px 16px; overflow-x: auto; white-space: pre; color: var(--ink); }
 pre, code { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; font-size: .85rem; }
-.callout { background: var(--callout); border-left: 3px solid var(--accent); border-radius: 0 6px 6px 0;
-           padding: .7rem 1rem; margin: 1.2rem 0; white-space: pre-wrap; }
-details { margin: 1rem 0; }
-summary { cursor: pointer; font-family: ui-sans-serif, system-ui, sans-serif; color: var(--accent); }
-.q { border: 1px solid var(--rule); border-radius: 8px; padding: 1rem 1.1rem; margin: 1.2rem 0; }
-.q h3 { margin: 0 0 .6rem; font-size: 1rem; }
-.opt { display: block; width: 100%; text-align: left; margin: .3rem 0; padding: .5rem .7rem;
-       border: 1px solid var(--rule); border-radius: 6px; background: transparent; color: inherit;
+.callout { background: var(--canvas-soft); border-left: 2px solid var(--hairline);
+           border-radius: 0 6px 6px 0; padding: 12px 16px; margin: 24px 0; white-space: pre-wrap; }
+details { margin: 16px 0; }
+summary { cursor: pointer; font-family: ui-sans-serif, system-ui, sans-serif; color: var(--ink); }
+.q { border: 1px solid var(--hairline); border-radius: 6px; padding: 16px; margin: 24px 0; }
+.q h3 { margin: 0 0 8px; font-size: 1rem; }
+.opt { display: block; width: 100%; text-align: left; margin: 4px 0; padding: 8px 12px;
+       border: 1px solid var(--hairline); border-radius: 4px; background: transparent; color: inherit;
        font: inherit; cursor: pointer; }
-.opt:hover { border-color: var(--accent); }
-.opt.right { border-color: #2e7d4f; }
-.opt.wrong { border-color: #a33; }
-.fix { margin-top: .8rem; padding: .8rem 1rem; background: var(--callout); border-radius: 6px;
+.opt:hover { border-color: var(--ink); }
+/* Colour is never the only signal here: the mark says the same thing, so the
+   state survives a reader who cannot separate the two hues. */
+.opt.right { border-color: var(--correct); color: var(--ink); }
+.opt.wrong { border-color: var(--incorrect); color: var(--ink); }
+.mark { font-family: ui-monospace, "Cascadia Mono", Consolas, monospace; }
+.fix { margin-top: 12px; padding: 12px 16px; background: var(--canvas-soft); border-radius: 6px;
        white-space: pre-wrap; }
-.skip { margin-top: .6rem; font: inherit; font-size: .85rem; background: transparent; color: var(--accent);
-        border: 1px solid var(--rule); border-radius: 6px; padding: .35rem .7rem; cursor: pointer; }
-.score { font-family: ui-sans-serif, system-ui, sans-serif; color: var(--muted); }
+.skip { margin-top: 8px; font: inherit; font-size: .85rem; background: transparent; color: var(--ink);
+        border: 1px solid var(--hairline); border-radius: 3px; padding: 4px 12px; cursor: pointer; }
+.score { font-family: ui-sans-serif, system-ui, sans-serif; color: var(--mute); }
 </style>
 </head>
 <body>
@@ -276,6 +287,14 @@ summary { cursor: pointer; font-family: ui-sans-serif, system-ui, sans-serif; co
         if (right) { correct = correct + 1; }
         Array.prototype.forEach.call(card.querySelectorAll(".opt"), function (el, i) {
           el.className = "opt" + (i === q.answer ? " right" : (i === choice ? " wrong" : ""));
+          // The mark carries the same meaning as the border colour, so the
+          // answer is legible without separating the two hues.
+          if (i === q.answer || i === choice) {
+            var mark = document.createElement("span");
+            mark.className = "mark";
+            mark.textContent = (i === q.answer ? "[ok] " : "[x] ");
+            el.insertBefore(mark, el.firstChild);
+          }
         });
         if (!right && q.remediation) {
           fix.textContent = q.remediation;

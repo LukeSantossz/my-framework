@@ -237,6 +237,22 @@ interchangeable: Codex reads a declarative segment list, Claude Code runs a comm
 `mf statusline apply`, rather than part of activation.
 _Avoid_: status bar, statusline (as the Standard rather than the rendered line), theme.
 
+**Design Standard**:
+The Standard fixing the visual identity of the surfaces this framework renders — colour
+roles in both polarities, three typeface stacks, a tight radius and spacing scale — in the
+`DESIGN.md` format. Its direction is derived from a third-party entry and its values are
+authored here, a distinction `mf check design` verifies by fingerprint rather than
+asserting. It declares no chromatic accent, and it reaches neither the status line nor
+terminal output.
+_Avoid_: theme, style guide, branding, design system (implies components this has none of).
+
+**Derived identity**:
+A visual identity whose direction is read from another project's design document while
+every value is authored locally. Distinguished from a copied one by a check, not by a
+claim: no declared token may match a recorded fingerprint of the source's colours or
+typefaces. It proves non-identity of values, never independence of design.
+_Avoid_: inspired-by (unverifiable), fork, adaptation.
+
 ### Token Economy
 
 **Token Economy**:

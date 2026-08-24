@@ -15,6 +15,7 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - `r2_gate.md`: operational R2 cross-provider gate — the reviewer backend chain, its adapter contract, and its configuration.
 - `status_line.md`: the facts a coding agent's status line must show and in what order, across Claude Code and Codex.
 - `crux_method.md`: the CRUX review-time explanation aid — a transient, interactive explainer of an implemented change that feeds R1 and the CRURA Review.
+- `design.md`: the visual identity of the surfaces this framework renders, in the `DESIGN.md` format — colour roles, typefaces and scale, with what it deliberately does not reach.
 
 ## System Rules
 
@@ -30,6 +31,7 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - Token economy per `token_economy.md`: opt-in, chosen when the framework is initialized in a project, never a default the framework imposes; a repository that declines it is fully conformant. Terse mode is allowed in conversation but never in `SPEC.md`, PR, Issue, or commit artifacts; where the harness composes the prompt it enforces that boundary rather than trusting it. It never overrides Safety or Correctness.
 - Conflict resolution follows the precedence order in `code_conventions.md`.
 - Authority between sources: a repository's standards override user-global defaults (per the Precedence section of `code_conventions.md`); Safety and Correctness are never overridden.
+- Visual identity per `design.md`: the surfaces this framework renders use only the colour roles it declares, in both polarities, and it declares no chromatic accent — a tool whose provider is configuration must not wear a vendor's. `mf check design` enforces it. It reaches neither the status line nor terminal output beyond honouring `NO_COLOR`.
 - Status line per `status_line.md`: the five facts and their order are fixed across
   Claude Code and Codex; how a tool draws them is not. Applying the contract is
   machine state, so it is a command of its own — `mf statusline apply` — and is the
@@ -52,3 +54,4 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 9. `r2_gate.md`
 10. `crux_method.md`
 11. `status_line.md`
+12. `design.md`

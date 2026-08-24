@@ -42,6 +42,7 @@ A development-standards framework: versioned Markdown standards under `docs/stan
 | CRURA becomes triggered review, shipped instrumented | [`docs/adr/0008-crura-becomes-triggered-review.md`](docs/adr/0008-crura-becomes-triggered-review.md) |
 | Deterministic checks derive their vocabularies from the standards | [`docs/adr/0009-checks-derive-vocabularies-from-standards.md`](docs/adr/0009-checks-derive-vocabularies-from-standards.md) |
 | R1's provider constraint is per-backend, not a layer requirement | [`docs/adr/0010-r1-provider-constraint-is-per-backend.md`](docs/adr/0010-r1-provider-constraint-is-per-backend.md) |
+| A derived visual identity is verified by fingerprint, not asserted | [`docs/adr/0011-a-derived-visual-identity-is-verified-not-asserted.md`](docs/adr/0011-a-derived-visual-identity-is-verified-not-asserted.md) |
 
 ## Getting Started
 
@@ -144,6 +145,8 @@ In development. Versioning policy: semver git tags, with `v0.1.0` tagged when th
 - `mf explain` sends a diff to a model and gets prose back, and prose is where fabrication hides. Nothing verifies its claims: an explainer that confidently explains something the code does not do is worse than no explainer, which is why it stays advisory and is read against the diff rather than instead of it.
 - The Codex segment names written into `config.toml` were read out of the installed Codex build rather than a published schema. An upgrade that renames or drops one would leave the written configuration silently ignored — the line degrades, the tool does not break. The vocabulary as read is recorded in `docs/specs/0012-standardize-agent-status-line.md`.
 - The quota fact on the Claude Code side reads an undocumented OAuth usage endpoint and needs an OAuth session; an API-key session shows `usage n/a`.
+- The design gate reads colour literals with a regular expression, not a CSS parser. It finds hex and `rgb()` values, which are the forms this repository writes; a named CSS colour, an `oklch()` call or a computed value would pass unnoticed, so `docs/standards/design.md` forbids those forms rather than the gate pretending to catch them.
+- The design standard's fingerprint check proves that the source entry's literal colours and typefaces are not reused. It cannot prove independence of design: direction is not a value, and a layout or a restraint cannot be fingerprinted. The source entry also carries no version, so a later read may differ from the one the fingerprints describe.
 - The Token Economy's terse boundary is enforced only where the harness composes the prompt. A person writing a commit message or a PR body by hand is outside it, so that part of the rule remains a discipline rather than a check.
 - Small deferred follow-ups (documented gaps not yet closed) are tracked in the issue backlog rather than in this README.
 

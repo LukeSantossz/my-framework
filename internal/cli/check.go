@@ -14,10 +14,10 @@ func runCheck(env Env, args []string) int {
 	var only []string
 	for _, a := range args {
 		switch a {
-		case "spec", "commit", "branch", "docs", "records", "agents":
+		case "spec", "commit", "branch", "docs", "records", "agents", "design":
 			only = append(only, a)
 		default:
-			fmt.Fprintf(env.Stderr, "mf check: unknown check %q (expected spec, commit, branch, docs, records or agents)\n", a)
+			fmt.Fprintf(env.Stderr, "mf check: unknown check %q (expected spec, commit, branch, docs, records, agents or design)\n", a)
 			return 2
 		}
 	}
@@ -42,13 +42,17 @@ func runCheck(env Env, args []string) int {
 	// standards tree, so it is not one of the check package's gates.
 	explicit := len(only) > 0
 	checkAgents := !explicit
+	checkDesign := !explicit
 	var gates []string
 	for _, name := range only {
-		if name == "agents" {
+		switch name {
+		case "agents":
 			checkAgents = true
-			continue
+		case "design":
+			checkDesign = true
+		default:
+			gates = append(gates, name)
 		}
-		gates = append(gates, name)
 	}
 
 	var results []check.Result
@@ -87,6 +91,11 @@ func runCheck(env Env, args []string) int {
 	}
 	if checkAgents {
 		if code := agentsGate(env); code != 0 {
+			failed++
+		}
+	}
+	if checkDesign {
+		if code := designGate(env, cfg); code != 0 {
 			failed++
 		}
 	}

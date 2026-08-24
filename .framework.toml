@@ -99,6 +99,12 @@ exempt_paths = [
   "docs/specs/*",
 ]
 
+# The surfaces docs/standards/design.md governs. The explainer's stylesheet is
+# inline in its renderer, so the Go file is the surface.
+design_surfaces = [
+  "internal/explain/render.go",
+]
+
 # --- agent instruction files --------------------------------------------------
 
 # Generated from docs/agents/instructions.md. Roles are declared, not derived
