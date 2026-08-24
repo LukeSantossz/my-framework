@@ -103,6 +103,12 @@ func Load(repoRoot string) (Palette, error) {
 // Parse extracts the token block. Every failure is an error: this is the one
 // place where being lenient would turn the gate off without saying so.
 func Parse(body string) (Palette, error) {
+	// A standard is a Markdown file in a git repository, and git hands a Windows
+	// checkout CRLF by default. The TOML decoder refuses a carriage return as a
+	// control character, so without this the same document parses on one
+	// machine and fails on another.
+	body = strings.ReplaceAll(body, "\r\n", "\n")
+
 	at := strings.Index(body, Marker)
 	if at < 0 {
 		return Palette{}, fmt.Errorf("no %s marker; the token block cannot be located", Marker)

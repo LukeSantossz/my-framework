@@ -234,3 +234,18 @@ func TestTheShippedStandardLoadsAndGovernsTheExplainer(t *testing.T) {
 		t.Error("the standard does not record what it was derived from or when")
 	}
 }
+
+func TestParsesAStandardCheckedOutWithWindowsLineEndings(t *testing.T) {
+	// A standard is a Markdown file in a git repository, and git hands a Windows
+	// checkout CRLF by default. The TOML decoder refuses a carriage return as a
+	// control character, so a parser that does not normalise first fails on the
+	// same document it just parsed on another machine.
+	crlf := strings.ReplaceAll(standard, "\n", "\r\n")
+	p, err := Parse(crlf)
+	if err != nil {
+		t.Fatalf("a CRLF checkout does not parse: %v", err)
+	}
+	if len(p.Colors) != 3 || p.Colors["canvas"].Light != "#faf8f4" {
+		t.Errorf("the CRLF parse lost content: %+v", p.Colors)
+	}
+}
