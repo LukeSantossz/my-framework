@@ -61,11 +61,15 @@ AI assistant behavior when generating or modifying code. Counterpart to `crura_m
 Reviews compose; they do not replace one another. Three layers can run on a change,
 with a defined hierarchy so none is duplicated or skipped:
 
-- R1, internal review: the Superpowers two-stage subagent review (same provider, Claude). It applies `code_conventions.md`, `var_method.md`, and this file, and stands in for the Author's Self-Review. Record that it ran; do not repeat it manually.
-- R2, cross-provider review: a Reviewer model from a provider different from the Author (e.g. the Codex pre-push gate; the operational gate is defined in `r2_gate.md`). If the pre-push reviewer is a different provider than the Author, the cross-provider requirement is satisfied and no third reviewer is required for that purpose.
+- R1, internal review: satisfied by a chain of review backends, taking the first one that is actually available and naming it. It applies `code_conventions.md`, `var_method.md`, and this file, and stands in for the Author's Self-Review. No provider constraint applies: each backend declares its own provider, and R1 is defined by when it runs and what it sees, not by whom it shares a provider with. Record which backend ran; do not repeat it manually.
+- R2, cross-provider review: a Reviewer model from a provider different from the Author's (the operational gate is defined in `r2_gate.md`). The Author's provider is a recorded property of the change, not an assumption, so the requirement resolves to one of three states — `verified`, `declared`, or `unknown` — and only the first two can satisfy it.
 - R3, automated PR review: any automated PR reviewer (e.g. CodeRabbit). It is additional signal and does not substitute for R2.
 
+`superpowers` is one backend of the R1 chain, not the layer itself: it runs inside a coding-agent session and cannot be started as a subprocess, so it contributes an attestation rather than an execution, and a session where it is absent counts as unavailable so the chain advances.
+
 When no second-provider tool is available, R1 plus the human PR review (per `crura_method.md`) stand in for R2; note its absence in the PR.
+
+Layer R1 has no executor yet: the chain is specified here and the runner that walks it is not built, so until it is, R1 is performed by hand against this file and the PR records that. A layer whose executor is absent is declared as such rather than assumed to have run.
 
 At review time an implemented change may also carry a transient CRUX explainer (see `crux_method.md`) that feeds R1 and the CRURA Review. It is an aid, not a review layer, and never blocks a ship.
 
@@ -75,6 +79,7 @@ Two roles: the Author model develops the code; the Reviewer model, when a second
 
 - The Author completes Self-Review above, then writes the change.
 - When a second provider is available, route the diff to the Reviewer model before requesting human review. The Reviewer must be a different provider than the Author.
+- The Author's provider and model are declared when the change is authored, not inferred when it is pushed: a push carries commits that may come from several sessions or from a person typing, so it has no single Author to detect. The cross-provider claim is then `verified` when an independent signal agrees with the declaration and differs from the Reviewer's provider, `declared` when only the record asserts it, and `unknown` when nothing recorded it. A signal that contradicts the declaration is an error to resolve, never a preference to apply silently.
 - The Reviewer applies the same standards (`code_conventions.md`, `var_method.md`, this file) and reports: correctness defects, invented or unverified symbols, scope creep, security issues, convention violations.
 - The Reviewer does not rewrite the code; it reports findings. The Author resolves them or justifies the decision in the PR.
 - Record in the PR which model authored and which reviewed.

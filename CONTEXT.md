@@ -17,9 +17,17 @@ _Avoid_: author (reserved for the model), maintainer, engineer, user (the end co
 of the software being built).
 
 **Author**:
-The model that writes the change under the Developer's direction (currently Claude,
-Anthropic). One half of the Cross-Provider Review pair.
-_Avoid_: coder, generator, assistant, the AI.
+The model that writes the change under the Developer's direction. One half of the
+Cross-Provider Review pair. Which model and Provider it is belongs to the change, not to
+the session or the push, and is fixed by the Author Declaration.
+_Avoid_: coder, generator, assistant, the AI; naming a specific vendor as the definition.
+
+**Author Declaration**:
+The record of the Author's Provider and model, written per branch while the change is
+being authored. It exists because a push carries commits that may come from several
+sessions, several agents, or a person typing, so there is no single Author to detect at
+push time. It is what the Cross-Provider State is evaluated against.
+_Avoid_: session detection, fingerprint (the corroborating signal, not the record).
 
 **Reviewer**:
 The model that performs the R2 Cross-Provider Review, drawn from a different Provider
@@ -30,8 +38,20 @@ _Avoid_: checker, validator, critic.
 
 **Provider**:
 The vendor behind a model (e.g. Anthropic, OpenAI). R2 is satisfied only when the
-Reviewer's Provider differs from the Author's.
+Reviewer's Provider differs from the Author's, as resolved by the Cross-Provider State.
 _Avoid_: vendor, platform, model.
+
+**Backend**:
+A named way of performing a Role — an agentic CLI, an HTTP endpoint, an in-session
+skill, or a deterministic in-process check. A Backend declares its own Provider and
+classifies its own tool's failures, which is what lets a chain tell "unavailable" from
+"reviewed with findings".
+_Avoid_: adapter (the script implementing one), reviewer (the role it may fill), plugin.
+
+**Role**:
+A job the framework needs performed — Author, R1, R2, R3 — bound to an ordered chain of
+Backends. The Role is the unit of configuration; the Backend is the unit of execution.
+_Avoid_: layer (R1–R3 as review stages), phase, agent.
 
 ### Review
 
@@ -41,14 +61,26 @@ duplicated or skipped. Spans the automated layers R1–R3 and the Developer's CR
 _Avoid_: review stack, review pipeline.
 
 **R1 / Internal Review**:
-The automated same-Provider review — the Superpowers two-stage subagent pass (Claude).
-Stands in for the Author Self-Review.
-_Avoid_: self-review, internal QA.
+The automated internal review, satisfied by a chain of Backends and named by whichever
+one ran. No Provider constraint applies: what defines R1 is when it runs and how much of
+the change it sees, not whom it shares a Provider with. Stands in for the Author
+Self-Review. Superpowers is one Backend of this chain, never the layer itself.
+_Avoid_: self-review, internal QA, same-provider review, the Superpowers pass.
 
 **R2 / Cross-Provider Review**:
 The automated review by the Reviewer, whose Provider differs from the Author's
-(operationally the pre-push backend chain). Only valid across Providers.
+(operationally the pre-push backend chain). Only valid across Providers, and only as
+strongly as the Cross-Provider State reports.
 _Avoid_: external review, second opinion.
+
+**Cross-Provider State**:
+How strongly R2's Provider requirement is established for a change: `verified` when an
+independent signal agrees with the Author Declaration and differs from the Reviewer's
+Provider, `declared` when only the Declaration asserts it, `unknown` when nothing
+recorded it. `unknown` does not satisfy R2. The state is recorded in the PR beside the
+Backend and model, because a reader adjudicating a PR needs to tell an enforced claim
+from an asserted one.
+_Avoid_: verified/unverified as a binary, cross-provider flag.
 
 **R2 Gate**:
 The automated push-time hook that runs the Reviewer against the base branch — the

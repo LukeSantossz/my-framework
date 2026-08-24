@@ -14,7 +14,11 @@ the process.
 
 - Pipeline stage: process orchestration end to end — brainstorming (design),
   writing-plans (plan), subagent-driven-development (TDD implementation),
-  requesting/receiving-code-review (R1), finishing-a-development-branch.
+  requesting/receiving-code-review, finishing-a-development-branch. Its review
+  pass is one backend of the R1 chain (`ai_guidelines.md` Review Composition),
+  not the R1 layer itself: R1 is satisfied by whichever backend in its chain is
+  available, and this one is in-session, so it contributes an attestation rather
+  than an execution and an absent session counts as unavailable.
 - How to use: invoke the phase's skill before acting in that phase; the
   orchestrator's phases map one-to-one onto `spec_method.md` (Brainstorm feeds
   the SPEC, the Plan turns Acceptance Criteria into failing tests).

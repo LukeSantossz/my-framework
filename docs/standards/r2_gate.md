@@ -2,15 +2,19 @@
 
 Operational definition of the R2 cross-provider review from `ai_guidelines.md`. It runs
 a chain of reviewer backends as a `pre-push` gate, taking the first one that is actually
-available, and reports which one reviewed. R1 (internal Superpowers review) is unchanged;
+available, and reports which one reviewed. R1 is its own chain of backends and is
+unchanged here;
 this document makes R2 concrete and records the repository's R3 wiring. On this
 repository, R3 is CodeRabbit (wired via its GitHub app);
 its findings are adjudicated in the PR discussion like any reviewer finding.
 
 ## Roles
 
-- Author: the model conducting the session (Anthropic Claude family, per `CLAUDE.md`).
-  The concrete model varies by session and is recorded per PR.
+- Author: the provider and model that wrote the change. This is a property of the change
+  and is declared while it is being authored, not inferred at push time — a push carries
+  commits that may come from several sessions, several agents, or a person typing
+  directly, so there is no single Author to detect at that moment. The declaration is
+  recorded per branch and named per PR.
 - Reviewer: whichever backend in the chain actually ran. The requirement is the role,
   not a name: the Reviewer must be a different provider than the Author. The shipped
   default chain is `codex` alone, so a repository that configures nothing behaves as it
@@ -19,6 +23,33 @@ its findings are adjudicated in the PR discussion like any reviewer finding.
 The Reviewer reads `AGENTS.md` at the repository root for its role and the binding
 standards — an agentic backend finds it there itself, and a non-agentic one has it sent
 in the request.
+
+### The cross-provider state
+
+Whether the Reviewer's provider differs from the Author's resolves to one of three
+values, because collapsing them into a yes/no would report "nobody recorded it" as
+"satisfied":
+
+| State | Meaning | Satisfies R2 |
+|---|---|---|
+| `verified` | An independent signal agrees with the declaration and differs from the Reviewer's provider | Yes |
+| `declared` | Only the branch record asserts the Author's provider | Yes, as an assertion |
+| `unknown` | Nothing recorded the Author's provider | No |
+
+`unknown` **does not satisfy R2**. The run says so in the line meant for the PR, on the
+same principle the chain already holds: falling back is allowed, falling back quietly is
+not. A signal that contradicts the declaration is an error to resolve, never a preference
+to apply silently.
+
+A backend that runs inside a coding-agent session — `superpowers` is the one named today
+— cannot be started as a subprocess. It therefore contributes
+an attestation rather than an execution, and a session where it is absent counts as
+unavailable so the chain advances.
+
+The declaration and the three states have no executor yet: they are specified here and
+the command that records a declaration is not built, so until it is, the Author's
+provider is named by hand in the PR and the state is `declared` at best. A requirement
+whose mechanism is absent is written down as absent rather than assumed to be running.
 
 ## Why a chain
 

@@ -73,7 +73,7 @@ Screenshots or videos if the change is visual; omit if backend or configuration 
 - Commented-out code and unnecessary debug statements removed.
 - Code follows the project style guide.
 - New dependencies work without breaking the build.
-- Review layers recorded: internal Superpowers review (R1), cross-provider review (R2), automated PR review (R3) where applicable, with Author and Reviewer models named (per `ai_guidelines.md` Review Composition). Note any layer that did not run and why.
+- Review layers recorded: internal review (R1), cross-provider review (R2), automated PR review (R3) where applicable, with Author and Reviewer models named, the backend that actually reviewed, and the cross-provider state (`verified`, `declared` or `unknown`) per `r2_gate.md`. Note any layer that did not run and why.
 
 ## Issue Model
 
