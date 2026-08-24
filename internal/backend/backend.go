@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/LukeSantossz/my-framework/internal/report"
+	"github.com/LukeSantossz/my-framework/internal/usage"
 )
 
 // withOverrides applies a backend's own model and effort. A chain can mix a
@@ -307,12 +308,20 @@ func (a *API) Review(ctx context.Context, req Request) (report.Result, error) {
 		return report.Result{}, &Unavailable{Backend: a.BackendName, Reason: err.Error()}
 	}
 
+	// Accounting never fails a review: if the figure cannot be determined the
+	// review still stands and the accounting says it does not know.
+	consumed := a.readUsage(raw)
+	if !consumed.Known {
+		consumed = usage.Estimate(len(systemPrompt)+len(req.Instructions)+len(req.Diff), len(content))
+	}
+
 	result := report.Result{
 		Backend:    a.BackendName,
 		Provider:   a.ProviderName,
 		Model:      req.Model,
 		Truncated:  req.Truncated,
 		Incomplete: incomplete,
+		Usage:      consumed,
 	}
 	findings, parseErr := report.ParseFindings(content)
 	if parseErr != nil {
@@ -321,6 +330,7 @@ func (a *API) Review(ctx context.Context, req Request) (report.Result, error) {
 		unstructured := report.Unstructured(a.BackendName, a.ProviderName, req.Model, content)
 		unstructured.Truncated = req.Truncated
 		unstructured.Incomplete = incomplete
+		unstructured.Usage = consumed
 		return unstructured, nil
 	}
 	result.Findings = findings
@@ -529,4 +539,18 @@ func (e *External) Describe(Request) string {
 func (e *External) Review(context.Context, Request) (report.Result, error) {
 	return report.Result{}, &Unavailable{Backend: e.BackendName,
 		Reason: "declared as external: it runs outside this tool, so no review was observed here"}
+}
+
+// readUsage parses the usage object for this backend's wire shape. Layouts and
+// terminology differ between vendors, which is why this is per-shape rather
+// than one parser trying to satisfy all of them.
+func (a *API) readUsage(raw []byte) usage.Usage {
+	switch a.Shape {
+	case WireAnthropic:
+		return usage.ParseAnthropic(raw)
+	case WireGoogle:
+		return usage.ParseGoogle(raw)
+	default:
+		return usage.ParseOpenAI(raw)
+	}
 }

@@ -38,7 +38,7 @@ func runDoctor(env Env) int {
 	default:
 		fmt.Fprintf(env.Stdout, "  hooks      not wired; run `mf hooks install`\n")
 	}
-	if lock, ok := activate.ReadLock(env.RepoRoot); ok {
+	if lock, ok := activate.ReadLock(env.RepoRoot); ok && lock.FrameworkVersion != "" {
 		fmt.Fprintf(env.Stdout, "  adopted    framework %s\n", lock.FrameworkVersion)
 	} else {
 		fmt.Fprintf(env.Stdout, "  adopted    no %s; run `mf init`\n", activate.LockFileName)
@@ -102,6 +102,19 @@ func runDoctor(env Env) int {
 	}
 	if !printed {
 		fmt.Fprintln(env.Stdout, "  none configured")
+	}
+
+	// Spend, and whether a pinned model still matches the configuration.
+	fmt.Fprintln(env.Stdout, "\nusage")
+	if store := usageStore(env); store.Path != "" {
+		totals := store.Read()
+		fmt.Fprintf(env.Stdout, "  total      %d run(s): %s\n", totals.Runs, totals.Usage)
+		if line, ok := costLine(cfg, totals.Usage); ok {
+			fmt.Fprintf(env.Stdout, "  %s\n", line)
+		}
+	}
+	for _, line := range modelDriftLines(env, cfg) {
+		fmt.Fprintf(env.Stdout, "  models     %s\n", line)
 	}
 
 	// Standards drift.

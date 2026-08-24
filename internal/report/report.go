@@ -9,6 +9,8 @@ import (
 	"fmt"
 	"io"
 	"strings"
+
+	"github.com/LukeSantossz/my-framework/internal/usage"
 )
 
 type Category string
@@ -68,6 +70,17 @@ type Result struct {
 
 	// Unstructured says the findings are prose the backend could not classify.
 	Unstructured bool
+
+	// Usage is what this review consumed, in disjoint buckets.
+	Usage usage.Usage
+}
+
+// WithUsage attaches what the review consumed. It is a separate step because
+// accounting is observation: a review whose usage could not be determined still
+// stands, and losing it because the observation failed inverts their importance.
+func (r Result) WithUsage(u usage.Usage) Result {
+	r.Usage = u
+	return r
 }
 
 func (r Result) HasBlocking() bool {
@@ -186,6 +199,9 @@ func Render(w io.Writer, r Result) {
 	if r.Unstructured {
 		fmt.Fprintln(w, "  note: this backend cannot report per-finding structure; its output is recorded verbatim.")
 	}
+	// Printed before the findings and before the early return, so a clean review
+	// still accounts for what it cost.
+	fmt.Fprintf(w, "  usage: %s\n", r.Usage)
 	if len(r.Findings) == 0 {
 		fmt.Fprintln(w, "  no findings reported.")
 		return

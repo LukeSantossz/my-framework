@@ -8,11 +8,14 @@
 package activate
 
 import (
+	"bytes"
 	"fmt"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 
+	"github.com/BurntSushi/toml"
 	"github.com/LukeSantossz/my-framework/internal/config"
 	"github.com/LukeSantossz/my-framework/internal/vcs"
 )
@@ -67,10 +70,19 @@ func UninstallHooks(root string) error {
 	return vcs.Open(root).ConfigUnsetLocal("core.hooksPath")
 }
 
+// PinnedModel records which model id a backend resolved to, and when. It turns
+// a vendor retiring or silently re-pointing an id from a mystery into a
+// reported difference.
+type PinnedModel struct {
+	Model    string `toml:"model"`
+	PinnedOn string `toml:"pinned_on"`
+}
+
 // Lock is the adopted-version record.
 type Lock struct {
-	Version          int    `toml:"version"`
-	FrameworkVersion string `toml:"framework_version"`
+	Version          int                    `toml:"version"`
+	FrameworkVersion string                 `toml:"framework_version"`
+	Models           map[string]PinnedModel `toml:"models"`
 }
 
 func LockPath(root string) string { return filepath.Join(root, LockFileName) }
@@ -81,22 +93,82 @@ func ReadLock(root string) (Lock, bool) {
 		return Lock{}, false
 	}
 	lock := Lock{Version: 1}
-	for _, line := range strings.Split(string(data), "\n") {
-		key, value, found := strings.Cut(line, "=")
-		if !found {
-			continue
-		}
-		if strings.TrimSpace(key) == "framework_version" {
-			lock.FrameworkVersion = strings.Trim(strings.TrimSpace(value), `"`)
-		}
+	if _, err := toml.Decode(string(data), &lock); err != nil {
+		return Lock{}, false
 	}
-	return lock, lock.FrameworkVersion != ""
+	// Existence is keyed on the file parsing, not on any one field. `mf models
+	// pin` before `mf init` writes a lock that legitimately carries pins and no
+	// adopted version, and reporting that as "no lock" loses the pins.
+	return lock, true
 }
 
+const lockHeader = "# What this repository adopted, and what its reviewers resolved to.\n" +
+	"# Written by `mf init` and `mf models pin`; compared by `mf upgrade` and `mf doctor`.\n" +
+	"# A pinned model that no longer matches the configuration is reported, never\n" +
+	"# silently corrected: which side is right is a decision, not a default.\n"
+
+// WriteLock persists the record, preserving whatever it already held. A command
+// that writes one field must not drop the others.
 func WriteLock(root, frameworkVersion string) error {
-	body := fmt.Sprintf("# Which framework version this repository adopted.\n"+
-		"# Written by `mf init`; compared by `mf upgrade`.\nversion = 1\nframework_version = %q\n", frameworkVersion)
-	return os.WriteFile(LockPath(root), []byte(body), 0o644)
+	lock, _ := ReadLock(root)
+	lock.Version = 1
+	if frameworkVersion != "" {
+		lock.FrameworkVersion = frameworkVersion
+	}
+	return writeLockFile(root, lock)
+}
+
+// PinModels records the model ids the configuration currently resolves to.
+func PinModels(root string, resolved map[string]string, today string) (Lock, error) {
+	lock, _ := ReadLock(root)
+	lock.Version = 1
+	if lock.Models == nil {
+		lock.Models = map[string]PinnedModel{}
+	}
+	for backend, model := range resolved {
+		if model == "" {
+			continue
+		}
+		lock.Models[backend] = PinnedModel{Model: model, PinnedOn: today}
+	}
+	return lock, writeLockFile(root, lock)
+}
+
+// ModelDrift reports where the configuration and the pin disagree.
+type ModelDrift struct {
+	Backend    string
+	Pinned     string
+	Configured string
+	PinnedOn   string
+}
+
+func ComparePins(lock Lock, resolved map[string]string) []ModelDrift {
+	var drift []ModelDrift
+	names := make([]string, 0, len(lock.Models))
+	for name := range lock.Models {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	for _, name := range names {
+		pin := lock.Models[name]
+		current, present := resolved[name]
+		if !present || current == pin.Model {
+			continue
+		}
+		drift = append(drift, ModelDrift{
+			Backend: name, Pinned: pin.Model, Configured: current, PinnedOn: pin.PinnedOn,
+		})
+	}
+	return drift
+}
+
+func writeLockFile(root string, lock Lock) error {
+	var buf bytes.Buffer
+	buf.WriteString(lockHeader)
+	if err := toml.NewEncoder(&buf).Encode(lock); err != nil {
+		return err
+	}
+	return os.WriteFile(LockPath(root), buf.Bytes(), 0o644)
 }
 
 // Step is one thing init did or declined to do.

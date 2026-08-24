@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"github.com/LukeSantossz/my-framework/internal/config"
 )
@@ -24,9 +25,12 @@ type Env struct {
 	MachinePath string
 	Getenv      func(string) string
 	GitConfig   func(string) (string, bool)
+
+	// Now is injected so a test can assert on a recorded date.
+	Now func() time.Time
 }
 
-const usage = `mf — development standards harness
+const usageText = `mf — development standards harness
 
 Usage:
   mf config get <key>              print one resolved value and the layer it came from
@@ -67,7 +71,7 @@ func Run(env Env) int {
 	}
 
 	if len(env.Args) == 0 {
-		fmt.Fprint(env.Stdout, usage)
+		fmt.Fprint(env.Stdout, usageText)
 		return 0
 	}
 
@@ -90,11 +94,15 @@ func Run(env Env) int {
 		return runAuthor(env, env.Args[1:])
 	case "agents":
 		return runAgents(env, env.Args[1:])
+	case "models":
+		return runModels(env, env.Args[1:])
+	case "usage":
+		return runUsage(env, env.Args[1:])
 	case "help", "-h", "--help":
-		fmt.Fprint(env.Stdout, usage)
+		fmt.Fprint(env.Stdout, usageText)
 		return 0
 	default:
-		fmt.Fprintf(env.Stderr, "mf: unknown command %q\n\n%s", env.Args[0], usage)
+		fmt.Fprintf(env.Stderr, "mf: unknown command %q\n\n%s", env.Args[0], usageText)
 		return 2
 	}
 }
@@ -142,7 +150,7 @@ func (e Env) configOptions() config.Options {
 
 func runConfig(env Env, args []string) int {
 	if len(args) == 0 {
-		fmt.Fprint(env.Stderr, usage)
+		fmt.Fprint(env.Stderr, usageText)
 		return 2
 	}
 	switch args[0] {

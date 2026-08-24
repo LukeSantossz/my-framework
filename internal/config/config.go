@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/BurntSushi/toml"
+	"github.com/LukeSantossz/my-framework/internal/usage"
 )
 
 // ProjectFileName is the committed policy file at the repository root.
@@ -169,6 +170,11 @@ type MachineFile struct {
 	// ai_guidelines.md forbids. Until an adopter fills it in, the
 	// cross-provider state is `declared` at best.
 	Fingerprints map[string]string `toml:"fingerprints"`
+
+	// Prices is the user-supplied cost table. None ships: prices change faster
+	// than releases, and a stale price presented as cost is worse than no cost
+	// at all. Without it, usage is reported in tokens and nothing else.
+	Prices map[string]usage.Price `toml:"prices"`
 }
 
 // Problem is one validation failure. Every problem found is reported, because a

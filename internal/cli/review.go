@@ -196,6 +196,11 @@ func runReview(env Env, args []string) int {
 	}
 
 	report.Render(env.Stdout, out.Result)
+	if store := usageStore(env); store.Path != "" {
+		// Accounting never fails a review: a total that could not be written is
+		// a lost observation, not a lost review.
+		_ = store.Add(out.Result.Usage)
+	}
 	if out.CrossProvider != role.StateNA {
 		fmt.Fprintf(env.Stdout, "Cross-provider: %s (%s)\n", out.CrossProvider, out.CrossProviderNote)
 		if !out.CrossProvider.Satisfies() {
