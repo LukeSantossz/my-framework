@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestDoctorReportsAndChangesNothing(t *testing.T) {
@@ -198,5 +199,79 @@ func TestCheckFailsOnInstructionFileDrift(t *testing.T) {
 	}
 	if !strings.Contains(out2.String(), "mf agents sync") {
 		t.Errorf("output does not say how to fix it:\n%s", out2.String())
+	}
+}
+
+func TestModelsPinRecordsTheDateAndDoctorReportsDrift(t *testing.T) {
+	project := "version = 1\n\n[backends.codex]\nkind = \"cli\"\nprovider = \"openai\"\ncommand = \"codex\"\nmodel = \"m1\"\n"
+	root := gitRepo(t, project)
+
+	e, out, _ := reviewEnv(t, root, "models", "pin")
+	e.Now = func() time.Time { return time.Date(2026, 8, 24, 0, 0, 0, 0, time.UTC) }
+	if code := Run(e); code != 0 {
+		t.Fatalf("pin exit %d", code)
+	}
+	if !strings.Contains(out.String(), "2026-08-24") {
+		t.Errorf("a pin with no date cannot be compared to anything later:\n%s", out.String())
+	}
+	if !strings.Contains(out.String(), "unverified") {
+		t.Errorf("pinning must not imply a vendor confirmed the id:\n%s", out.String())
+	}
+
+	// Change the configured model; the pin must now read as drift.
+	if err := os.WriteFile(filepath.Join(root, ".framework.toml"),
+		[]byte(strings.Replace(project, "m1", "m2", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e2, out2, _ := reviewEnv(t, root, "models", "list")
+	if code := Run(e2); code != 0 {
+		t.Fatalf("list exit %d", code)
+	}
+	if !strings.Contains(out2.String(), "DRIFT") {
+		t.Errorf("a changed model id did not report as drift:\n%s", out2.String())
+	}
+
+	e3, out3, _ := reviewEnv(t, root, "doctor")
+	Run(e3)
+	if !strings.Contains(out3.String(), "m1") || !strings.Contains(out3.String(), "m2") {
+		t.Errorf("doctor does not report the pin against the configuration:\n%s", out3.String())
+	}
+}
+
+func TestUsageShowsAndResets(t *testing.T) {
+	root := gitRepo(t, "version = 1\n")
+	e, out, _ := reviewEnv(t, root, "usage")
+	if code := Run(e); code != 0 {
+		t.Fatalf("usage exit %d", code)
+	}
+	if !strings.Contains(out.String(), "runs:  0") {
+		t.Errorf("a fresh total should report no runs:\n%s", out.String())
+	}
+	e2, out2, _ := reviewEnv(t, root, "usage", "reset")
+	if code := Run(e2); code != 0 {
+		t.Fatalf("reset exit %d", code)
+	}
+	if !strings.Contains(out2.String(), "reset") {
+		t.Errorf("reset said nothing:\n%s", out2.String())
+	}
+}
+
+func TestUsageRejectsAnUnknownAction(t *testing.T) {
+	root := gitRepo(t, "version = 1\n")
+	e, _, errOut := reviewEnv(t, root, "usage", "spend")
+	if code := Run(e); code != 2 {
+		t.Errorf("exit %d, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "spend") {
+		t.Errorf("stderr %q does not name the bad action", errOut.String())
+	}
+}
+
+func TestDoctorReportsNoPinsAsSomethingToDo(t *testing.T) {
+	root := gitRepo(t, "version = 1\n")
+	e, out, _ := reviewEnv(t, root, "doctor")
+	Run(e)
+	if !strings.Contains(out.String(), "no models pinned") {
+		t.Errorf("doctor does not mention that nothing is pinned:\n%s", out.String())
 	}
 }

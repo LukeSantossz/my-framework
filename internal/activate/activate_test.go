@@ -230,3 +230,60 @@ func TestInitRecordsWhenThereIsNoHooksDirectoryRatherThanFailing(t *testing.T) {
 		t.Errorf("message %q does not say why", hooks.Message)
 	}
 }
+
+func TestPinModelsRecordsWhatTheConfigurationResolvedTo(t *testing.T) {
+	root := repo(t, true)
+	if err := WriteLock(root, "1.2.3"); err != nil {
+		t.Fatal(err)
+	}
+	lock, err := PinModels(root, map[string]string{"codex": "gpt-5.6-terra", "empty": ""}, "2026-08-24")
+	if err != nil {
+		t.Fatalf("PinModels: %v", err)
+	}
+	if lock.Models["codex"].Model != "gpt-5.6-terra" {
+		t.Errorf("pin = %+v", lock.Models["codex"])
+	}
+	if lock.Models["codex"].PinnedOn != "2026-08-24" {
+		t.Error("a pin with no date cannot be compared against anything later")
+	}
+	if _, present := lock.Models["empty"]; present {
+		t.Error("a backend with no resolved model was pinned to nothing")
+	}
+	// The adopted version must survive a write that only touches models.
+	reread, ok := ReadLock(root)
+	if !ok || reread.FrameworkVersion != "1.2.3" {
+		t.Errorf("writing a pin dropped the adopted version: %+v", reread)
+	}
+	if reread.Models["codex"].Model != "gpt-5.6-terra" {
+		t.Errorf("the pin did not survive the round trip: %+v", reread.Models)
+	}
+}
+
+func TestWriteLockPreservesPinsAlreadyRecorded(t *testing.T) {
+	root := repo(t, true)
+	if _, err := PinModels(root, map[string]string{"codex": "m1"}, "2026-08-24"); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteLock(root, "2.0.0"); err != nil {
+		t.Fatal(err)
+	}
+	lock, _ := ReadLock(root)
+	if lock.Models["codex"].Model != "m1" {
+		t.Error("recording a version dropped the pins; a command that writes one field must not drop the others")
+	}
+}
+
+func TestComparePinsReportsOnlyRealDisagreement(t *testing.T) {
+	lock := Lock{Models: map[string]PinnedModel{
+		"codex":  {Model: "gpt-5.6-terra", PinnedOn: "2026-08-24"},
+		"gemini": {Model: "g-1", PinnedOn: "2026-08-24"},
+		"gone":   {Model: "x", PinnedOn: "2026-08-24"},
+	}}
+	drift := ComparePins(lock, map[string]string{"codex": "gpt-5.6-terra", "gemini": "g-2"})
+	if len(drift) != 1 {
+		t.Fatalf("drift = %+v, want exactly the changed one", drift)
+	}
+	if drift[0].Backend != "gemini" || drift[0].Pinned != "g-1" || drift[0].Configured != "g-2" {
+		t.Errorf("drift = %+v", drift[0])
+	}
+}

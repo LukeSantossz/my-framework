@@ -422,3 +422,48 @@ func TestAnExternalBackendIsRecordedButNeverRunHere(t *testing.T) {
 		t.Errorf("describe does not state the weaker claim: %q", b.Describe(req()))
 	}
 }
+
+func TestReportsMeasuredUsageWhenTheEndpointReturnsIt(t *testing.T) {
+	body := `{"choices":[{"message":{"content":"{\"findings\":[]}"},"finish_reason":"stop"}],
+	 "usage":{"prompt_tokens":1000,"completion_tokens":200,"prompt_tokens_details":{"cached_tokens":700}}}`
+	srv := openAIServer(t, 200, body)
+	b := &API{BackendName: "d", Shape: WireOpenAI, Endpoint: srv.URL}
+	res, err := b.Review(context.Background(), req())
+	if err != nil {
+		t.Fatalf("Review: %v", err)
+	}
+	if !res.Usage.Known || res.Usage.Estimated {
+		t.Fatalf("usage = %+v, want measured", res.Usage)
+	}
+	if res.Usage.CacheReadTokens != 700 || res.Usage.InputTokens != 300 {
+		t.Errorf("buckets not disjoint: %+v", res.Usage)
+	}
+}
+
+func TestFallsBackToAnEstimateWhenTheEndpointReportsNoUsage(t *testing.T) {
+	// The estimate is marked as one everywhere it appears. Reporting zero as a
+	// measured value would be a fabricated number.
+	srv := openAIServer(t, 200, `{"choices":[{"message":{"content":"{\"findings\":[]}"}}]}`)
+	b := &API{BackendName: "d", Shape: WireOpenAI, Endpoint: srv.URL}
+	res, _ := b.Review(context.Background(), req())
+	if !res.Usage.Known {
+		t.Fatal("no usage at all; an estimate was expected")
+	}
+	if !res.Usage.Estimated {
+		t.Error("the fallback figure is not marked as an estimate")
+	}
+}
+
+func TestUsageSurvivesAnUnparseableAnswer(t *testing.T) {
+	body := `{"choices":[{"message":{"content":"I could not produce JSON"}}],
+	 "usage":{"prompt_tokens":10,"completion_tokens":5}}`
+	srv := openAIServer(t, 200, body)
+	b := &API{BackendName: "d", Shape: WireOpenAI, Endpoint: srv.URL}
+	res, _ := b.Review(context.Background(), req())
+	if !res.Unstructured {
+		t.Fatal("expected the prose path")
+	}
+	if !res.Usage.Known {
+		t.Error("usage was lost on the prose path; the call still cost what it cost")
+	}
+}
