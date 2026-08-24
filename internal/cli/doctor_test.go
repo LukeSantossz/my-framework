@@ -147,3 +147,56 @@ func TestUpgradeReportsDifferencesAndAppliesNothing(t *testing.T) {
 		t.Error("upgrade wrote standards into the repository; it only reports")
 	}
 }
+
+func TestAgentsSyncThenCheckPasses(t *testing.T) {
+	project := "version = 1\n\n[agents.claude]\nfile = \"CLAUDE.md\"\nroles = [\"shared\"]\n"
+	root := gitRepo(t, project)
+	if err := os.MkdirAll(filepath.Join(root, "docs", "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := "# Instructions\n\nPreamble.\n\n<!-- mf:role shared -->\n## Binding\n\nRead the standards.\n"
+	if err := os.WriteFile(filepath.Join(root, "docs", "agents", "instructions.md"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e, _, errOut := reviewEnv(t, root, "agents", "check")
+	if code := Run(e); code == 0 {
+		t.Errorf("check passed before any sync: %s", errOut.String())
+	}
+
+	e2, _, errOut2 := reviewEnv(t, root, "agents", "sync")
+	if code := Run(e2); code != 0 {
+		t.Fatalf("sync exit %d: %s", code, errOut2.String())
+	}
+
+	e3, out3, _ := reviewEnv(t, root, "agents", "check")
+	if code := Run(e3); code != 0 {
+		t.Errorf("check failed right after sync: %s", out3.String())
+	}
+}
+
+func TestCheckFailsOnInstructionFileDrift(t *testing.T) {
+	// The generated files are only a single source if editing the output is
+	// caught; otherwise they are the old duplication with extra steps.
+	project := "version = 1\n\n[agents.claude]\nfile = \"CLAUDE.md\"\nroles = [\"shared\"]\n"
+	root := gitRepo(t, project)
+	if err := os.MkdirAll(filepath.Join(root, "docs", "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := "# Instructions\n\n<!-- mf:role shared -->\n## Binding\n\nRead the standards.\n"
+	if err := os.WriteFile(filepath.Join(root, "docs", "agents", "instructions.md"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e, _, _ := reviewEnv(t, root, "agents", "sync")
+	Run(e)
+	if err := os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte("# hand edited\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e2, out2, _ := reviewEnv(t, root, "check", "agents")
+	if code := Run(e2); code == 0 {
+		t.Errorf("mf check passed with a drifted instruction file:\n%s", out2.String())
+	}
+	if !strings.Contains(out2.String(), "mf agents sync") {
+		t.Errorf("output does not say how to fix it:\n%s", out2.String())
+	}
+}
