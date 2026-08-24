@@ -77,6 +77,11 @@ the submodule consumer notices nothing.
   - The wall-clock budget and diff cap already measured for the `openai` path, carried
     over with their current defaults.
   - The `scripts/r2-review.sh` shim and its compatibility tests.
+  - Retiring the `unbuilt_behavior_is_declared_as_such` guard and the `no executor yet`
+    disclosures it pins in `r2_gate.md` and `ai_guidelines.md`. Those statements become
+    false the moment this slice lands, and a guard that outlives its purpose forces the
+    documents to keep asserting something untrue — a lie enforced by CI. Retiring it is
+    part of this work, not later cleanup.
 
 - Does NOT include:
   - Writing the Author Declaration. Reading it is here; `mf author declare` is its own
@@ -127,6 +132,7 @@ Compatibility
 - `the_shim_execs_the_binary_when_present_and_runs_the_shell_path_when_absent`
 - `honors_the_legacy_skip_and_base_environment_variables`
 - `keeps_the_reviewed_by_output_line_the_pull_request_record_quotes`
+- `the_unbuilt_executor_disclosure_and_its_guard_are_both_gone`
 
 ## Reproducibility
 
