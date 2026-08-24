@@ -981,6 +981,119 @@ else
   no "reviewer_switch_adr_restored" "missing:$reviewer_adr_missing"
 fi
 
+# r1_is_a_chain_not_the_superpowers_pass (guard: docs/adr/0010 removed the
+# same-provider requirement from R1 and made the provider constraint a property
+# each backend declares. A layer defined by one executor is the failure spec 0013
+# fixed for R2: when that executor is absent the layer silently stops existing
+# while still reporting success, which is what R1 does today.
+#
+# Pinned in both directions. Absence alone would pass on a tree that deleted R1
+# rather than redefined it, so each document is also held to still stating the
+# new claim. The clauses below ARE the claims, not decoration: reword one and the
+# guard must be updated deliberately, which is the point.
+R1_AI_DOC="$REPO_ROOT/docs/standards/ai_guidelines.md"
+R1_GATE_DOC="$REPO_ROOT/docs/standards/r2_gate.md"
+R1_SKILLS_DOC="$REPO_ROOT/docs/standards/skills_guidelines.md"
+R1_INDEX_DOC="$REPO_ROOT/docs/standards/INDEX.md"
+R1_CONTEXT_DOC="$REPO_ROOT/CONTEXT.md"
+r1_chain_missing=""
+
+# The retired definition must be gone from every document that carried it.
+for r1_file in "$R1_AI_DOC" "$R1_GATE_DOC" "$R1_INDEX_DOC" "$R1_CONTEXT_DOC" \
+  "$REPO_ROOT/docs/standards/github.md" "$REPO_ROOT/.github/PULL_REQUEST_TEMPLATE.md"; do
+  grep -qF 'internal Superpowers review' "$r1_file" 2>/dev/null \
+    && r1_chain_missing="$r1_chain_missing retired_definition_in:$(basename "$r1_file")"
+  grep -qF 'two-stage subagent' "$r1_file" 2>/dev/null \
+    && r1_chain_missing="$r1_chain_missing retired_definition_in:$(basename "$r1_file")"
+done
+
+# R1 is a chain, and Superpowers is one backend of it rather than the layer.
+grep -qF 'satisfied by a chain of review backends' "$R1_AI_DOC" 2>/dev/null \
+  || r1_chain_missing="$r1_chain_missing chain_claim_missing_from:ai_guidelines.md"
+grep -qF 'one backend of the R1 chain' "$R1_SKILLS_DOC" 2>/dev/null \
+  || r1_chain_missing="$r1_chain_missing backend_claim_missing_from:skills_guidelines.md"
+grep -qF 'chain of review backends' "$R1_INDEX_DOC" 2>/dev/null \
+  || r1_chain_missing="$r1_chain_missing chain_claim_missing_from:INDEX.md"
+
+# The glossary must no longer define R1 by the provider it shares with the Author.
+grep -qF 'same-Provider review' "$R1_CONTEXT_DOC" 2>/dev/null \
+  && r1_chain_missing="$r1_chain_missing same_provider_definition_in:CONTEXT.md"
+
+if [ -z "$r1_chain_missing" ]; then
+  ok "r1_is_a_chain_not_the_superpowers_pass"
+else
+  no "r1_is_a_chain_not_the_superpowers_pass" "R1 is still defined by one executor, or the chain claim was dropped:$r1_chain_missing"
+fi
+
+# cross_provider_state_is_three_valued (guard: docs/adr/0007 made the Author a
+# recorded property of the change and gave the cross-provider claim three states.
+# Two states would collapse "nobody recorded it" into "satisfied", which is the
+# assumption the ADR exists to remove — an unverified claim reported as an
+# enforced one is worse than no claim, because the PR reader trusts it.
+#
+# The two documents must agree: a state named in one and absent from the other
+# is a contradiction between standards, which is what the deprecated-wording
+# check exists to catch elsewhere.
+cross_state_missing=""
+for cs_file in "$R1_AI_DOC" "$R1_GATE_DOC"; do
+  for cs_state in 'verified' 'declared' 'unknown'; do
+    grep -qF "\`$cs_state\`" "$cs_file" 2>/dev/null \
+      || cross_state_missing="$cross_state_missing ${cs_state}_missing_from:$(basename "$cs_file")"
+  done
+done
+grep -qF 'does not satisfy R2' "$R1_GATE_DOC" 2>/dev/null \
+  || cross_state_missing="$cross_state_missing unknown_treated_as_satisfied_in:r2_gate.md"
+grep -qF 'an attestation rather than an execution' "$R1_GATE_DOC" 2>/dev/null \
+  || cross_state_missing="$cross_state_missing in_session_honesty_missing_from:r2_gate.md"
+grep -qF 'Author Declaration' "$R1_CONTEXT_DOC" 2>/dev/null \
+  || cross_state_missing="$cross_state_missing term_missing_from:CONTEXT.md"
+grep -qF 'Cross-Provider State' "$R1_CONTEXT_DOC" 2>/dev/null \
+  || cross_state_missing="$cross_state_missing term_missing_from:CONTEXT.md"
+if [ -z "$cross_state_missing" ]; then
+  ok "cross_provider_state_is_three_valued"
+else
+  no "cross_provider_state_is_three_valued" "the three states are not stated consistently:$cross_state_missing"
+fi
+
+# pr_record_carries_the_cross_provider_state (guard: a state the runner computes
+# and the Pull Request never shows is a state nobody acts on. The review-layers
+# record is the one place the difference between an enforced and an asserted
+# cross-provider claim changes a human decision, so both the standard and the
+# template that implements it must carry it, and they must stay in step with
+# each other.
+PR_GITHUB_DOC="$REPO_ROOT/docs/standards/github.md"
+PR_TEMPLATE="$REPO_ROOT/.github/PULL_REQUEST_TEMPLATE.md"
+pr_state_missing=""
+for pr_file in "$PR_GITHUB_DOC" "$PR_TEMPLATE"; do
+  [ -f "$pr_file" ] || { pr_state_missing="$pr_state_missing absent:$(basename "$pr_file")"; continue; }
+  grep -qF 'cross-provider state' "$pr_file" 2>/dev/null \
+    || pr_state_missing="$pr_state_missing state_missing_from:$(basename "$pr_file")"
+  grep -qF 'Review layers recorded' "$pr_file" 2>/dev/null \
+    || pr_state_missing="$pr_state_missing record_dropped_from:$(basename "$pr_file")"
+done
+if [ -z "$pr_state_missing" ]; then
+  ok "pr_record_carries_the_cross_provider_state"
+else
+  no "pr_record_carries_the_cross_provider_state" "the PR review-layers record is missing the state:$pr_state_missing"
+fi
+
+# unbuilt_behavior_is_declared_as_such (guard: between this slice and the runner
+# slice the standards describe a runner nothing performs. That is this project's
+# own Gap in miniature, and the mitigation the spec requires is that the
+# documents say so plainly — the way skills_guidelines.md already declares an
+# absent capability and its fallback — rather than implying coverage that does
+# not exist.
+unbuilt_missing=""
+grep -qF 'no executor yet' "$R1_GATE_DOC" 2>/dev/null \
+  || unbuilt_missing="$unbuilt_missing disclosure_missing_from:r2_gate.md"
+grep -qF 'no executor yet' "$R1_AI_DOC" 2>/dev/null \
+  || unbuilt_missing="$unbuilt_missing disclosure_missing_from:ai_guidelines.md"
+if [ -z "$unbuilt_missing" ]; then
+  ok "unbuilt_behavior_is_declared_as_such"
+else
+  no "unbuilt_behavior_is_declared_as_such" "the standards describe an executor that does not exist without saying so:$unbuilt_missing"
+fi
+
 # passes_on_current_tree (the real docs/standards must be consistent)
 out=$(bash "$CHECK" 2>&1); code=$?
 if [ "$code" -eq 0 ]; then
