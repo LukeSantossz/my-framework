@@ -1,0 +1,28 @@
+diff --git a/docs/usage.md b/docs/usage.md
+index 1111111..2222222 100644
+--- a/docs/usage.md
++++ b/docs/usage.md
+@@ -10,3 +10,7 @@ Run the checks with:
+ ```sh
+ mf check
+ ```
++
++To fail on warnings as well, pass `--strict`:
++
++```sh
++mf check --strict
++```
+diff --git a/internal/cli/check.go b/internal/cli/check.go
+index 3333333..4444444 100644
+--- a/internal/cli/check.go
++++ b/internal/cli/check.go
+@@ -14,7 +14,7 @@ func runCheck(env Env, args []string) int {
+ 	var only []string
+ 	for _, a := range args {
+ 		switch a {
+ 		case "spec", "commit", "branch", "docs", "records", "agents":
+ 			only = append(only, a)
+ 		default:
+ 			return 2
+ 		}
+ 	}

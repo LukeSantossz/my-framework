@@ -1,0 +1,7 @@
+version = 1
+name = "the documented flag does not exist in the command"
+
+[[defects]]
+category = "invented-symbol"
+file = "docs/usage.md"
+terms = ["does not exist", "no such flag", "invented", "unverified", "--strict", "not a flag"]

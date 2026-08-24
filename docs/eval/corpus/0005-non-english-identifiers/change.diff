@@ -1,0 +1,22 @@
+diff --git a/internal/pedido/pedido.go b/internal/pedido/pedido.go
+new file mode 100644
+index 0000000..1111111
+--- /dev/null
++++ b/internal/pedido/pedido.go
+@@ -0,0 +1,12 @@
++package pedido
++
++// Pedido representa um pedido do cliente.
++type Pedido struct {
++	Codigo     string
++	Quantidade int
++}
++
++// CalcularTotal soma o valor dos itens.
++func CalcularTotal(itens []Pedido) int {
++	total := 0
++	for _, item := range itens {
++		total += item.Quantidade
++	}
++	return total
++}

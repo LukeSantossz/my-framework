@@ -53,6 +53,9 @@ Usage:
   mf upgrade                       compare standards against this build; applies nothing
   mf author declare --provider <name> [--model <id>]
   mf agents sync|check              generate the vendor instruction files from one source
+  mf models pin|list                record and compare the model ids in use
+  mf usage [show|reset]             tokens spent, in disjoint buckets
+  mf eval [--role r2] [--backend n]  measure a backend against planted defects
 `
 
 // Run dispatches a command and returns the process exit code.
@@ -98,6 +101,8 @@ func Run(env Env) int {
 		return runModels(env, env.Args[1:])
 	case "usage":
 		return runUsage(env, env.Args[1:])
+	case "eval":
+		return runEval(env, env.Args[1:])
 	case "help", "-h", "--help":
 		fmt.Fprint(env.Stdout, usageText)
 		return 0

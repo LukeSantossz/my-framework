@@ -1,0 +1,7 @@
+version = 1
+name = "identifiers and comments written in another language"
+
+[[defects]]
+category = "convention"
+file = "internal/pedido/pedido.go"
+terms = ["english", "language", "identifier", "naming", "convention"]

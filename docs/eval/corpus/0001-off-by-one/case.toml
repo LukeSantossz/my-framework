@@ -1,0 +1,8 @@
+version = 1
+name = "the loop bound includes one element past the end"
+
+[[defects]]
+category = "correctness"
+file = "internal/counter/counter.go"
+line = 9
+terms = ["off by one", "off-by-one", "out of range", "bound", "<=", "index"]
