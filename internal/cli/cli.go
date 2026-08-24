@@ -34,6 +34,10 @@ Usage:
   mf config set <key> <value> [--machine|--project]
   mf config validate               load the configuration and report every problem
   mf config migrate                take over the deprecated r2.* git-config keys
+
+  mf review --role <r1|r2|r3> [--base <ref>] [--dry-run]
+                                   walk the role's backend chain and report
+                                   which backend actually reviewed
 `
 
 // Run dispatches a command and returns the process exit code.
@@ -59,6 +63,8 @@ func Run(env Env) int {
 	switch env.Args[0] {
 	case "config":
 		return runConfig(env, env.Args[1:])
+	case "review":
+		return runReview(env, env.Args[1:])
 	case "help", "-h", "--help":
 		fmt.Fprint(env.Stdout, usage)
 		return 0

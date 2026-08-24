@@ -69,7 +69,7 @@ with a defined hierarchy so none is duplicated or skipped:
 
 When no second-provider tool is available, R1 plus the adjudication stage of CRURA (per `crura_method.md`) stand in for R2; note its absence in the PR. It is the adjudication that substitutes, not the line-by-line read, because adjudication is the part that runs unconditionally.
 
-Layer R1 has no executor yet: the chain is specified here and the runner that walks it is not built, so until it is, R1 is performed by hand against this file and the PR records that. A layer whose executor is absent is declared as such rather than assumed to have run.
+The chain is walked by `mf review --role <r1|r2|r3>`, which takes the first backend that is actually available and names it. A role whose every backend is unavailable is reported as not having run, and that absence belongs in the PR: a layer that did not run is never the same as a layer that found nothing.
 
 At review time an implemented change may also carry a transient CRUX explainer (see `crux_method.md`) that feeds R1 and the CRURA Review. It is an aid, not a review layer, and never blocks a ship.
 

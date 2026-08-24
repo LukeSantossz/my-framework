@@ -1077,22 +1077,17 @@ else
   no "pr_record_carries_the_cross_provider_state" "the PR review-layers record is missing the state:$pr_state_missing"
 fi
 
-# unbuilt_behavior_is_declared_as_such (guard: between this slice and the runner
-# slice the standards describe a runner nothing performs. That is this project's
-# own Gap in miniature, and the mitigation the spec requires is that the
-# documents say so plainly — the way skills_guidelines.md already declares an
-# absent capability and its fallback — rather than implying coverage that does
-# not exist.
-unbuilt_missing=""
-grep -qF 'no executor yet' "$R1_GATE_DOC" 2>/dev/null \
-  || unbuilt_missing="$unbuilt_missing disclosure_missing_from:r2_gate.md"
-grep -qF 'no executor yet' "$R1_AI_DOC" 2>/dev/null \
-  || unbuilt_missing="$unbuilt_missing disclosure_missing_from:ai_guidelines.md"
-if [ -z "$unbuilt_missing" ]; then
-  ok "unbuilt_behavior_is_declared_as_such"
-else
-  no "unbuilt_behavior_is_declared_as_such" "the standards describe an executor that does not exist without saying so:$unbuilt_missing"
-fi
+# unbuilt_behavior_is_declared_as_such was retired here, with the slice that
+# built the runner (docs/specs/0018-role-runner-and-backend-families.md).
+#
+# It required `no executor yet` to appear in r2_gate.md and ai_guidelines.md
+# while the chain was specified and nothing walked it. Now that `mf review`
+# walks it, that sentence is false — and a guard that outlives its purpose stops
+# protecting a truth and starts compelling a lie, enforced by CI. Retiring it is
+# part of the work that made it wrong, not later cleanup.
+#
+# What replaced it is the Go suite: the behaviour the disclosure used to
+# apologise for is now pinned by tests that run it.
 
 # crura_review_is_triggered_not_fixed_rate (guard: docs/adr/0008 re-scoped the
 # human track because fixed-rate verification of model output cannot be both

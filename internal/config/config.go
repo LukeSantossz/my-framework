@@ -140,6 +140,15 @@ type MachineFile struct {
 	Version   int                 `toml:"version"`
 	Providers map[string]Provider `toml:"providers"`
 	Review    Review              `toml:"review"`
+
+	// Fingerprints maps an environment variable name to the provider whose
+	// agent sets it, and is how a session can corroborate an Author
+	// Declaration. It is machine state because which agent runs here is a
+	// property of this machine, and it ships empty on purpose: guessing a
+	// vendor's variable names would be inventing environment variables, which
+	// ai_guidelines.md forbids. Until an adopter fills it in, the
+	// cross-provider state is `declared` at best.
+	Fingerprints map[string]string `toml:"fingerprints"`
 }
 
 // Problem is one validation failure. Every problem found is reported, because a
@@ -245,7 +254,7 @@ func Load(opts Options) (*Config, error) {
 	problems = append(problems, machineProblems...)
 	cfg.Machine = machine
 
-	problems = append(problems, validate(project, machine, projectPath)...)
+	problems = append(problems, validateStatic(project, machine)...)
 	if len(problems) > 0 {
 		return nil, &ValidationError{Problems: problems}
 	}
@@ -261,6 +270,18 @@ func Load(opts Options) (*Config, error) {
 	}
 	cfg.applyEnv(opts.Env)
 
+	// Reachability is deliberately not a load error.
+	//
+	// Whether an api backend's provider has an endpoint here is a property of
+	// this machine, not of the configuration's correctness, and the two are
+	// indistinguishable from inside the file: a provider nobody configured yet
+	// and a misspelled one look identical. Refusing to load would mean a fresh
+	// clone could not even run `mf config list` until someone set up every
+	// endpoint the committed policy mentions.
+	//
+	// The graceful path already exists and is the one this framework chose
+	// everywhere else: an api backend with no endpoint reports itself
+	// unavailable, the chain advances, and the run names what it skipped.
 	return cfg, nil
 }
 
@@ -313,6 +334,18 @@ func (c *Config) applyMachine(m *MachineFile, source string) {
 		c.set(prefix+"endpoint", p.Endpoint, LayerMachine, source)
 		c.set(prefix+"api_key_env", p.APIKeyEnv, LayerMachine, source)
 	}
+	for envVar, provider := range m.Fingerprints {
+		c.set("fingerprints."+envVar, provider, LayerMachine, source)
+	}
+}
+
+// Fingerprints returns the environment-variable-to-provider map used to
+// corroborate an Author Declaration. Empty unless a machine declared one.
+func (c *Config) Fingerprints() map[string]string {
+	if c.Machine == nil {
+		return nil
+	}
+	return c.Machine.Fingerprints
 }
 
 func (c *Config) applyProject(p *ProjectFile, source string) {
@@ -397,7 +430,9 @@ func undecodedProblems(file string, md toml.MetaData) []Problem {
 	return problems
 }
 
-func validate(project *ProjectFile, machine *MachineFile, projectPath string) []Problem {
+// validateStatic checks what a file says on its own. Anything that depends on
+// a resolved value belongs in validateResolved, which runs after the cascade.
+func validateStatic(project *ProjectFile, machine *MachineFile) []Problem {
 	var problems []Problem
 
 	if project != nil {
@@ -436,16 +471,10 @@ func validate(project *ProjectFile, machine *MachineFile, projectPath string) []
 				problems = append(problems, Problem{File: ProjectFileName, Key: key + ".kind",
 					Message: fmt.Sprintf("unknown backend kind %q", b.Kind)})
 			}
-			// Only an api backend needs a route. A cli backend's provider is an
-			// identity used for the cross-provider check, and requiring a
-			// machine entry for it would break the shipped default chain on a
-			// machine that configured nothing.
-			if b.Kind == "api" && b.Provider != "" {
-				if machine == nil || machine.Providers[b.Provider].Endpoint == "" {
-					problems = append(problems, Problem{File: ProjectFileName, Key: key + ".provider",
-						Message: fmt.Sprintf("api backend names provider %q, which no machine file defines", b.Provider)})
-				}
-			}
+			// Reachability is deliberately not checked here. Only an api backend
+			// needs a route at all — a cli backend's provider is an identity
+			// used for the cross-provider check — and whether that route exists
+			// depends on the whole cascade, so validateResolved answers it.
 		}
 	}
 

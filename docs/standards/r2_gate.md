@@ -46,10 +46,14 @@ A backend that runs inside a coding-agent session — `superpowers` is the one n
 an attestation rather than an execution, and a session where it is absent counts as
 unavailable so the chain advances.
 
-The declaration and the three states have no executor yet: they are specified here and
-the command that records a declaration is not built, so until it is, the Author's
-provider is named by hand in the PR and the state is `declared` at best. A requirement
-whose mechanism is absent is written down as absent rather than assumed to be running.
+`mf review --role r2` computes the state and refuses to report R2 satisfied when it is
+`unknown`. Writing a declaration is a separate command that is not built yet, so until it
+is, a branch will resolve to `unknown` unless the record was written by hand with
+`git config --local branch.<branch>.mfAuthorProvider`. Corroboration is configured per
+machine — an environment variable name mapped to the provider whose agent sets it — and
+ships empty, because guessing a vendor's variable names would be inventing environment
+variables. The practical consequence is that `declared` is the realistic best case today,
+and `verified` requires an adopter to fill that table in.
 
 ## Why a chain
 
