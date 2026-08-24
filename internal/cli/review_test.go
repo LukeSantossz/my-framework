@@ -197,3 +197,27 @@ func TestReviewReportsTheCrossProviderStateForR2Only(t *testing.T) {
 		t.Errorf("r1 reported a cross-provider state: %q", out.String())
 	}
 }
+
+func TestCheckReportsEachGateAndExitsNonZeroOnAFailure(t *testing.T) {
+	root := gitRepo(t, "version = 1\n")
+	// No standards tree at all: the checks must fail loudly rather than pass by
+	// finding nothing to read.
+	e, _, errOut := reviewEnv(t, root, "check", "docs")
+	if code := Run(e); code == 0 {
+		t.Error("exit 0 with no standards to check against")
+	}
+	if !strings.Contains(errOut.String(), "INDEX.md") {
+		t.Errorf("stderr %q does not say what could not be read", errOut.String())
+	}
+}
+
+func TestCheckRejectsAnUnknownGateName(t *testing.T) {
+	root := gitRepo(t, "version = 1\n")
+	e, _, errOut := reviewEnv(t, root, "check", "vibes")
+	if code := Run(e); code != 2 {
+		t.Errorf("exit %d, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "vibes") {
+		t.Errorf("stderr %q does not name the unknown gate", errOut.String())
+	}
+}

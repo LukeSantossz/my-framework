@@ -175,3 +175,49 @@ func TestAuthorDeclarationRoundTripsPerBranch(t *testing.T) {
 		t.Error("the declaration leaked onto another branch")
 	}
 }
+
+func TestCommitsListsWhatTheBranchAddsOverItsBase(t *testing.T) {
+	r := newRepo(t)
+	commitOnBranch(t, r, "feat/thing", "a.txt", "a\n")
+	commitOnBranch(t, r, "", "b.txt", "b\n")
+	commits, err := r.Commits("main", "feat/thing")
+	if err != nil {
+		t.Fatalf("Commits: %v", err)
+	}
+	if len(commits) != 2 {
+		t.Fatalf("got %d commits, want 2: %+v", len(commits), commits)
+	}
+	if commits[0].Subject != "feat: a.txt" {
+		t.Errorf("first subject = %q; --reverse must put the oldest first", commits[0].Subject)
+	}
+}
+
+func TestCommitsSurvivesABodyWithBlankLines(t *testing.T) {
+	// A trailer-carrying message has blank lines in it, and a naive split would
+	// read each paragraph as another commit.
+	r := newRepo(t)
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = r.Root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	run("checkout", "-b", "feat/multiline")
+	if err := os.WriteFile(filepath.Join(r.Root, "c.txt"), []byte("c\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", ".")
+	run("commit", "-m", "feat: c", "-m", "first para\n\nsecond para")
+	commits, err := r.Commits("main", "feat/multiline")
+	if err != nil {
+		t.Fatalf("Commits: %v", err)
+	}
+	if len(commits) != 1 {
+		t.Fatalf("got %d commits, want 1: %+v", len(commits), commits)
+	}
+	if !strings.Contains(commits[0].Body, "second para") {
+		t.Errorf("body lost: %q", commits[0].Body)
+	}
+}
