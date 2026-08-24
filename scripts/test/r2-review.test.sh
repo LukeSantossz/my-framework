@@ -641,5 +641,42 @@ else
   no "reviewer_flag_refuses_a_secret_value" "code=$code stored=[$stored_key] out=$out"
 fi
 
+# --- shim_delegates_to_the_binary_when_present ------------------------------
+# The shim is what protects the submodule consumer during the port: with the
+# binary installed the runner must hand over to it, and without it the shell
+# path must still work. Both directions are pinned, because a shim that only
+# ever takes one of them is not a shim.
+repo="$(new_repo shimdelegate)"
+stub_bin="$REPO_SANDBOX/stub-mf"
+cat > "$stub_bin" <<'STUB'
+#!/usr/bin/env bash
+printf 'STUB-MF-RAN %s\n' "$*"
+STUB
+chmod +x "$stub_bin"
+out=$(cd "$repo" && MF_BIN="$stub_bin" bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -eq 0 ] && printf '%s' "$out" | grep -q "STUB-MF-RAN review --role r2"; then
+  ok "shim_delegates_to_the_binary_when_present"
+else
+  no "shim_delegates_to_the_binary_when_present" "code=$code out=$out"
+fi
+
+# --- shim_runs_the_shell_path_when_the_binary_is_absent ---------------------
+out=$(cd "$repo" && MF_BIN="$REPO_SANDBOX/absent-mf" CODEX_BIN="$REPO_SANDBOX/absent-codex" \
+  R2_DRYRUN=1 bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -eq 0 ] && ! printf '%s' "$out" | grep -q "STUB-MF-RAN"; then
+  ok "shim_runs_the_shell_path_when_the_binary_is_absent"
+else
+  no "shim_runs_the_shell_path_when_the_binary_is_absent" "code=$code out=$out"
+fi
+
+# --- shim_honors_the_legacy_bypass_before_delegating ------------------------
+# A bypass must not become a delegated run that ignores it.
+out=$(cd "$repo" && MF_BIN="$stub_bin" SKIP_CODEX_REVIEW=1 bash "$RUNNER" 2>&1); code=$?
+if [ "$code" -eq 0 ] && ! printf '%s' "$out" | grep -q "STUB-MF-RAN"; then
+  ok "shim_honors_the_legacy_bypass_before_delegating"
+else
+  no "shim_honors_the_legacy_bypass_before_delegating" "code=$code out=$out"
+fi
+
 printf '\n%d passed, %d failed\n' "$PASS" "$FAIL"
 [ "$FAIL" -eq 0 ]

@@ -1,0 +1,12 @@
+diff --git a/README.md b/README.md
+index 1111111..2222222 100644
+--- a/README.md
++++ b/README.md
+@@ -18,7 +18,7 @@ Validate the standards tree at any time with:
+ 
+ ```sh
+-bash scripts/test/docs-consistancy.sh
++bash scripts/test/docs-consistency.sh
+ ```
+ 
+ Once wired, the gate runs automatically on push.

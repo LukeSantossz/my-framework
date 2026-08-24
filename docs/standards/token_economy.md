@@ -21,6 +21,10 @@ governs. Two capabilities are in scope, and only one of them exists today:
   never mentions `CLAUDE.md`, context files, or byte-for-byte preservation, and
   nothing in it rewrites a file. `caveman-compress` is therefore a capability this
   policy scopes for the day it arrives, not one the framework can invoke now.
+  `mf doctor` reports it under `token economy` as NOT IMPLEMENTED, beside the
+  terse style that is. A capability this document names has to be findable as
+  absent from the tool as well as from the page describing it, or the page is
+  the only thing that knows.
 
 The distinction matters because the policy below is written against both: §1
 describes what compressing the context file requires *if* an adopter opts into it
@@ -69,6 +73,13 @@ cost saving for the exact failure the framework exists to prevent.
 - It is the agent's communication style, never a reason to do less work or skip a
   required step.
 
+The harness applies this to the prompts it composes, which is the only place a
+framework can apply anything: it appends a terse style instruction — one that
+carries its own precedence, so the model reading it also reads what outranks it
+— to a prompt whose output is a conversation, and refuses to append it to one
+whose output is a versioned artifact. `mf review --dry-run` prints which of the
+two it resolved, so the boundary is inspectable rather than asserted.
+
 ### 3. Where terse mode is forbidden (hard boundary)
 
 Terse mode never applies to versioned or review artifacts. These follow their own
@@ -87,6 +98,18 @@ templates in full prose, regardless of any active compression level:
 If a compression or terse setting would empty or degrade any of these artifacts,
 the artifact requirement wins. This is a Correctness-level concern in the
 `code_conventions.md` precedence order, above the naming and style layers.
+
+Where the harness composes the prompt, this boundary is enforced rather than
+trusted: asking for terse style on any of the five artifacts above returns a
+refusal naming this section, and the prompt goes out unchanged. The enforcement
+reaches exactly as far as the harness does. A person writing a commit message by
+hand is outside it, so the rule remains partly a discipline — but the part the
+framework controls is now a function that returns an error rather than a
+sentence someone has to remember.
+
+The same review is a conversation when it is printed to a terminal and a pull
+request artifact when it is posted. What decides is what the output becomes, not
+which command produced it.
 
 ## Precedence
 

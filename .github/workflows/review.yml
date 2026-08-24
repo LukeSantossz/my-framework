@@ -1,0 +1,62 @@
+name: r3-review
+
+# R3 is the third configuration of the same role runner, differing from R2 only
+# in when it runs and how much it sees: the pull request carries the intent, and
+# reviewing an implementation against what it was supposed to do is only
+# possible where that was written down.
+#
+# It never fails on findings. Every review layer is advisory, and a blocking R3
+# would make the reviewer with the least context the strictest gate in the
+# pipeline. The job fails only when it is misconfigured.
+
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    # A fork's workflow has no access to secrets by design, so the review cannot
+    # run there. The step below says so out loud rather than passing quietly,
+    # but the job is skipped here to avoid spending a runner on it.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+          # Both sides of the comparison must exist locally: the runner builds
+          # the diff with git rather than downloading it.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build mf
+        run: go build -o mf ./cmd/mf
+
+      - name: R3 review
+        env:
+          # The token the comment is posted with. Every other credential is
+          # named by the machine configuration rather than hard-coded here, so
+          # adding a provider is a repository-secret change and not a workflow
+          # edit.
+          GITHUB_TOKEN: ${{ github.token }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          # Supply the reviewer's key under whatever variable name the machine
+          # configuration points at. An unset one makes that backend report
+          # itself unavailable and the chain advances.
+          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+        run: |
+          ./mf review \
+            --role r3 \
+            --pr "${{ github.event.pull_request.number }}" \
+            --base "${{ github.event.pull_request.base.ref }}" \
+            --post

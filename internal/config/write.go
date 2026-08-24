@@ -1,0 +1,187 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+)
+
+// Target names the file a write lands in. The two are not interchangeable: the
+// split by data nature is what keeps a credential-shaped value out of a
+// committed file, so a write that would cross it is refused rather than
+// redirected.
+type Target int
+
+const (
+	TargetProject Target = iota
+	TargetMachine
+)
+
+func (t Target) String() string {
+	if t == TargetMachine {
+		return "machine"
+	}
+	return "project"
+}
+
+// envVarName is the shape of an environment variable name. A value that fails
+// it is almost certainly the key itself rather than the name of the variable
+// holding it, and configuration output ends up in bug reports and screenshots.
+var envVarName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// machineOnlyPrefixes are the key spaces that exist only on a machine.
+var machineOnlyPrefixes = []string{"providers."}
+
+func isMachineOnly(key string) bool {
+	for _, p := range machineOnlyPrefixes {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
+}
+
+// Set writes one key into one layer, preserving everything else in the file.
+// It edits text rather than re-encoding the document, because a policy file is
+// hand-edited and re-encoding would silently drop its comments and ordering.
+func Set(opts Options, key, value string, target Target) error {
+	if strings.HasSuffix(key, ".api_key") {
+		return fmt.Errorf("refusing to write %s: a credential must never appear in configuration; store the variable *name* in api_key_env instead", key)
+	}
+	if strings.HasSuffix(key, ".api_key_env") && !envVarName.MatchString(value) {
+		return fmt.Errorf("refusing to write %s: %q is not an environment variable name; give the NAME of the variable holding the key (for example DEEPSEEK_API_KEY), never the key itself", key, value)
+	}
+	if isMachineOnly(key) && target == TargetProject {
+		return fmt.Errorf("refusing to write %s into the project file: endpoints and credential references are machine state and may not be committed", key)
+	}
+
+	path := opts.MachinePath
+	seed := "version = 1\n"
+	if target == TargetProject {
+		path = filepath.Join(opts.RepoRoot, ProjectFileName)
+	}
+	if path == "" {
+		return fmt.Errorf("no path for the %s layer", target)
+	}
+
+	body, err := os.ReadFile(path)
+	if err != nil {
+		if !os.IsNotExist(err) {
+			return err
+		}
+		body = []byte(seed)
+		if mkErr := os.MkdirAll(filepath.Dir(path), 0o755); mkErr != nil {
+			return mkErr
+		}
+	}
+
+	updated, err := setInDocument(string(body), key, value)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte(updated), 0o644)
+}
+
+// setInDocument places `key = value` in the TOML text, creating the section
+// when it is absent and replacing the value in place when it is present.
+func setInDocument(doc, key, value string) (string, error) {
+	idx := strings.LastIndex(key, ".")
+	if idx < 0 {
+		return "", fmt.Errorf("key %q has no section", key)
+	}
+	section, leaf := key[:idx], key[idx+1:]
+	assignment := fmt.Sprintf("%s = %q", leaf, value)
+
+	lines := strings.Split(doc, "\n")
+	header := "[" + section + "]"
+	inSection := false
+	sectionStart := -1
+	sectionEnd := len(lines)
+
+	for i, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+			if inSection {
+				sectionEnd = i
+				break
+			}
+			if trimmed == header {
+				inSection = true
+				sectionStart = i
+			}
+			continue
+		}
+		if inSection && assignsKey(trimmed, leaf) {
+			lines[i] = assignment
+			return strings.Join(lines, "\n"), nil
+		}
+	}
+
+	if sectionStart >= 0 {
+		// Append inside the existing section, after its last non-empty line, so
+		// a trailing blank line separating sections survives.
+		insert := sectionEnd
+		for insert > sectionStart+1 && strings.TrimSpace(lines[insert-1]) == "" {
+			insert--
+		}
+		out := append([]string{}, lines[:insert]...)
+		out = append(out, assignment)
+		out = append(out, lines[insert:]...)
+		return strings.Join(out, "\n"), nil
+	}
+
+	trimmedDoc := strings.TrimRight(doc, "\n")
+	return trimmedDoc + "\n\n" + header + "\n" + assignment + "\n", nil
+}
+
+func assignsKey(line, leaf string) bool {
+	if !strings.HasPrefix(line, leaf) {
+		return false
+	}
+	rest := strings.TrimSpace(strings.TrimPrefix(line, leaf))
+	return strings.HasPrefix(rest, "=")
+}
+
+// Migrate takes over responsibility for the deprecated git-config keys by
+// writing their values into the machine file. It is deliberately
+// non-destructive: it never removes the source, because deleting a machine's
+// configuration as a side effect of running a command is not a migration a user
+// can undo. The machine layer outranks the legacy layer, so the migrated value
+// wins immediately, and the caller reports how to remove the originals.
+func Migrate(opts Options) ([]string, error) {
+	if opts.GitConfig == nil {
+		return nil, nil
+	}
+	sources := make([]string, 0, len(legacyKeys))
+	for gitKey := range legacyKeys {
+		sources = append(sources, gitKey)
+	}
+	sort.Strings(sources)
+
+	var moved []string
+	for _, gitKey := range sources {
+		value, ok := opts.GitConfig(gitKey)
+		if !ok || value == "" {
+			continue
+		}
+		target := legacyKeys[gitKey]
+		if err := Set(opts, target, value, TargetMachine); err != nil {
+			return moved, fmt.Errorf("migrating %s: %w", gitKey, err)
+		}
+		moved = append(moved, gitKey)
+	}
+	return moved, nil
+}
+
+// RemovalCommands renders what a user would run to drop the migrated keys.
+// Printed rather than executed, so the destructive half stays a human decision.
+func RemovalCommands(moved []string) []string {
+	cmds := make([]string, 0, len(moved))
+	for _, key := range moved {
+		cmds = append(cmds, "git config --global --unset "+key)
+	}
+	return cmds
+}

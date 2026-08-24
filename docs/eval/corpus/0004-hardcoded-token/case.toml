@@ -1,0 +1,7 @@
+version = 1
+name = "a credential written into the source"
+
+[[defects]]
+category = "security"
+file = "internal/client/client.go"
+terms = ["hardcoded", "hard-coded", "secret", "credential", "token", "api key"]

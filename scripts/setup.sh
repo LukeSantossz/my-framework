@@ -263,6 +263,8 @@ fi
 #    the only step that writes outside the repository and so governs every
 #    other project on the machine (docs/standards/status_line.md).
 if [ "$statusline" -eq 1 ]; then
+  log "note: 'mf statusline apply' now applies this contract without Node. This flag"
+  log "      remains for a consumer that has not migrated and still wires the Node renderer."
   statusline_failures=0
   apply_codex_status_line || statusline_failures=$((statusline_failures + 1))
   apply_claude_status_line || statusline_failures=$((statusline_failures + 1))

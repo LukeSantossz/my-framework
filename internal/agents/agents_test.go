@@ -1,0 +1,278 @@
+package agents
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+const source = `# Agent Instructions
+
+Read ` + "`docs/standards/INDEX.md`" + ` before doing anything.
+
+<!-- mf:role shared -->
+## Standards are binding
+
+Follow ` + "`docs/standards/code_conventions.md`" + ` and its precedence order.
+
+<!-- mf:role author -->
+## Your role as Author
+
+Specify before building.
+
+<!-- mf:role reviewer -->
+## Your role as Reviewer (R2)
+
+You review; you do not rewrite.
+`
+
+func mustParse(t *testing.T) Source {
+	t.Helper()
+	src, err := Parse(source)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	return src
+}
+
+func TestParseSplitsTheSourceOnItsRoleMarkers(t *testing.T) {
+	src := mustParse(t)
+	if len(src.Sections) != 3 {
+		t.Fatalf("got %d sections, want 3: %+v", len(src.Sections), src.Sections)
+	}
+	want := []string{"shared", "author", "reviewer"}
+	for i, r := range want {
+		if src.Sections[i].Role != r {
+			t.Errorf("section %d role = %q, want %q", i, src.Sections[i].Role, r)
+		}
+	}
+	if !strings.Contains(src.Preamble, "INDEX.md") {
+		t.Errorf("preamble lost: %q", src.Preamble)
+	}
+}
+
+func TestParseFailsWhenTheSourceCarriesNoMarkers(t *testing.T) {
+	if _, err := Parse("# Just a document\n\nNo markers.\n"); err == nil {
+		t.Fatal("a source with no markers cannot be assigned to any vendor and must fail")
+	}
+}
+
+func TestRenderGivesAVendorOnlyTheRolesItPlays(t *testing.T) {
+	// The whole point: an authoring session should not carry reviewer
+	// obligations in its context, and a reviewer should not be told to specify
+	// before building.
+	src := mustParse(t)
+	out, err := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"}})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(out, "Standards are binding") || !strings.Contains(out, "role as Author") {
+		t.Errorf("output lacks a role it should carry:\n%s", out)
+	}
+	if strings.Contains(out, "role as Reviewer") {
+		t.Errorf("output carries a role this vendor does not play:\n%s", out)
+	}
+}
+
+func TestRenderAlwaysCarriesThePreamble(t *testing.T) {
+	src := mustParse(t)
+	for _, roles := range [][]string{{"shared"}, {"reviewer"}} {
+		out, err := Render(src, Target{Name: "x", File: "X.md", Roles: roles})
+		if err != nil {
+			t.Fatalf("Render: %v", err)
+		}
+		if !strings.Contains(out, "INDEX.md") {
+			t.Errorf("preamble missing for roles %v:\n%s", roles, out)
+		}
+	}
+}
+
+func TestRenderWritesAHeaderNamingTheSourceAndTheCommand(t *testing.T) {
+	src := mustParse(t)
+	out, _ := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared"}})
+	for _, want := range []string{SourcePath, "mf agents sync", "Do not edit"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("header lacks %q:\n%s", want, out)
+		}
+	}
+}
+
+func TestRenderAppliesThePathPrefix(t *testing.T) {
+	// A submodule consumer's CLAUDE.md must point into `.standards/`, or every
+	// reference in the generated file resolves to nothing there.
+	src := mustParse(t)
+	out, err := Render(src, Target{
+		Name: "claude", File: "CLAUDE.md", Roles: []string{"shared"},
+		PathPrefix: ".standards/docs/standards",
+	})
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(out, ".standards/docs/standards/code_conventions.md") {
+		t.Errorf("path prefix not applied:\n%s", out)
+	}
+	if strings.Contains(out, "`docs/standards/code_conventions.md`") {
+		t.Errorf("an unprefixed reference survived:\n%s", out)
+	}
+}
+
+func TestRenderRefusesARoleTheSourceDoesNotDeclare(t *testing.T) {
+	// A typo would otherwise produce a file quietly missing the obligations it
+	// was supposed to carry.
+	src := mustParse(t)
+	_, err := Render(src, Target{Name: "x", File: "X.md", Roles: []string{"revewer"}})
+	if err == nil {
+		t.Fatal("want an error for an undeclared role")
+	}
+	if !strings.Contains(err.Error(), "revewer") {
+		t.Errorf("error %q does not name the bad role", err)
+	}
+}
+
+// --- sync and check ---------------------------------------------------------
+
+func fixture(t *testing.T) Options {
+	t.Helper()
+	root := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(root, "docs", "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, filepath.FromSlash(SourcePath)), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return Options{
+		RepoRoot: root,
+		Targets: []Target{
+			{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"}},
+			{Name: "codex", File: "AGENTS.md", Roles: []string{"shared", "reviewer"}},
+		},
+	}
+}
+
+func TestSyncWritesEveryTarget(t *testing.T) {
+	o := fixture(t)
+	results, err := Sync(o)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if len(results) != 2 {
+		t.Fatalf("got %d results, want 2", len(results))
+	}
+	for _, r := range results {
+		if !r.Changed {
+			t.Errorf("%s reported no change on a first sync", r.File)
+		}
+		if _, err := os.Stat(filepath.Join(o.RepoRoot, r.File)); err != nil {
+			t.Errorf("%s was not written", r.File)
+		}
+	}
+}
+
+func TestSyncIsIdempotent(t *testing.T) {
+	o := fixture(t)
+	if _, err := Sync(o); err != nil {
+		t.Fatal(err)
+	}
+	results, err := Sync(o)
+	if err != nil {
+		t.Fatalf("second Sync: %v", err)
+	}
+	for _, r := range results {
+		if r.Changed {
+			t.Errorf("%s rewritten on a second sync", r.File)
+		}
+	}
+}
+
+func TestCheckPassesImmediatelyAfterSync(t *testing.T) {
+	o := fixture(t)
+	if _, err := Sync(o); err != nil {
+		t.Fatal(err)
+	}
+	results, err := Check(o)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	for _, r := range results {
+		if r.Drifted {
+			t.Errorf("%s reported drift right after sync", r.File)
+		}
+	}
+}
+
+func TestCheckFailsWhenAGeneratedFileWasEditedByHand(t *testing.T) {
+	// Without this the generated files are a convention people bypass by
+	// editing the output, which is the original problem with extra steps.
+	o := fixture(t)
+	if _, err := Sync(o); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(o.RepoRoot, "CLAUDE.md")
+	if err := os.WriteFile(path, []byte("# I edited this by hand\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	results, _ := Check(o)
+	drifted := false
+	for _, r := range results {
+		if r.File == "CLAUDE.md" && r.Drifted {
+			drifted = true
+		}
+	}
+	if !drifted {
+		t.Error("a hand-edited output did not report drift")
+	}
+}
+
+func TestCheckFailsWhenTheSourceChangedAndSyncWasNotRun(t *testing.T) {
+	o := fixture(t)
+	if _, err := Sync(o); err != nil {
+		t.Fatal(err)
+	}
+	updated := strings.Replace(source, "Specify before building.", "Specify before building, always.", 1)
+	if err := os.WriteFile(filepath.Join(o.RepoRoot, filepath.FromSlash(SourcePath)), []byte(updated), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	results, _ := Check(o)
+	drifted := false
+	for _, r := range results {
+		if r.File == "CLAUDE.md" && r.Drifted {
+			drifted = true
+		}
+	}
+	if !drifted {
+		t.Error("a changed source with no re-sync did not report drift")
+	}
+}
+
+func TestCheckReportsAMissingOutputAsDrift(t *testing.T) {
+	o := fixture(t)
+	results, err := Check(o)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	for _, r := range results {
+		if !r.Drifted {
+			t.Errorf("%s exists nowhere yet and must report drift", r.File)
+		}
+	}
+}
+
+func TestAddingAVendorNeedsNoCodeChange(t *testing.T) {
+	o := fixture(t)
+	o.Targets = append(o.Targets, Target{Name: "gemini", File: "GEMINI.md", Roles: []string{"shared", "reviewer"}})
+	results, err := Sync(o)
+	if err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	if len(results) != 3 {
+		t.Fatalf("got %d results, want 3", len(results))
+	}
+	body, err := os.ReadFile(filepath.Join(o.RepoRoot, "GEMINI.md"))
+	if err != nil {
+		t.Fatalf("GEMINI.md not written: %v", err)
+	}
+	if !strings.Contains(string(body), "role as Reviewer") {
+		t.Errorf("the new vendor did not get its roles:\n%s", body)
+	}
+}

@@ -1,0 +1,126 @@
+# Development-standards policy for this repository.
+#
+# This file is committed: it carries policy, so it travels with the repository.
+# It must never carry an endpoint, an API key, or the name of the variable
+# holding one — those are machine state and the loader refuses them here.
+# See docs/adr/0006-configuration-split-policy-and-machine.md.
+#
+# A project names providers; only a machine defines how to reach them. To add a
+# locally reachable reviewer, define the provider on your machine and extend the
+# chain there:
+#
+#   mf config set providers.deepseek.endpoint https://api.deepseek.com/v1 --machine
+#   mf config set providers.deepseek.api_key_env DEEPSEEK_API_KEY --machine
+#   mf config set providers.deepseek.kind openai-compatible --machine
+#   mf config set roles.r2.backends codex,gemini,deepseek --machine
+
+version = 1
+
+[review]
+base = "main"
+effort = "high"
+
+# --- roles -------------------------------------------------------------------
+
+# R1 carries no provider constraint: what defines it is when it runs and how
+# much of the change it sees. superpowers is one backend of this chain, not the
+# layer itself (docs/adr/0010-r1-provider-constraint-is-per-backend.md).
+[roles.r1]
+backends = ["superpowers"]
+
+# R2 is the only role that carries the cross-provider requirement.
+[roles.r2]
+backends = ["codex", "gemini"]
+require_cross_provider = true
+
+[roles.r3]
+backends = []
+
+# The CRUX explainer is a role like every other, so which model explains a
+# change is configuration rather than a second setting nobody remembers exists.
+# Only a prompt-driven backend can serve it: an agentic reviewer answers with a
+# review, and `mf explain` asks for an explainer.
+[roles.explain]
+backends = ["gemini"]
+
+# --- backends ----------------------------------------------------------------
+
+# Runs inside a coding-agent session, so it cannot be started as a subprocess.
+# It contributes an attestation; an absent session counts as unavailable.
+[backends.superpowers]
+kind = "in-session"
+provider = "anthropic"
+
+# Agentic: explores the repository itself, and finds AGENTS.md on disk.
+[backends.codex]
+kind = "cli"
+provider = "openai"
+command = "codex"
+# ADR 0004 pinned this default on benchmark; it is per-backend so a fallback
+# never inherits it.
+model = "gpt-5.6-terra"
+args = [
+  "review",
+  "--base", "{{.Base}}",
+  "-c", "model={{.Model}}",
+  "-c", "model_reasoning_effort={{.Effort}}",
+]
+unavailable_patterns = [
+  "usage limit", "rate limit", "quota",
+  "not logged in", "please (run )?codex login", "unauthorized", "401", "403",
+  "network error", "connection (refused|reset)",
+]
+
+# Also agentic, but prompt-driven rather than repository-reading, so the role
+# instructions and the diff are handed to it through {{.Prompt}}.
+[backends.gemini]
+kind = "cli"
+provider = "google"
+command = "gemini"
+args = ["--prompt", "{{.Prompt}}"]
+unavailable_patterns = [
+  "quota", "rate limit", "resource[_ ]exhausted",
+  "not authenticated", "unauthorized", "401", "403",
+  "network error", "connection (refused|reset)",
+]
+
+# --- checks ------------------------------------------------------------------
+
+# What counts as trivial, as an explicit path list rather than a heuristic or a
+# model. It is crude on purpose: a gate nobody can predict is a gate people
+# route around, and widening this list is visible in review.
+[checks]
+exempt_paths = [
+  "README.md",
+  "LICENSE",
+  ".gitignore",
+  ".gitattributes",
+  "docs/adr/*",
+  "docs/specs/*",
+]
+
+# The surfaces docs/standards/design.md governs. The explainer's stylesheet is
+# inline in its renderer, so the Go file is the surface.
+design_surfaces = [
+  "internal/explain/render.go",
+]
+
+# --- agent instruction files --------------------------------------------------
+
+# Generated from docs/agents/instructions.md. Roles are declared, not derived
+# from the backend chains: the Author is a per-branch declaration rather than a
+# chain, so there is nothing to derive it from.
+[agents.claude]
+file = "CLAUDE.md"
+roles = ["shared", "author"]
+
+[agents.codex]
+file = "AGENTS.md"
+roles = ["shared", "reviewer"]
+
+# R3 runs in CI on the pull request, where the intent is written down. The chain
+# is empty by default: a machine or a CI secret supplies a reachable reviewer,
+# and until one does, R3 reports that it did not run rather than passing quietly.
+[backends.coderabbit]
+kind = "external"
+provider = "coderabbit"

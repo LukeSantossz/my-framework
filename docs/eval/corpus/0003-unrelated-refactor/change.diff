@@ -1,0 +1,41 @@
+diff --git a/internal/parse/parse.go b/internal/parse/parse.go
+index 1111111..2222222 100644
+--- a/internal/parse/parse.go
++++ b/internal/parse/parse.go
+@@ -22,7 +22,7 @@ func Parse(line string) (Entry, error) {
+ 	key, value, found := strings.Cut(line, "=")
+ 	if !found {
+-		return Entry{}, nil
++		return Entry{}, fmt.Errorf("no separator in %q", line)
+ 	}
+ 	return Entry{Key: key, Value: value}, nil
+ }
+diff --git a/internal/render/render.go b/internal/render/render.go
+index 3333333..4444444 100644
+--- a/internal/render/render.go
++++ b/internal/render/render.go
+@@ -1,20 +1,24 @@
+ package render
+ 
+-func Render(entries []Entry) string {
+-	out := ""
+-	for _, e := range entries {
+-		out += e.Key + ": " + e.Value + "\n"
+-	}
+-	return out
++// Renderer holds the formatting options.
++type Renderer struct {
++	Separator string
++	Indent    int
++}
++
++func New() *Renderer { return &Renderer{Separator: ": "} }
++
++func (r *Renderer) Render(entries []Entry) string {
++	var b strings.Builder
++	for _, e := range entries {
++		b.WriteString(strings.Repeat(" ", r.Indent))
++		b.WriteString(e.Key + r.Separator + e.Value + "\n")
++	}
++	return b.String()
+ }

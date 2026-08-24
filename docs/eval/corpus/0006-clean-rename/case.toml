@@ -1,0 +1,4 @@
+version = 1
+name = "a mechanical rename with no defect planted"
+# No defects. A backend that reports findings here is producing false positives,
+# which is what keeps a reviewer that flags everything from scoring well.

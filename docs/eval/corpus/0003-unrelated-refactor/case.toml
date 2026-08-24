@@ -1,0 +1,7 @@
+version = 1
+name = "a bug fix that also rewrites an unrelated package"
+
+[[defects]]
+category = "scope-creep"
+file = "internal/render/render.go"
+terms = ["unrelated", "scope", "out of scope", "beyond", "not required", "separate change"]

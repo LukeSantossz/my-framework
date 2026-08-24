@@ -17,9 +17,17 @@ _Avoid_: author (reserved for the model), maintainer, engineer, user (the end co
 of the software being built).
 
 **Author**:
-The model that writes the change under the Developer's direction (currently Claude,
-Anthropic). One half of the Cross-Provider Review pair.
-_Avoid_: coder, generator, assistant, the AI.
+The model that writes the change under the Developer's direction. One half of the
+Cross-Provider Review pair. Which model and Provider it is belongs to the change, not to
+the session or the push, and is fixed by the Author Declaration.
+_Avoid_: coder, generator, assistant, the AI; naming a specific vendor as the definition.
+
+**Author Declaration**:
+The record of the Author's Provider and model, written per branch while the change is
+being authored. It exists because a push carries commits that may come from several
+sessions, several agents, or a person typing, so there is no single Author to detect at
+push time. It is what the Cross-Provider State is evaluated against.
+_Avoid_: session detection, fingerprint (the corroborating signal, not the record).
 
 **Reviewer**:
 The model that performs the R2 Cross-Provider Review, drawn from a different Provider
@@ -30,8 +38,20 @@ _Avoid_: checker, validator, critic.
 
 **Provider**:
 The vendor behind a model (e.g. Anthropic, OpenAI). R2 is satisfied only when the
-Reviewer's Provider differs from the Author's.
+Reviewer's Provider differs from the Author's, as resolved by the Cross-Provider State.
 _Avoid_: vendor, platform, model.
+
+**Backend**:
+A named way of performing a Role — an agentic CLI, an HTTP endpoint, an in-session
+skill, or a deterministic in-process check. A Backend declares its own Provider and
+classifies its own tool's failures, which is what lets a chain tell "unavailable" from
+"reviewed with findings".
+_Avoid_: adapter (the script implementing one), reviewer (the role it may fill), plugin.
+
+**Role**:
+A job the framework needs performed — Author, R1, R2, R3 — bound to an ordered chain of
+Backends. The Role is the unit of configuration; the Backend is the unit of execution.
+_Avoid_: layer (R1–R3 as review stages), phase, agent.
 
 ### Review
 
@@ -41,14 +61,26 @@ duplicated or skipped. Spans the automated layers R1–R3 and the Developer's CR
 _Avoid_: review stack, review pipeline.
 
 **R1 / Internal Review**:
-The automated same-Provider review — the Superpowers two-stage subagent pass (Claude).
-Stands in for the Author Self-Review.
-_Avoid_: self-review, internal QA.
+The automated internal review, satisfied by a chain of Backends and named by whichever
+one ran. No Provider constraint applies: what defines R1 is when it runs and how much of
+the change it sees, not whom it shares a Provider with. Stands in for the Author
+Self-Review. Superpowers is one Backend of this chain, never the layer itself.
+_Avoid_: self-review, internal QA, same-provider review, the Superpowers pass.
 
 **R2 / Cross-Provider Review**:
 The automated review by the Reviewer, whose Provider differs from the Author's
-(operationally the pre-push backend chain). Only valid across Providers.
+(operationally the pre-push backend chain). Only valid across Providers, and only as
+strongly as the Cross-Provider State reports.
 _Avoid_: external review, second opinion.
+
+**Cross-Provider State**:
+How strongly R2's Provider requirement is established for a change: `verified` when an
+independent signal agrees with the Author Declaration and differs from the Reviewer's
+Provider, `declared` when only the Declaration asserts it, `unknown` when nothing
+recorded it. `unknown` does not satisfy R2. The state is recorded in the PR beside the
+Backend and model, because a reader adjudicating a PR needs to tell an enforced claim
+from an asserted one.
+_Avoid_: verified/unverified as a binary, cross-provider flag.
 
 **R2 Gate**:
 The automated push-time hook that runs the Reviewer against the base branch — the
@@ -62,10 +94,26 @@ signal; never a substitute for R2.
 _Avoid_: bot review, CI review.
 
 **CRURA Review**:
-The Developer's always-on human review track — Change, Review, Upload, Review Again —
-run on every change and feeding the PR Review Checklist. Distinct from the automated
-R-layers; also substitutes for R2 when no second Provider is available.
-_Avoid_: manual review, human QA, R4.
+The Developer's human review track — Change, Review, Upload, Review Again — feeding the
+PR Review Checklist. Its adjudication of the recorded layers and its merge decision run
+on every change; its line-by-line reads run when a Review Trigger fires or the change is
+drawn as the Untriggered Sample. Distinct from the automated R-layers; its adjudication
+stage also substitutes for R2 when no second Provider is available.
+_Avoid_: manual review, human QA, R4, always-on track.
+
+**Review Trigger**:
+A named condition that makes a CRURA line-by-line read owed for a change — a security or
+blocking finding, a failing deterministic check, a high-risk path, a `unknown`
+Cross-Provider State, or no layer having run. Enumerated in `crura_method.md`, because a
+trigger set left to judgment degrades into never.
+_Avoid_: heuristic, threshold, rule (unqualified).
+
+**Untriggered Sample**:
+The periodic draw of changes that no Review Trigger selected, read and recorded anyway.
+It exists because instrumenting only triggered reads observes the population already
+suspected, which can confirm the trigger set but never correct it. The sample is what
+makes the evidence able to falsify the triggered regime.
+_Avoid_: spot check, audit, random review.
 
 **Self-Review**:
 The Author's pre-delivery checklist over its own change (does it run, are all symbols
@@ -173,8 +221,10 @@ The review-time discipline that explains an implemented change with a transient,
 interactive HTML explainer (Background, Intuition, Code, Quiz) generated outside
 version control, to make comprehension a produced, checkable outcome before
 review. An aid feeding R1 and the CRURA Review — never a review layer and never
-a blocking gate; durable rationale stays in ADRs. Acronym: Change Review
-Understanding eXplanation.
+a blocking gate; durable rationale stays in ADRs. Generated by `mf explain`
+through the `explain` role's backend chain, so which model explains a change is
+configuration like every other role. Acronym: Change Review Understanding
+eXplanation.
 _Avoid_: explainer (the artifact, not the method), code walkthrough, tutorial.
 
 **Status Line Contract**:
@@ -182,9 +232,26 @@ The Standard fixing which five facts a coding agent's status line shows and in w
 order — model with reasoning effort, context used, tokens spent, quota, location —
 across Claude Code and Codex. It binds the facts and their order, never the colors,
 glyphs, or widths, because the two tools render through mechanisms that are not
-interchangeable: Codex reads a declarative segment list, Claude Code runs a command.
-Applying it is machine state and therefore opt-in.
+interchangeable: Codex reads a declarative segment list, Claude Code runs a command —
+`mf statusline render`. Applying it is machine state and therefore a command of its own,
+`mf statusline apply`, rather than part of activation.
 _Avoid_: status bar, statusline (as the Standard rather than the rendered line), theme.
+
+**Design Standard**:
+The Standard fixing the visual identity of the surfaces this framework renders — colour
+roles in both polarities, three typeface stacks, a tight radius and spacing scale — in the
+`DESIGN.md` format. Its direction is derived from a third-party entry and its values are
+authored here, a distinction `mf check design` verifies by fingerprint rather than
+asserting. It declares no chromatic accent, and it reaches neither the status line nor
+terminal output.
+_Avoid_: theme, style guide, branding, design system (implies components this has none of).
+
+**Derived identity**:
+A visual identity whose direction is read from another project's design document while
+every value is authored locally. Distinguished from a copied one by a check, not by a
+claim: no declared token may match a recorded fingerprint of the source's colours or
+typefaces. It proves non-identity of values, never independence of design.
+_Avoid_: inspired-by (unverifiable), fork, adaptation.
 
 ### Token Economy
 
@@ -205,7 +272,9 @@ _Avoid_: minify, summarize; naming it as a capability the framework has today.
 **Terse mode**:
 Caveman's conversational compression — drops filler from the agent's replies. A
 communication style only; never a reason to do less work, and forbidden in SPEC.md, PR,
-Issue, and commit artifacts.
+Issue, and commit artifacts. Where the harness composes the prompt, that boundary is a
+refusal rather than a rule to remember: what the output becomes decides, so the same
+review is terse in a terminal and full prose in a pull request.
 _Avoid_: brief mode, caveman mode (ambiguous with the tool).
 
 ### External dependencies

@@ -981,6 +981,186 @@ else
   no "reviewer_switch_adr_restored" "missing:$reviewer_adr_missing"
 fi
 
+# r1_is_a_chain_not_the_superpowers_pass (guard: docs/adr/0010 removed the
+# same-provider requirement from R1 and made the provider constraint a property
+# each backend declares. A layer defined by one executor is the failure spec 0013
+# fixed for R2: when that executor is absent the layer silently stops existing
+# while still reporting success, which is what R1 does today.
+#
+# Pinned in both directions. Absence alone would pass on a tree that deleted R1
+# rather than redefined it, so each document is also held to still stating the
+# new claim. The clauses below ARE the claims, not decoration: reword one and the
+# guard must be updated deliberately, which is the point.
+R1_AI_DOC="$REPO_ROOT/docs/standards/ai_guidelines.md"
+R1_GATE_DOC="$REPO_ROOT/docs/standards/r2_gate.md"
+R1_SKILLS_DOC="$REPO_ROOT/docs/standards/skills_guidelines.md"
+R1_INDEX_DOC="$REPO_ROOT/docs/standards/INDEX.md"
+R1_CONTEXT_DOC="$REPO_ROOT/CONTEXT.md"
+r1_chain_missing=""
+
+# The retired definition must be gone from every document that carried it.
+for r1_file in "$R1_AI_DOC" "$R1_GATE_DOC" "$R1_INDEX_DOC" "$R1_CONTEXT_DOC" \
+  "$REPO_ROOT/docs/standards/github.md" "$REPO_ROOT/.github/PULL_REQUEST_TEMPLATE.md"; do
+  grep -qF 'internal Superpowers review' "$r1_file" 2>/dev/null \
+    && r1_chain_missing="$r1_chain_missing retired_definition_in:$(basename "$r1_file")"
+  grep -qF 'two-stage subagent' "$r1_file" 2>/dev/null \
+    && r1_chain_missing="$r1_chain_missing retired_definition_in:$(basename "$r1_file")"
+done
+
+# R1 is a chain, and Superpowers is one backend of it rather than the layer.
+grep -qF 'satisfied by a chain of review backends' "$R1_AI_DOC" 2>/dev/null \
+  || r1_chain_missing="$r1_chain_missing chain_claim_missing_from:ai_guidelines.md"
+grep -qF 'one backend of the R1 chain' "$R1_SKILLS_DOC" 2>/dev/null \
+  || r1_chain_missing="$r1_chain_missing backend_claim_missing_from:skills_guidelines.md"
+grep -qF 'chain of review backends' "$R1_INDEX_DOC" 2>/dev/null \
+  || r1_chain_missing="$r1_chain_missing chain_claim_missing_from:INDEX.md"
+
+# The glossary must no longer define R1 by the provider it shares with the Author.
+grep -qF 'same-Provider review' "$R1_CONTEXT_DOC" 2>/dev/null \
+  && r1_chain_missing="$r1_chain_missing same_provider_definition_in:CONTEXT.md"
+
+if [ -z "$r1_chain_missing" ]; then
+  ok "r1_is_a_chain_not_the_superpowers_pass"
+else
+  no "r1_is_a_chain_not_the_superpowers_pass" "R1 is still defined by one executor, or the chain claim was dropped:$r1_chain_missing"
+fi
+
+# cross_provider_state_is_three_valued (guard: docs/adr/0007 made the Author a
+# recorded property of the change and gave the cross-provider claim three states.
+# Two states would collapse "nobody recorded it" into "satisfied", which is the
+# assumption the ADR exists to remove — an unverified claim reported as an
+# enforced one is worse than no claim, because the PR reader trusts it.
+#
+# The two documents must agree: a state named in one and absent from the other
+# is a contradiction between standards, which is what the deprecated-wording
+# check exists to catch elsewhere.
+cross_state_missing=""
+for cs_file in "$R1_AI_DOC" "$R1_GATE_DOC"; do
+  for cs_state in 'verified' 'declared' 'unknown'; do
+    grep -qF "\`$cs_state\`" "$cs_file" 2>/dev/null \
+      || cross_state_missing="$cross_state_missing ${cs_state}_missing_from:$(basename "$cs_file")"
+  done
+done
+grep -qF 'does not satisfy R2' "$R1_GATE_DOC" 2>/dev/null \
+  || cross_state_missing="$cross_state_missing unknown_treated_as_satisfied_in:r2_gate.md"
+grep -qF 'an attestation rather than an execution' "$R1_GATE_DOC" 2>/dev/null \
+  || cross_state_missing="$cross_state_missing in_session_honesty_missing_from:r2_gate.md"
+grep -qF 'Author Declaration' "$R1_CONTEXT_DOC" 2>/dev/null \
+  || cross_state_missing="$cross_state_missing term_missing_from:CONTEXT.md"
+grep -qF 'Cross-Provider State' "$R1_CONTEXT_DOC" 2>/dev/null \
+  || cross_state_missing="$cross_state_missing term_missing_from:CONTEXT.md"
+if [ -z "$cross_state_missing" ]; then
+  ok "cross_provider_state_is_three_valued"
+else
+  no "cross_provider_state_is_three_valued" "the three states are not stated consistently:$cross_state_missing"
+fi
+
+# pr_record_carries_the_cross_provider_state (guard: a state the runner computes
+# and the Pull Request never shows is a state nobody acts on. The review-layers
+# record is the one place the difference between an enforced and an asserted
+# cross-provider claim changes a human decision, so both the standard and the
+# template that implements it must carry it, and they must stay in step with
+# each other.
+PR_GITHUB_DOC="$REPO_ROOT/docs/standards/github.md"
+PR_TEMPLATE="$REPO_ROOT/.github/PULL_REQUEST_TEMPLATE.md"
+pr_state_missing=""
+for pr_file in "$PR_GITHUB_DOC" "$PR_TEMPLATE"; do
+  [ -f "$pr_file" ] || { pr_state_missing="$pr_state_missing absent:$(basename "$pr_file")"; continue; }
+  grep -qF 'cross-provider state' "$pr_file" 2>/dev/null \
+    || pr_state_missing="$pr_state_missing state_missing_from:$(basename "$pr_file")"
+  grep -qF 'Review layers recorded' "$pr_file" 2>/dev/null \
+    || pr_state_missing="$pr_state_missing record_dropped_from:$(basename "$pr_file")"
+done
+if [ -z "$pr_state_missing" ]; then
+  ok "pr_record_carries_the_cross_provider_state"
+else
+  no "pr_record_carries_the_cross_provider_state" "the PR review-layers record is missing the state:$pr_state_missing"
+fi
+
+# unbuilt_behavior_is_declared_as_such was retired here, with the slice that
+# built the runner (docs/specs/0018-role-runner-and-backend-families.md).
+#
+# It required `no executor yet` to appear in r2_gate.md and ai_guidelines.md
+# while the chain was specified and nothing walked it. Now that `mf review`
+# walks it, that sentence is false — and a guard that outlives its purpose stops
+# protecting a truth and starts compelling a lie, enforced by CI. Retiring it is
+# part of the work that made it wrong, not later cleanup.
+#
+# What replaced it is the Go suite: the behaviour the disclosure used to
+# apologise for is now pinned by tests that run it.
+
+# crura_review_is_triggered_not_fixed_rate (guard: docs/adr/0008 re-scoped the
+# human track because fixed-rate verification of model output cannot be both
+# effective and worth its cost. The cut is precise, and the guard pins both
+# halves of it: the line-by-line reads become conditional, while adjudicating
+# the recorded layers and deciding the merge stay unconditional, because
+# CONTEXT.md holds the Developer accountable for what ships and accountability
+# without a mandatory decision point is a claim nobody can exercise.
+#
+# Pinned in both directions on purpose. An absence-only check would pass on a
+# tree that deleted the human track altogether, which is not the decision.
+CR_DOC="$REPO_ROOT/docs/standards/crura_method.md"
+CR_CONTEXT="$REPO_ROOT/CONTEXT.md"
+crura_trigger_missing=""
+grep -qF 'triggered rather than unconditional' "$CR_DOC" 2>/dev/null \
+  || crura_trigger_missing="$crura_trigger_missing trigger_claim_missing_from:crura_method.md"
+grep -qF 'adjudication and the merge decision are unconditional' "$CR_DOC" 2>/dev/null \
+  || crura_trigger_missing="$crura_trigger_missing unconditional_half_dropped_from:crura_method.md"
+grep -qF '## Triggers' "$CR_DOC" 2>/dev/null \
+  || crura_trigger_missing="$crura_trigger_missing triggers_not_enumerated_in:crura_method.md"
+grep -qF 'moved to the Spec Gate' "$CR_DOC" 2>/dev/null \
+  || crura_trigger_missing="$crura_trigger_missing relocation_missing_from:crura_method.md"
+grep -qF 'always-on human review track' "$CR_CONTEXT" 2>/dev/null \
+  && crura_trigger_missing="$crura_trigger_missing retired_definition_in:CONTEXT.md"
+if [ -z "$crura_trigger_missing" ]; then
+  ok "crura_review_is_triggered_not_fixed_rate"
+else
+  no "crura_review_is_triggered_not_fixed_rate" "the human track is still fixed-rate, or the unconditional half was dropped:$crura_trigger_missing"
+fi
+
+# crura_instrumentation_can_falsify (guard: instrumenting only the reviews a
+# trigger fired on observes exactly the population already suspected, so the
+# resulting evidence can confirm the trigger set and never correct it — a
+# missing trigger hides in the changes nobody looked at. The periodic sample of
+# untriggered changes is the whole mitigation, so the standard has to require it
+# and has to say why, or a later reader drops it as ceremony.
+crura_evidence_missing=""
+grep -qF 'periodic sample of untriggered changes' "$CR_DOC" 2>/dev/null \
+  || crura_evidence_missing="$crura_evidence_missing sample_not_required_in:crura_method.md"
+grep -qF 'never correct it' "$CR_DOC" 2>/dev/null \
+  || crura_evidence_missing="$crura_evidence_missing rationale_missing_from:crura_method.md"
+grep -qF 'Review Trigger' "$CR_CONTEXT" 2>/dev/null \
+  || crura_evidence_missing="$crura_evidence_missing term_missing_from:CONTEXT.md"
+grep -qF 'Untriggered Sample' "$CR_CONTEXT" 2>/dev/null \
+  || crura_evidence_missing="$crura_evidence_missing term_missing_from:CONTEXT.md"
+if [ -z "$crura_evidence_missing" ]; then
+  ok "crura_instrumentation_can_falsify"
+else
+  no "crura_instrumentation_can_falsify" "the instrumentation can only ratify its own trigger set:$crura_evidence_missing"
+fi
+
+# pr_record_carries_the_review_outcome (guard: the bet is testable only if the
+# outcome of each human review is written down where it can later be counted,
+# in one vocabulary shared by the standard and the template that implements it.
+CR_GITHUB="$REPO_ROOT/docs/standards/github.md"
+CR_TEMPLATE="$REPO_ROOT/.github/PULL_REQUEST_TEMPLATE.md"
+CR_AI="$REPO_ROOT/docs/standards/ai_guidelines.md"
+CR_INDEX="$REPO_ROOT/docs/standards/INDEX.md"
+crura_record_missing=""
+for cr_file in "$CR_GITHUB" "$CR_TEMPLATE"; do
+  grep -qF 'automated layers missed' "$cr_file" 2>/dev/null \
+    || crura_record_missing="$crura_record_missing outcome_missing_from:$(basename "$cr_file")"
+done
+grep -qF 'adjudication stage of CRURA' "$CR_AI" 2>/dev/null \
+  || crura_record_missing="$crura_record_missing standin_unnamed_in:ai_guidelines.md"
+grep -qF 'triggered' "$CR_INDEX" 2>/dev/null \
+  || crura_record_missing="$crura_record_missing rule_missing_from:INDEX.md"
+if [ -z "$crura_record_missing" ]; then
+  ok "pr_record_carries_the_review_outcome"
+else
+  no "pr_record_carries_the_review_outcome" "the review outcome is not recorded in one shared vocabulary:$crura_record_missing"
+fi
+
 # passes_on_current_tree (the real docs/standards must be consistent)
 out=$(bash "$CHECK" 2>&1); code=$?
 if [ "$code" -eq 0 ]; then

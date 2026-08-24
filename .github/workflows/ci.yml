@@ -27,3 +27,20 @@ jobs:
           bash scripts/test/docs-consistency.test.sh
       - name: Docs consistency
         run: bash scripts/test/docs-consistency.sh
+      # The Go toolchain reads the version from go.mod, so the pin lives in one
+      # place rather than being restated here and drifting.
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Go build and tests
+        run: |
+          go build ./...
+          go vet ./...
+          go test ./...
+      - name: Go formatting
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt would change:"; echo "$unformatted"; exit 1
+          fi

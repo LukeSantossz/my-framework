@@ -1,0 +1,134 @@
+package cli
+
+import (
+	"bytes"
+	"encoding/json"
+	"fmt"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+)
+
+func statuslineEnv(t *testing.T, stdin string, vars map[string]string, args ...string) (Env, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	return Env{
+		Args:        args,
+		Stdin:       strings.NewReader(stdin),
+		Stdout:      &out,
+		Stderr:      &errOut,
+		RepoRoot:    t.TempDir(),
+		MachinePath: filepath.Join(t.TempDir(), "config.toml"),
+		Now:         func() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) },
+		Getenv:      func(name string) string { return vars[name] },
+		GitConfig:   func(string) (string, bool) { return "", false },
+	}, &out, &errOut
+}
+
+func sessionPayload(t *testing.T, dir string) string {
+	t.Helper()
+	transcript := filepath.Join(dir, "transcript.jsonl")
+	body := `{"type":"assistant","message":{"usage":{"input_tokens":1200,"output_tokens":800,` +
+		`"cache_creation_input_tokens":3000,"cache_read_input_tokens":300000}}}` + "\n"
+	if err := os.WriteFile(transcript, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	encoded, _ := json.Marshal(filepath.ToSlash(transcript))
+	return fmt.Sprintf(`{"model":{"id":"claude-opus-5[1m]","display_name":"Opus 5 (1M context)"},`+
+		`"transcript_path":%s,"cwd":%q,"version":"2.1.161"}`, encoded, "/nowhere/repo")
+}
+
+func TestStatuslineRenderEmitsTheContractWithoutANodeRuntime(t *testing.T) {
+	// The point of the port: the renderer is this binary. Nothing is spawned to
+	// produce the line, and an empty PATH — no node, and no git either — still
+	// yields every fact the contract names.
+	t.Setenv("PATH", "")
+	dir := t.TempDir()
+	claudeHome := t.TempDir()
+	if err := os.WriteFile(filepath.Join(claudeHome, "settings.json"), []byte(`{"effortLevel":"high"}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e, out, errOut := statuslineEnv(t, sessionPayload(t, dir), map[string]string{
+		"CLAUDE_HOME":                claudeHome,
+		"MYFW_STATUSLINE_NO_REFRESH": "1",
+		"NO_COLOR":                   "1",
+	}, "statusline", "render")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	line := out.String()
+	for _, want := range []string{"Opus 5", "high", "ctx", "304.2k/1M", "5.0k tok", "usage n/a", "repo"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the line lacks %q: %q", want, line)
+		}
+	}
+}
+
+func TestStatuslineRenderAlwaysExitsZero(t *testing.T) {
+	// An exit code where the status bar goes replaces every fact with an error
+	// message, which is worse than losing one.
+	e, out, _ := statuslineEnv(t, "not json", map[string]string{"MYFW_STATUSLINE_NO_REFRESH": "1", "NO_COLOR": "1"},
+		"statusline", "render")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d, want 0", code)
+	}
+	if out.String() == "" {
+		t.Error("a malformed payload emptied the status bar")
+	}
+}
+
+func TestStatuslineApplyWritesBothConfigurationsAndIsIdempotent(t *testing.T) {
+	codexHome, claudeHome := t.TempDir(), t.TempDir()
+	vars := map[string]string{"CODEX_HOME": codexHome, "CLAUDE_HOME": claudeHome}
+
+	e, out, errOut := statuslineEnv(t, "", vars, "statusline", "apply")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "machine state, not repository state") {
+		t.Errorf("the command did not say what it just changed: %q", out.String())
+	}
+
+	toml, err := os.ReadFile(filepath.Join(codexHome, "config.toml"))
+	if err != nil {
+		t.Fatalf("no codex config written: %v", err)
+	}
+	if !strings.Contains(string(toml), "model-with-reasoning") {
+		t.Errorf("the codex contract is missing:\n%s", toml)
+	}
+	settings, err := os.ReadFile(filepath.Join(claudeHome, "settings.json"))
+	if err != nil {
+		t.Fatalf("no settings written: %v", err)
+	}
+	if !strings.Contains(string(settings), "statusline render") {
+		t.Errorf("the settings do not point at the binary:\n%s", settings)
+	}
+	// The Node renderer is not what gets wired any more.
+	if strings.Contains(string(settings), ".js") {
+		t.Errorf("the settings still point at a script:\n%s", settings)
+	}
+
+	second, out2, _ := statuslineEnv(t, "", vars, "statusline", "apply")
+	if code := Run(second); code != 0 {
+		t.Fatalf("second run exit %d", code)
+	}
+	if !strings.Contains(out2.String(), "already canonical") {
+		t.Errorf("a conformant configuration was rewritten: %q", out2.String())
+	}
+	backups, _ := filepath.Glob(filepath.Join(claudeHome, "settings.json.bak.*"))
+	if len(backups) != 0 {
+		t.Errorf("re-running buried the original under %d generated copy/copies", len(backups))
+	}
+}
+
+func TestStatuslineRejectsAnUnknownAction(t *testing.T) {
+	e, _, errOut := statuslineEnv(t, "", nil, "statusline", "wat")
+	if code := Run(e); code == 0 {
+		t.Fatal("an unknown action was accepted")
+	}
+	if !strings.Contains(errOut.String(), "wat") {
+		t.Errorf("stderr %q does not name the action", errOut.String())
+	}
+}

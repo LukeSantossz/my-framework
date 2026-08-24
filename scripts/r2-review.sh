@@ -11,6 +11,23 @@ reviewers_dir="${R2_REVIEWERS_DIR:-$script_dir/reviewers}"
 
 log() { printf '[r2-review] %s\n' "$1"; }
 
+# Delegate to the binary when it is installed, and run the shell path below when
+# it is not. The shim exists so an adopter consuming this repository as a
+# submodule keeps working through the whole port: the environment variables, the
+# exit behavior and the reported line are unchanged either way.
+# Set R2_NO_DELEGATE=1 to exercise the shell path with the binary present.
+mf_bin="${MF_BIN:-mf}"
+if [ "${R2_NO_DELEGATE:-}" != "1" ] && command -v "$mf_bin" >/dev/null 2>&1; then
+  set -- --role r2
+  [ -n "${R2_BASE:-${CODEX_REVIEW_BASE:-}}" ] && set -- "$@" --base "${R2_BASE:-$CODEX_REVIEW_BASE}"
+  [ "${R2_DRYRUN:-${CODEX_REVIEW_DRYRUN:-}}" = "1" ] && set -- "$@" --dry-run
+  if [ "${SKIP_R2_REVIEW:-}" = "1" ] || [ "${SKIP_CODEX_REVIEW:-}" = "1" ]; then
+    log "bypass set; skipping R2 gate."
+    exit 0
+  fi
+  exec "$mf_bin" review "$@"
+fi
+
 # An adapter reports one of three outcomes, because the distinction the chain
 # turns on — did this reviewer run at all — cannot be recovered from outside
 # the adapter that owns the tool.
