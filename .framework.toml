@@ -91,3 +91,16 @@ exempt_paths = [
   "docs/adr/*",
   "docs/specs/*",
 ]
+
+# --- agent instruction files --------------------------------------------------
+
+# Generated from docs/agents/instructions.md. Roles are declared, not derived
+# from the backend chains: the Author is a per-branch declaration rather than a
+# chain, so there is nothing to derive it from.
+[agents.claude]
+file = "CLAUDE.md"
+roles = ["shared", "author"]
+
+[agents.codex]
+file = "AGENTS.md"
+roles = ["shared", "reviewer"]

@@ -47,6 +47,7 @@ Usage:
   mf hooks install|uninstall|status
   mf upgrade                       compare standards against this build; applies nothing
   mf author declare --provider <name> [--model <id>]
+  mf agents sync|check              generate the vendor instruction files from one source
 `
 
 // Run dispatches a command and returns the process exit code.
@@ -86,6 +87,8 @@ func Run(env Env) int {
 		return runUpgrade(env)
 	case "author":
 		return runAuthor(env, env.Args[1:])
+	case "agents":
+		return runAgents(env, env.Args[1:])
 	case "help", "-h", "--help":
 		fmt.Fprint(env.Stdout, usage)
 		return 0

@@ -134,6 +134,16 @@ type ProjectFile struct {
 	Review    Review              `toml:"review"`
 	Providers map[string]Provider `toml:"providers"`
 	Checks    Checks              `toml:"checks"`
+	Agents    map[string]Agent    `toml:"agents"`
+}
+
+// Agent is one vendor instruction file to generate. Roles are declared rather
+// than derived from the backend chains, because the Author is not a chain: it is
+// a per-branch declaration, so there is nothing to derive it from.
+type Agent struct {
+	File       string   `toml:"file"`
+	Roles      []string `toml:"roles"`
+	PathPrefix string   `toml:"path_prefix"`
 }
 
 // Checks configures the deterministic gates. ExemptPaths is what decides
