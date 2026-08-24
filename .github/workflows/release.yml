@@ -1,0 +1,62 @@
+name: release
+
+# Builds the binary for every supported platform on a version tag and publishes
+# it with checksums. The standards tree stays a runtime-free directory in this
+# repository, so an adopter consuming it as a submodule needs no binary at all;
+# the two artifacts are deliberately separate.
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # The suites gate the release. A tag that cannot pass them is a tag that
+      # should not become a download.
+      - name: Tests
+        run: |
+          go vet ./...
+          go test ./...
+          bash scripts/test/docs-consistency.sh
+
+      - name: Build
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          mkdir -p dist
+          # The version is stamped in rather than read at run time, so a binary
+          # always reports the tag it was built from even when it is copied
+          # somewhere with no git history.
+          for target in linux/amd64 linux/arm64 darwin/amd64 darwin/arm64 windows/amd64; do
+            os="${target%/*}"; arch="${target#*/}"
+            name="mf_${TAG}_${os}_${arch}"
+            ext=""
+            if [ "$os" = "windows" ]; then ext=".exe"; fi
+            GOOS="$os" GOARCH="$arch" CGO_ENABLED=0 go build \
+              -ldflags "-s -w -X github.com/LukeSantossz/my-framework/internal/version.Version=${TAG}" \
+              -o "dist/${name}${ext}" ./cmd/mf
+          done
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS
+
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: gh release create "$TAG" dist/* --generate-notes

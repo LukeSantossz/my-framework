@@ -169,3 +169,19 @@ func (r *Repo) Commits(base, head string) ([]Commit, error) {
 	}
 	return commits, nil
 }
+
+// ConfigGet reads a repository-scoped setting. Absence is not an error.
+func (r *Repo) ConfigGet(key string) (string, error) {
+	out, err := r.git("config", "--get", key)
+	return strings.TrimSpace(out), err
+}
+
+func (r *Repo) ConfigSetLocal(key, value string) error {
+	_, err := r.git("config", "--local", key, value)
+	return err
+}
+
+func (r *Repo) ConfigUnsetLocal(key string) error {
+	_, err := r.git("config", "--local", "--unset", key)
+	return err
+}

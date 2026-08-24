@@ -41,6 +41,12 @@ Usage:
 
   mf check [spec|commit|branch|docs|records]
                                    run the deterministic gates; no model is called
+
+  mf doctor                        report what resolves, what is wired, what is missing
+  mf init                          scaffold policy, wire hooks, record the version
+  mf hooks install|uninstall|status
+  mf upgrade                       compare standards against this build; applies nothing
+  mf author declare --provider <name> [--model <id>]
 `
 
 // Run dispatches a command and returns the process exit code.
@@ -70,6 +76,16 @@ func Run(env Env) int {
 		return runReview(env, env.Args[1:])
 	case "check":
 		return runCheck(env, env.Args[1:])
+	case "doctor":
+		return runDoctor(env)
+	case "init":
+		return runInit(env)
+	case "hooks":
+		return runHooks(env, env.Args[1:])
+	case "upgrade":
+		return runUpgrade(env)
+	case "author":
+		return runAuthor(env, env.Args[1:])
 	case "help", "-h", "--help":
 		fmt.Fprint(env.Stdout, usage)
 		return 0
