@@ -298,6 +298,27 @@ the code is required to do.
 9. `0023` — usage accounting and `models pin`.
 10. `0024` — `eval` and the planted-defect corpus.
 11. `0025` — the ported `statusline`, `explain`, and token-economy style.
+12. `0026` — the tool's visual identity, decided once every other slice is
+    implemented and validated. Added to this list after the architecture was
+    approved, at the Developer's direction. The reference is
+    `https://github.com/voltagent/awesome-design-md`, a collection of `DESIGN.md`
+    files in Google Stitch format — palette, typography, components, spacing,
+    depth — written to be read by an agent that then generates matching UI.
+
+    It is placed last because it depends on the surfaces existing. Two of them
+    are genuinely visual: the CRUX explainer that `0025` generates, which is an
+    HTML page and where a `DESIGN.md` applies directly, and the terminal output,
+    where it barely applies at all — a terminal has no fonts, no shadows and no
+    cards, and its palette belongs to the reader's theme rather than to the
+    tool. The status line is explicitly out of reach: `status_line.md` binds the
+    five facts and their order and deliberately binds neither colours nor glyphs.
+
+    The decision that slice has to make is which of two things is being adopted:
+    the `DESIGN.md` *format*, with values authored for this project, or a
+    specific brand's file taken as-is. The second is what the reference
+    repository is built for, and it means shipping a published tool dressed in
+    another company's identity — a question of trademark and honest attribution
+    rather than of taste, and one the Developer decides rather than the spec.
 
 ## Reproducibility
 
