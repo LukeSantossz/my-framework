@@ -211,15 +211,23 @@ model = "deepseek-v4-flash"
 	assertValue(t, cfg, "providers.deepseek.api_key_env", "DEEPSEEK_API_KEY", LayerMachine)
 }
 
-func TestRefusesAnAPIBackendNamingAProviderNoMachineFileDefines(t *testing.T) {
+func TestAnAPIBackendWithNoConfiguredProviderStillLoads(t *testing.T) {
+	// Whether a provider is reachable here is a property of this machine, not
+	// of the file's correctness, and a provider nobody has configured yet is
+	// indistinguishable from a misspelled one. Refusing the load would stop a
+	// fresh clone from running any command at all; the backend reports itself
+	// unavailable at run time instead, and the chain advances.
 	project := `
 version = 1
 [backends.local]
 kind = "api"
 provider = "nowhere"
 `
-	_, err := Load(fixture(t, project, minimalMachine))
-	assertRefused(t, err, "nowhere")
+	cfg := mustLoad(t, fixture(t, project, minimalMachine))
+	assertValue(t, cfg, "backends.local.provider", "nowhere", LayerProject)
+	if endpoint, _, ok := cfg.Get("providers.nowhere.endpoint"); ok && endpoint != "" {
+		t.Errorf("an unconfigured provider resolved to an endpoint: %q", endpoint)
+	}
 }
 
 func TestAllowsACLIBackendWhoseProviderNoMachineFileDefines(t *testing.T) {
@@ -412,4 +420,26 @@ func TestShipsTheDocumentedDefaultR2Chain(t *testing.T) {
 	// r2_gate.md states the shipped default chain is codex alone, so a
 	// repository that configures nothing behaves as it always has.
 	assertValue(t, mustLoad(t, fixture(t, "", "")), "roles.r2.backends", DefaultR2Backends, LayerDefault)
+}
+
+func TestAcceptsAnAPIBackendWhoseProviderEndpointComesFromTheLegacyLayer(t *testing.T) {
+	// A clone configured before the TOML layers existed has its endpoint in
+	// git config. Validating only against the decoded machine file would refuse
+	// a configuration that resolves perfectly well, which is precisely the
+	// upgrade break the deprecated layer exists to prevent.
+	project := `
+version = 1
+[backends.legacy]
+kind = "api"
+provider = "openai"
+`
+	opts := fixture(t, project, "")
+	opts.GitConfig = func(key string) (string, bool) {
+		if key == "r2.openai.endpoint" {
+			return "https://api.deepseek.com/v1", true
+		}
+		return "", false
+	}
+	cfg := mustLoad(t, opts)
+	assertValue(t, cfg, "providers.openai.endpoint", "https://api.deepseek.com/v1", LayerLegacy)
 }
