@@ -133,6 +133,16 @@ type ProjectFile struct {
 	Backends  map[string]Backend  `toml:"backends"`
 	Review    Review              `toml:"review"`
 	Providers map[string]Provider `toml:"providers"`
+	Checks    Checks              `toml:"checks"`
+}
+
+// Checks configures the deterministic gates. ExemptPaths is what decides
+// triviality for the spec check: a crude, readable list rather than a heuristic
+// or a model, because a gate nobody can predict is a gate people route around,
+// and an exemption that lives in a committed file shows up in review when
+// someone widens it.
+type Checks struct {
+	ExemptPaths []string `toml:"exempt_paths"`
 }
 
 // MachineFile is the per-user file. It is the only place a provider is defined.

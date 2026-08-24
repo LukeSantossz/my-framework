@@ -129,3 +129,43 @@ func (r *Repo) SetAuthorDeclaration(branch string, d Declaration) error {
 	}
 	return nil
 }
+
+// Commit is one commit's message, split the way Conventional Commits reads it.
+type Commit struct {
+	SHA     string
+	Subject string
+	Body    string
+}
+
+// Commits lists what head adds over base, newest last.
+func (r *Repo) Commits(base, head string) ([]Commit, error) {
+	for _, ref := range []string{base, head} {
+		if !r.Resolves(ref) {
+			return nil, fmt.Errorf("ref %q does not resolve in this repository", ref)
+		}
+	}
+	// A record separator no commit message will contain, so a body with blank
+	// lines cannot be mistaken for the end of an entry.
+	const sep = "\x1e"
+	out, err := r.git("log", "--reverse", "--format=%H%x1f%s%x1f%b"+sep, base+".."+head)
+	if err != nil {
+		return nil, err
+	}
+	var commits []Commit
+	for _, entry := range strings.Split(out, sep) {
+		entry = strings.TrimSpace(entry)
+		if entry == "" {
+			continue
+		}
+		parts := strings.SplitN(entry, "\x1f", 3)
+		if len(parts) < 2 {
+			continue
+		}
+		c := Commit{SHA: parts[0], Subject: parts[1]}
+		if len(parts) == 3 {
+			c.Body = parts[2]
+		}
+		commits = append(commits, c)
+	}
+	return commits, nil
+}

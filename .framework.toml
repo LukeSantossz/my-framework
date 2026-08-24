@@ -76,3 +76,18 @@ unavailable_patterns = [
   "not authenticated", "unauthorized", "401", "403",
   "network error", "connection (refused|reset)",
 ]
+
+# --- checks ------------------------------------------------------------------
+
+# What counts as trivial, as an explicit path list rather than a heuristic or a
+# model. It is crude on purpose: a gate nobody can predict is a gate people
+# route around, and widening this list is visible in review.
+[checks]
+exempt_paths = [
+  "README.md",
+  "LICENSE",
+  ".gitignore",
+  ".gitattributes",
+  "docs/adr/*",
+  "docs/specs/*",
+]
