@@ -69,15 +69,15 @@ Three paths. **Once the next tag is published, prefer the prebuilt binary**: it 
 # Prebuilt, with the checksum verified. Pick your platform from
 # mf_<tag>_{linux,darwin}_{amd64,arm64} and mf_<tag>_windows_amd64.exe.
 # --repo is required: you are not standing in a clone of this repository.
-gh release download v0.4.0 --repo LukeSantossz/my-framework \
-  --pattern 'mf_v0.4.0_linux_amd64' --pattern 'SHA256SUMS'
+gh release download v0.5.0 --repo LukeSantossz/my-framework \
+  --pattern 'mf_v0.5.0_linux_amd64' --pattern 'SHA256SUMS'
 sha256sum --ignore-missing -c SHA256SUMS
 # macOS ships no sha256sum; there the same check is:
 #   shasum -a 256 --ignore-missing -c SHA256SUMS
-install -m 0755 mf_v0.4.0_linux_amd64 ~/.local/bin/mf
+install -m 0755 mf_v0.5.0_linux_amd64 ~/.local/bin/mf
 ```
 
-Without `gh`, the same assets are at `https://github.com/LukeSantossz/my-framework/releases/tag/v0.4.0`, and `SHA256SUMS` covers every one of them.
+Without `gh`, the same assets are at `https://github.com/LukeSantossz/my-framework/releases/tag/v0.5.0`, and `SHA256SUMS` covers every one of them.
 
 ```sh
 # From the module proxy. Needs a Go toolchain; from the next tag onward the
@@ -93,7 +93,7 @@ git clone https://github.com/LukeSantossz/my-framework && cd my-framework
 go build -o mf ./cmd/mf && install -m 0755 mf ~/.local/bin/mf
 ```
 
-**Read this before choosing.** `v0.4.0` is the newest tag, and its `mf init` predates the adoption described in the next section: run it and you get `.framework.toml` and `.framework.lock` and nothing else — no standards, no hooks, no instruction files, and a `mf check` that stops on the standards it cannot find. `go install …@latest` resolves to that same tag, and a `v0.4.0` binary installed that way additionally reports its version as `0.0.0-dev`, because the fallback that reads the module version also landed after the tag. Both are fixed on `main` and land in the next release. Until then, build from a checkout.
+**Which to prefer.** The released binary. It is stamped with its tag, verified by checksum, and needs no Go toolchain. `go install` is honest about its version too — the build-info fallback landed in `v0.5.0` — but it builds from source and gives you no checksum to check.
 
 ### Adopting a repository
 
@@ -304,19 +304,18 @@ my-framework/
 
 ## Project Status
 
-In development. `v0.4.0` is the current release and the first tag to contain `cmd/mf/`: it publishes stamped binaries for `linux/{amd64,arm64}`, `darwin/{amd64,arm64}` and `windows/amd64` with a `SHA256SUMS` covering all five. Tags `v0.1.0` through `v0.3.0` are the earlier standards-only releases, from before the binary existed; an adopter recording the tag they adopted from wants `v0.4.0` or later, and `mf init` records it in `.framework.lock` automatically.
+In development. `v0.5.0` is the current release: it is the first tag whose `mf init` performs the adoption this README describes, and it publishes stamped binaries for `linux/{amd64,arm64}`, `darwin/{amd64,arm64}` and `windows/amd64` with a `SHA256SUMS` covering all five. `v0.4.0` was the first tag to contain `cmd/mf/`; `v0.1.0` through `v0.3.0` are the earlier standards-only releases, from before the binary existed. An adopter recording the tag they adopted from wants `v0.5.0` or later, and `mf init` records it in `.framework.lock` automatically.
 
-Unreleased since `v0.4.0`, and landing in the next tag: the deletion of the shell review path, backends in the machine layer, `[paths]`, `roles.<role>.blocking`, the fail-closed hooks, `mf check commit --message`, `mf statusline revert`, and the version fallback that makes a `go install` build report a real version. Versioning policy is semver git tags.
+`v0.5.0` carries the work specified in `docs/specs/0027`: the deletion of the shell review path, backends in the machine layer, `[paths]`, `roles.<role>.blocking`, the fail-closed hooks, `mf check commit --message`, `mf statusline revert`, an `mf init` that adopts a repository and takes the provider you choose, and the version fallback that makes a `go install` build report a real version. Versioning policy is semver git tags.
 
 Done, in the tree: the seven gates and the three places they run, the four role chains, the configuration cascade, the status line contract, the CRUX explainer, the eval corpus, the design gate, and an `mf init` that genuinely adopts a repository.
 
-Pending: the fingerprint table that would let R2 report `verified`; an R3 reviewer configured on this repository; a first R1 backend that is not `in-session`; the removal of the Node status line renderer once the submodule consumer has migrated.
+Pending: the fingerprint table that would let R2 report `verified`; a first R1 backend that is not `in-session`; a workflow-hosted R3 beside the forge app that reviews here today; the removal of the Node status line renderer once the submodule consumer has migrated.
 
 ## Known Issues & Limitations
 
 - **R1 runs only from inside a session.** Its whole shipped chain is `superpowers`, an `in-session` backend that cannot be started as a subprocess. It is satisfiable — the session that reviewed records `git config --local mf.attestation.r1 $(git rev-parse HEAD)`, and the runner then reports R1 as reviewed — but nothing outside a session can produce that record, so a CI run or a push from a plain terminal reports R1 as not run. A second, subprocess-startable R1 backend is what would close this; none is configured here.
-- **R3 does not run on this repository.** The mechanism exists: `.github/workflows/review.yml` builds a machine-layer `api` backend out of `MF_R3_ENDPOINT`, `MF_R3_MODEL`, `MF_R3_PROVIDER_KIND` and the `MF_R3_API_KEY` secret, and prepends it to the chain for that run. None of those is set here, so every pull request gets a job that says R3 did not run and what to set. A fork's pull request cannot run it at all, by GitHub's design: forks get no secrets and a read-only token.
-- **The newest tag cannot perform the adoption this README describes.** `v0.4.0`'s `mf init` writes the policy file and the lock and stops; the materialisation of the standards, the agent source and the hooks is on `main` and unreleased. Adopting today means building from a checkout. This closes when the next tag ships.
+- **R3 runs here as a forge app, not from the workflow.** `.framework.toml` declares R3 as CodeRabbit, which reviews every pull request without this repository starting it — and does find things: it returned twenty-eight findings on the pull request that closed `docs/specs/0027`. What does not run is the workflow-hosted alternative: `.github/workflows/review.yml` builds a machine-layer `api` backend out of `MF_R3_ENDPOINT`, `MF_R3_MODEL`, `MF_R3_PROVIDER_KIND` and the `MF_R3_API_KEY` secret and prepends it to the chain, and none of those is set here, so a job says so on each pull request. That is an addition rather than a gap. A fork's pull request cannot run it at all, by GitHub's design: forks get no secrets and a read-only token.
 - **`mf init` adopts the harness, not the forge.** It writes the standards, the agent source, the hooks, the policy file and the instruction files. It does not write `.github/` templates or workflows, `CONTEXT.md`, or the `.gitattributes` that keeps a Windows checkout from failing the formatting gate. Those are still copied by hand from this repository.
 - **The R2 cross-provider gate needs at least one configured backend to be available.** When none is, R2 does not run for that push, the runner says so, and CRURA human review substitutes per `docs/standards/crura_method.md`.
 - **The cross-provider requirement compares two labels.** Both provider names are configuration strings nothing verifies against the endpoint actually reached, so a chain that selects a local OpenAI-compatible endpoint satisfies the rule by naming a provider. This is the standards question issue #16 raised, confirmed still live by the audit and unresolved: the claim is exactly as strong as the labels, which is why the Cross-Provider State is recorded beside the review rather than reduced to a pass.
