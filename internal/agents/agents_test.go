@@ -63,7 +63,7 @@ func TestRenderGivesAVendorOnlyTheRolesItPlays(t *testing.T) {
 	// obligations in its context, and a reviewer should not be told to specify
 	// before building.
 	src := mustParse(t)
-	out, err := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"}})
+	out, err := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"}}, SourcePath)
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -78,7 +78,7 @@ func TestRenderGivesAVendorOnlyTheRolesItPlays(t *testing.T) {
 func TestRenderAlwaysCarriesThePreamble(t *testing.T) {
 	src := mustParse(t)
 	for _, roles := range [][]string{{"shared"}, {"reviewer"}} {
-		out, err := Render(src, Target{Name: "x", File: "X.md", Roles: roles})
+		out, err := Render(src, Target{Name: "x", File: "X.md", Roles: roles}, SourcePath)
 		if err != nil {
 			t.Fatalf("Render: %v", err)
 		}
@@ -90,7 +90,7 @@ func TestRenderAlwaysCarriesThePreamble(t *testing.T) {
 
 func TestRenderWritesAHeaderNamingTheSourceAndTheCommand(t *testing.T) {
 	src := mustParse(t)
-	out, _ := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared"}})
+	out, _ := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared"}}, SourcePath)
 	for _, want := range []string{SourcePath, "mf agents sync", "Do not edit"} {
 		if !strings.Contains(out, want) {
 			t.Errorf("header lacks %q:\n%s", want, out)
@@ -105,7 +105,7 @@ func TestRenderAppliesThePathPrefix(t *testing.T) {
 	out, err := Render(src, Target{
 		Name: "claude", File: "CLAUDE.md", Roles: []string{"shared"},
 		PathPrefix: ".standards/docs/standards",
-	})
+	}, SourcePath)
 	if err != nil {
 		t.Fatalf("Render: %v", err)
 	}
@@ -121,7 +121,7 @@ func TestRenderRefusesARoleTheSourceDoesNotDeclare(t *testing.T) {
 	// A typo would otherwise produce a file quietly missing the obligations it
 	// was supposed to carry.
 	src := mustParse(t)
-	_, err := Render(src, Target{Name: "x", File: "X.md", Roles: []string{"revewer"}})
+	_, err := Render(src, Target{Name: "x", File: "X.md", Roles: []string{"revewer"}}, SourcePath)
 	if err == nil {
 		t.Fatal("want an error for an undeclared role")
 	}
@@ -323,4 +323,45 @@ func TestTheSourcePathFallsBackToTheShippedLayout(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("Sync with no configured source: %v", err)
 	}
+}
+
+func TestTheGeneratedHeaderNamesTheSourceItWasGeneratedFrom(t *testing.T) {
+	// The header tells the reader which file to edit instead of this one. A
+	// constant there sends a submodule consumer to a path that does not exist
+	// in their repository — the same defect as reading from it, on the way out.
+	root := t.TempDir()
+	vendored := filepath.Join(root, ".standards", "docs", "agents")
+	if err := os.MkdirAll(vendored, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vendored, "instructions.md"), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	const relocated = ".standards/docs/agents/instructions.md"
+
+	if _, err := Sync(Options{
+		RepoRoot:   root,
+		SourcePath: relocated,
+		Targets:    []Target{{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared"}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), relocated) {
+		t.Errorf("the header does not name the source it came from:\n%s", firstLines(string(body), 3))
+	}
+	if strings.Contains(string(body), "from "+SourcePath) {
+		t.Error("the header names the shipped layout, which this repository does not use")
+	}
+}
+
+func firstLines(s string, n int) string {
+	lines := strings.SplitN(s, "\n", n+1)
+	if len(lines) > n {
+		lines = lines[:n]
+	}
+	return strings.Join(lines, "\n")
 }
