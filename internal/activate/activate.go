@@ -303,6 +303,13 @@ type InitOptions struct {
 	// keeps them somewhere else, and materialising a second copy under
 	// `docs/standards` there would give that repository two corpora to drift.
 	StandardsDir string
+
+	// R2Backend is the reviewer the adopter named at activation, if any. The
+	// scaffold declares it in the R2 chain, because a chain is policy while the
+	// route to it is machine state, and writing only the route would leave a
+	// backend nothing reaches for. Empty leaves the chain empty, which is the
+	// honest state for a repository that has not chosen one.
+	R2Backend string
 }
 
 // Init applies the local activation state.
@@ -325,7 +332,12 @@ func Init(o InitOptions) ([]Step, error) {
 	if _, err := os.Stat(projectPath); err == nil {
 		steps = append(steps, Step{Name: "project file", Message: config.ProjectFileName + " already exists; left untouched"})
 	} else {
-		if err := os.WriteFile(projectPath, []byte(scaffold), 0o644); err != nil {
+		body := scaffold
+		if o.R2Backend != "" {
+			body = strings.Replace(body, "[roles.r2]\nbackends = []",
+				fmt.Sprintf("[roles.r2]\nbackends = [%q]", o.R2Backend), 1)
+		}
+		if err := os.WriteFile(projectPath, []byte(body), 0o644); err != nil {
 			return steps, err
 		}
 		steps = append(steps, Step{Name: "project file", Changed: true, Message: "wrote " + config.ProjectFileName})
@@ -530,23 +542,30 @@ const scaffold = `# Development-standards policy for this repository.
 # It must never carry an endpoint, an API key, or the name of the variable
 # holding one — those are machine state and the loader refuses them here.
 #
-# A project names providers; only a machine defines how to reach them. Naming a
-# reviewer therefore takes two steps, and this file is only the second of them.
-# On your machine, describe how the provider is reached and what backend uses it:
+# A project names providers; only a machine defines how to reach them. Which
+# provider reviews your code is your choice, so this framework names none: the
+# quickest way to record one is to have said so at activation,
 #
-#   mf config set providers.deepseek.endpoint https://api.deepseek.com/v1 --machine
-#   mf config set providers.deepseek.api_key_env DEEPSEEK_API_KEY --machine
-#   mf config set providers.deepseek.kind openai-compatible --machine
-#   mf config set backends.deepseek.kind api --machine
-#   mf config set backends.deepseek.provider deepseek --machine
-#   mf config set backends.deepseek.model deepseek-v4 --machine
+#   mf init --provider <name> --endpoint <url> --api-key-env <VAR> --model <id>
+#
+# which writes the route on this machine and the chain below in one step. The
+# same thing by hand, for a provider added later:
+#
+#   mf config set providers.<name>.endpoint <url> --machine
+#   mf config set providers.<name>.api_key_env <VAR> --machine
+#   mf config set providers.<name>.kind openai-compatible --machine
+#   mf config set backends.<name>.kind api --machine
+#   mf config set backends.<name>.provider <name> --machine
+#   mf config set backends.<name>.model <id> --machine
+#
+# <VAR> is the NAME of the environment variable holding the key, never the key.
 #
 # Then decide who puts it in a chain. This file does, for everyone who clones
 # the repository: add the name to a role below and commit it. A machine chain
 # (` + "`mf config set roles.r2.backends ... --machine`" + `) applies only to a role this
 # file leaves undeclared, because a machine may not review a repository with a
 # chain that repository did not choose. For one run, and only for the person
-# running it: ` + "`MF_ROLES_R2_BACKENDS=deepseek mf review --role r2`" + `.
+# running it: ` + "`MF_ROLES_R2_BACKENDS=<name> mf review --role r2`" + `.
 #
 # ` + "`mf doctor`" + ` reports which of these steps is still missing.
 

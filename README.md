@@ -102,6 +102,22 @@ cd /path/to/the/repository/you/want/to/govern
 mf init
 ```
 
+Nothing here picks a reviewer for you. If you already know which provider should
+review your code, name it and `init` records the route on this machine and the
+chain in committed policy in one step:
+
+```sh
+mf init --provider <name> --endpoint <url> --api-key-env <VAR> --model <id>
+```
+
+`<VAR>` is the *name* of the environment variable holding the key, never the key
+itself — the loader refuses a credential in either file. `--kind` selects the wire
+shape (`openai-compatible`, the default, or `anthropic` or `google`). Without
+these flags `init` writes no machine state at all, and a provider named without
+`--endpoint` and `--api-key-env` is refused rather than recorded: a backend with
+half a route resolves, gets named in a chain, and reports itself unavailable on
+every run for a reason nothing states.
+
 It writes, and never overwrites anything already there:
 
 | What | Where |
@@ -172,7 +188,7 @@ That is the whole suite. The shell suites this repository used to carry were del
 
 | Command | What it does |
 |---|---|
-| `mf init` | Adopt this repository: materialise the standards, the agent source and the hooks, wire `core.hooksPath`, record the version, generate the instruction files. Overwrites nothing. |
+| `mf init [--provider <name> --endpoint <url> --api-key-env <VAR> [--model <id>] [--kind <shape>]]` | Adopt this repository: materialise the standards, the agent source and the hooks, wire `core.hooksPath`, record the version, generate the instruction files. Overwrites nothing. The provider flags additionally record the reviewer you choose in the machine layer and name it in the R2 chain; without them no machine state is written. |
 | `mf doctor` | Report the build, activation state, every role's chain and each backend's reachability, the cross-provider state, credentials, usage, and the token-economy claims. Changes nothing. |
 | `mf hooks install` | Point `core.hooksPath` at `.githooks`. Refuses a hooks path it does not own. |
 | `mf hooks uninstall` | Remove only the wiring `mf` installed. Idempotent; leaves the directory. |

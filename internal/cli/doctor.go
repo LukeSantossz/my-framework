@@ -216,7 +216,51 @@ func inheritedNote(state activate.HooksState) string {
 	return " (set outside this repository, so it applies to every repository on this machine)"
 }
 
-func runInit(env Env) int {
+// chosenProvider is the reviewer an adopter names at activation time.
+//
+// Which provider reviews their code is theirs to pick, so nothing here ships a
+// default one: without these flags init writes no machine state at all, and
+// with them it writes each half into the layer that owns it — the route on the
+// machine, the chain that names it in committed policy (docs/adr/0006).
+type chosenProvider struct {
+	Name      string
+	Endpoint  string
+	APIKeyEnv string
+	Model     string
+	Kind      string
+}
+
+func (c chosenProvider) named() bool { return c.Name != "" }
+
+func runInit(env Env, args []string) int {
+	var chosen chosenProvider
+	for i := 0; i < len(args); i++ {
+		var into *string
+		switch args[i] {
+		case "--provider":
+			into = &chosen.Name
+		case "--endpoint":
+			into = &chosen.Endpoint
+		case "--api-key-env":
+			into = &chosen.APIKeyEnv
+		case "--model":
+			into = &chosen.Model
+		case "--kind":
+			into = &chosen.Kind
+		default:
+			fmt.Fprintf(env.Stderr, "mf init: unknown option %q\n", args[i])
+			return 2
+		}
+		value, ok := optionValue(env, "mf init", args, &i)
+		if !ok {
+			return 2
+		}
+		*into = value
+	}
+	if code := checkChosen(env, chosen); code != 0 {
+		return code
+	}
+
 	// Loaded before anything is written, for one value: where this repository
 	// keeps its standards. A repository that already configures a corpus — the
 	// submodule case — must not be handed a second one under docs/standards.
@@ -229,7 +273,17 @@ func runInit(env Env) int {
 		RepoRoot:         env.RepoRoot,
 		FrameworkVersion: version.Version,
 		StandardsDir:     standardsDir(cfg),
+		R2Backend:        chosen.Name,
 	})
+	if chosen.named() && err == nil {
+		// After the scaffold, so a machine write cannot leave a repository
+		// half-activated if it fails.
+		step, writeErr := recordProvider(env, chosen)
+		steps = append(steps, step)
+		if writeErr != nil {
+			err = writeErr
+		}
+	}
 	if err == nil {
 		steps = append(steps, generateAgentFiles(env)...)
 	}
@@ -424,4 +478,67 @@ func runAuthor(env Env, args []string) int {
 	}
 	fmt.Fprintf(env.Stdout, "declared %s / %s as the Author of %s\n", provider, orUnset(model), head)
 	return 0
+}
+
+// checkChosen refuses half a route.
+//
+// A provider named without a way to reach it resolves, gets named in a chain,
+// and reports itself unavailable on every run for a reason nothing states —
+// worse than not having been configured at all, because it looks configured.
+func checkChosen(env Env, c chosenProvider) int {
+	if !c.named() {
+		for flag, value := range map[string]string{
+			"--endpoint": c.Endpoint, "--api-key-env": c.APIKeyEnv,
+			"--model": c.Model, "--kind": c.Kind,
+		} {
+			if value != "" {
+				fmt.Fprintf(env.Stderr, "mf init: %s describes a provider, so --provider has to name one\n", flag)
+				return 2
+			}
+		}
+		return 0
+	}
+	for _, missing := range []struct{ flag, value string }{
+		{"--endpoint", c.Endpoint},
+		{"--api-key-env", c.APIKeyEnv},
+	} {
+		if missing.value == "" {
+			fmt.Fprintf(env.Stderr, "mf init: --provider %s needs %s; a provider with no route is a backend that reports itself unavailable on every run\n", c.Name, missing.flag)
+			return 2
+		}
+	}
+	return 0
+}
+
+// recordProvider writes the adopter's chosen route into the machine layer.
+//
+// Every value goes through config.Set rather than being formatted here, so the
+// refusals that guard a committed file — a credential instead of a variable
+// name, a key that belongs in the other layer — guard this path too.
+func recordProvider(env Env, c chosenProvider) (activate.Step, error) {
+	kind := c.Kind
+	if kind == "" {
+		kind = "openai-compatible"
+	}
+	writes := []struct{ key, value string }{
+		{"providers." + c.Name + ".endpoint", c.Endpoint},
+		{"providers." + c.Name + ".api_key_env", c.APIKeyEnv},
+		{"providers." + c.Name + ".kind", kind},
+		{"backends." + c.Name + ".kind", "api"},
+		{"backends." + c.Name + ".provider", c.Name},
+		{"backends." + c.Name + ".model", c.Model},
+	}
+	for _, w := range writes {
+		if w.value == "" {
+			continue
+		}
+		if err := config.Set(env.configOptions(), w.key, w.value, config.TargetMachine); err != nil {
+			return activate.Step{Name: "provider", Message: err.Error()}, err
+		}
+	}
+	return activate.Step{
+		Name:    "provider",
+		Changed: true,
+		Message: fmt.Sprintf("recorded %s on this machine; %s names it in the R2 chain", c.Name, config.ProjectFileName),
+	}, nil
 }

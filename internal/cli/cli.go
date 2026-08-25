@@ -55,7 +55,12 @@ Usage:
                                    run the deterministic gates; no model is called
 
   mf doctor                        report what resolves, what is wired, what is missing
-  mf init                          scaffold policy, wire hooks, record the version
+  mf init [--provider <name> --endpoint <url> --api-key-env <VAR>
+          [--model <id>] [--kind <shape>]]
+                                   scaffold policy, wire hooks, record the
+                                   version; the provider flags record the
+                                   reviewer you choose on this machine and
+                                   name it in the R2 chain
   mf hooks install|uninstall|status
   mf upgrade                       compare standards against this build; applies nothing
   mf author declare --provider <name> [--model <id>]
@@ -116,7 +121,7 @@ func Run(env Env) int {
 	case "doctor":
 		return runDoctor(env)
 	case "init":
-		return runInit(env)
+		return runInit(env, env.Args[1:])
 	case "hooks":
 		return runHooks(env, env.Args[1:])
 	case "upgrade":

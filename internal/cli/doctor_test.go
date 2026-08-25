@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"strings"
@@ -408,4 +409,89 @@ func TestDoctorReportsNoPinsAsSomethingToDo(t *testing.T) {
 	if !strings.Contains(out.String(), "no models pinned") {
 		t.Errorf("doctor does not mention that nothing is pinned:\n%s", out.String())
 	}
+}
+
+func TestInitWithoutProviderFlagsWritesNoMachineState(t *testing.T) {
+	// The default is unchanged: init scaffolds policy, and reaching outside the
+	// repository is something a person asks for rather than something an
+	// activation step does to them.
+	root := gitRepo(t, "")
+	machine := filepath.Join(t.TempDir(), "config.toml")
+	e, _, _ := initEnv(t, root, machine, "init")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	if _, err := os.Stat(machine); !os.IsNotExist(err) {
+		t.Errorf("init wrote a machine file nobody asked for: %v", err)
+	}
+}
+
+func TestInitRecordsTheProviderTheAdopterChose(t *testing.T) {
+	// Which provider reviews is the adopter's choice, made here, rather than a
+	// vendor this framework picked for them. The route is machine state and the
+	// chain that names it is policy, so one command writes both halves into the
+	// layer each belongs in.
+	root := gitRepo(t, "")
+	machine := filepath.Join(t.TempDir(), "config.toml")
+	e, out, errOut := initEnv(t, root, machine,
+		"init", "--provider", "acme", "--endpoint", "https://api.acme.test/v1",
+		"--api-key-env", "ACME_API_KEY", "--model", "acme-2")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, out.String(), errOut.String())
+	}
+
+	body, err := os.ReadFile(machine)
+	if err != nil {
+		t.Fatalf("reading the machine file: %v", err)
+	}
+	for _, want := range []string{"https://api.acme.test/v1", "ACME_API_KEY", "acme-2"} {
+		if !strings.Contains(string(body), want) {
+			t.Errorf("the machine file does not carry %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(string(body), "api.deepseek.com") {
+		t.Error("the machine file carries a vendor the adopter did not name")
+	}
+
+	project, err := os.ReadFile(filepath.Join(root, ".framework.toml"))
+	if err != nil {
+		t.Fatalf("reading the project file: %v", err)
+	}
+	if !strings.Contains(string(project), `"acme"`) {
+		t.Errorf("the scaffold does not name the chosen backend in a chain:\n%s", project)
+	}
+	if strings.Contains(string(project), "api.acme.test") {
+		t.Error("the committed file carries a route; only a machine may define one")
+	}
+}
+
+func TestInitRefusesAProviderItCannotReach(t *testing.T) {
+	// Half a route is worse than none: the backend would resolve, be named in a
+	// chain, and report itself unavailable on every run for a reason nothing
+	// states.
+	root := gitRepo(t, "")
+	machine := filepath.Join(t.TempDir(), "config.toml")
+	e, _, errOut := initEnv(t, root, machine, "init", "--provider", "acme")
+	if code := Run(e); code == 0 {
+		t.Fatal("init accepted a provider with no endpoint")
+	}
+	if !strings.Contains(errOut.String(), "--endpoint") {
+		t.Errorf("the refusal does not name what is missing: %q", errOut.String())
+	}
+}
+
+// initEnv is reviewEnv with the machine file named, because these tests assert
+// on what init does and does not write there.
+func initEnv(t *testing.T, root, machine string, args ...string) (Env, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	return Env{
+		Args:        args,
+		Stdout:      &out,
+		Stderr:      &errOut,
+		RepoRoot:    root,
+		MachinePath: machine,
+		Getenv:      func(string) string { return "" },
+		GitConfig:   func(string) (string, bool) { return "", false },
+	}, &out, &errOut
 }

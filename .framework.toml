@@ -5,23 +5,28 @@
 # holding one — those are machine state and the loader refuses them here.
 # See docs/adr/0006-configuration-split-policy-and-machine.md.
 #
-# A project names providers; only a machine defines how to reach them. To add a
-# locally reachable reviewer, define the provider and the backend on your
+# A project names providers; only a machine defines how to reach them. Which
+# provider reviews your code is your choice, so this framework names none. To
+# add a locally reachable reviewer, define the provider and the backend on your
 # machine:
 #
-#   mf config set providers.deepseek.endpoint https://api.deepseek.com/v1 --machine
-#   mf config set providers.deepseek.api_key_env DEEPSEEK_API_KEY --machine
-#   mf config set providers.deepseek.kind openai-compatible --machine
-#   mf config set backends.deepseek.kind api --machine
-#   mf config set backends.deepseek.provider deepseek --machine
-#   mf config set backends.deepseek.model deepseek-v4 --machine
+#   mf config set providers.<name>.endpoint <url> --machine
+#   mf config set providers.<name>.api_key_env <VAR> --machine
+#   mf config set providers.<name>.kind openai-compatible --machine
+#   mf config set backends.<name>.kind api --machine
+#   mf config set backends.<name>.provider <name> --machine
+#   mf config set backends.<name>.model <id> --machine
+#
+# <VAR> is the NAME of the environment variable holding the key, never the key.
+# `mf init --provider <name> --endpoint <url> --api-key-env <VAR>` does the same
+# at activation time, and names the backend in the R2 chain in one step.
 #
 # Then decide who puts it in the chain. This file does, for everyone who clones
 # the repository — add the name to `[roles.r2]` below and commit it. A machine
 # chain (`mf config set roles.r2.backends ... --machine`) applies only to a role
 # this file leaves undeclared, because a machine may not review a repository
 # with a chain that repository did not choose; for one run, and only for the
-# person running it, `MF_ROLES_R2_BACKENDS=codex,gemini,deepseek mf review`.
+# person running it, `MF_ROLES_R2_BACKENDS=codex,gemini,<name> mf review`.
 
 version = 1
 
