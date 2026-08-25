@@ -73,7 +73,7 @@ backends = ["superpowers"]
 # backend was available — a reviewer that never ran is not a finding, and an
 # expired quota must not be able to lock the repository.
 [roles.r2]
-backends = ["codex", "gemini"]
+backends = ["codex", "agy", "gemini"]
 require_cross_provider = true
 
 # R3 runs in CI on the pull request, where the intent is written down. On this
@@ -128,6 +128,30 @@ unavailable_patterns = [
 
 # Also agentic, but prompt-driven rather than repository-reading, so the role
 # instructions and the diff are handed to it through {{.Prompt}}.
+# Antigravity's CLI. Prompt-driven like gemini, so the role instructions and the
+# diff are handed to it through {{.Prompt}}.
+#
+# It is a gateway rather than a vendor: the same command reaches Google,
+# Anthropic and open models, so which vendor actually reviews depends entirely
+# on the model pinned below. That is why the provider says `google` and the
+# model is a Gemini one — a Claude model here would satisfy the cross-provider
+# rule against an Anthropic Author by name while being the same vendor in
+# substance, which is the failure that rule exists to prevent.
+#
+# The effort is baked into the model id (`-high`, `-low`), so --effort is not
+# passed: two settings for one dial is a way to have them disagree.
+[backends.agy]
+kind = "cli"
+provider = "google"
+command = "agy"
+model = "gemini-3.1-pro-high"
+args = ["--print", "{{.Prompt}}", "--model", "{{.Model}}"]
+unavailable_patterns = [
+  "quota", "rate limit", "resource[_ ]exhausted",
+  "not authenticated", "unauthorized", "401", "403",
+  "network error", "connection (refused|reset)",
+]
+
 [backends.gemini]
 kind = "cli"
 provider = "google"
