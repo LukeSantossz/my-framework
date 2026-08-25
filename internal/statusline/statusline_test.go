@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/BurntSushi/toml"
 )
 
 func fixedNow() time.Time { return time.Date(2026, 8, 24, 12, 0, 0, 0, time.UTC) }
@@ -355,6 +357,143 @@ func TestRefusesASettingsFileThatIsValidJsonButNotAnObject(t *testing.T) {
 	dir := home(t, map[string]string{"settings.json": `["a", "b"]`})
 	if _, err := ApplyClaude(dir, "mf statusline render", fixedNow()); err == nil {
 		t.Fatal("a JSON array was accepted as a settings object")
+	}
+}
+
+// tuiTableOf parses a rewritten configuration the way Codex itself will. A
+// rewrite that appends a second [tui] table produces a file TOML rejects
+// outright for defining the same key twice, and nothing says so: the apply
+// reported success and the status line simply stops.
+func tuiTableOf(t *testing.T, config string) map[string]any {
+	t.Helper()
+	var parsed map[string]any
+	if _, err := toml.Decode(config, &parsed); err != nil {
+		t.Fatalf("the rewritten configuration is not parseable TOML: %v\n%s", err, config)
+	}
+	tui, ok := parsed["tui"].(map[string]any)
+	if !ok {
+		t.Fatalf("no [tui] table survived the rewrite:\n%s", config)
+	}
+	return tui
+}
+
+func TestRecognisesTheTuiHeaderInEveryFormTomlAllows(t *testing.T) {
+	// A header is not simply a line wrapped in brackets: TOML allows padding
+	// inside the brackets and a comment after them, and both name the same
+	// table. Missing one leaves the section unseen and a second [tui] appended.
+	cases := []struct {
+		name     string
+		existing string
+		kept     string // the header, which is the user's line to keep verbatim
+	}{
+		{"a comment after the header", "[tui] # my terminal settings\ntheme = \"dark\"\n", "[tui] # my terminal settings"},
+		{"padding inside the brackets", "[ tui ]\ntheme = \"dark\"\n", "[ tui ]"},
+		{"a header after another table", "[features]\nmemories = true\n\n[tui] # mine\ntheme = \"dark\"\n", "[tui] # mine"},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			got := codexConfigWithContract(c.existing)
+			tui := tuiTableOf(t, got)
+			if tui["status_line_use_colors"] != true {
+				t.Errorf("colours were not enabled:\n%s", got)
+			}
+			if tui["theme"] != "dark" {
+				t.Errorf("an unrelated key in the section was lost:\n%s", got)
+			}
+			if !strings.Contains(got, CodexStatusLine) {
+				t.Errorf("the canonical segment list is missing:\n%s", got)
+			}
+			if !strings.Contains(got, c.kept) {
+				t.Errorf("the header the user wrote (%q) was not kept as written:\n%s", c.kept, got)
+			}
+		})
+	}
+}
+
+func TestStripsTheStatusLineKeysOnlyFromTheTuiSection(t *testing.T) {
+	// A header the rewrite does not recognise reads as ordinary content, so it
+	// stays in whichever table it thought it was in and strips the two keys out
+	// of the next one — a section it was told to leave alone.
+	existing := "[tui]\ntheme = \"dark\"\n\n[experimental] # not ours\nstatus_line = \"hand rolled\"\nstatus_line_use_colors = false\n"
+	got := codexConfigWithContract(existing)
+
+	var parsed map[string]any
+	if _, err := toml.Decode(got, &parsed); err != nil {
+		t.Fatalf("the rewritten configuration is not parseable TOML: %v\n%s", err, got)
+	}
+	other, ok := parsed["experimental"].(map[string]any)
+	if !ok {
+		t.Fatalf("an unrelated table was lost:\n%s", got)
+	}
+	if other["status_line"] != "hand rolled" || other["status_line_use_colors"] != false {
+		t.Errorf("an unrelated table's own keys were rewritten: %+v\n%s", other, got)
+	}
+}
+
+func TestASecondApplyInTheSameSecondKeepsTheFirstBackup(t *testing.T) {
+	// The backup name carries a one-second timestamp, so an apply landing in the
+	// same second as the last one would overwrite the copy of the configuration
+	// the Developer actually hand-wrote — the one thing that makes replacing it
+	// recoverable.
+	dir := home(t, map[string]string{"config.toml": divergentCodex})
+	first, err := ApplyCodex(dir, fixedNow())
+	if err != nil {
+		t.Fatalf("ApplyCodex: %v", err)
+	}
+	hand := "[tui]\nstatus_line = [\"model\"]\n"
+	if err := os.WriteFile(filepath.Join(dir, "config.toml"), []byte(hand), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	second, err := ApplyCodex(dir, fixedNow())
+	if err != nil {
+		t.Fatalf("ApplyCodex: %v", err)
+	}
+	if first.Backup == second.Backup {
+		t.Fatalf("both applies claimed the same backup name %q", first.Backup)
+	}
+	body, err := os.ReadFile(first.Backup)
+	if err != nil || string(body) != divergentCodex {
+		t.Errorf("the first backup no longer holds the original: %v\n%s", err, body)
+	}
+}
+
+func TestRevertRestoresWhatTheLastApplyReplaced(t *testing.T) {
+	// Apply pushes a backup and revert pops it, so two applies can be walked
+	// back one at a time; restoring without removing would make every revert
+	// after the first a no-op that reports success.
+	dir := home(t, map[string]string{"config.toml": divergentCodex})
+	target := filepath.Join(dir, "config.toml")
+	if _, err := ApplyCodex(dir, fixedNow()); err != nil {
+		t.Fatalf("ApplyCodex: %v", err)
+	}
+	hand := "[tui]\nstatus_line = [\"model\"]\n"
+	if err := os.WriteFile(target, []byte(hand), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := ApplyCodex(dir, fixedNow()); err != nil {
+		t.Fatalf("ApplyCodex: %v", err)
+	}
+
+	for _, want := range []string{hand, divergentCodex} {
+		res, err := Revert(target)
+		if err != nil {
+			t.Fatalf("Revert: %v", err)
+		}
+		if res.Action != ActionRestored {
+			t.Fatalf("action = %q, want %q", res.Action, ActionRestored)
+		}
+		body, _ := os.ReadFile(target)
+		if string(body) != want {
+			t.Errorf("restored\n%s\nwant\n%s", body, want)
+		}
+	}
+
+	spent, err := Revert(target)
+	if err != nil {
+		t.Fatalf("Revert with nothing left to restore: %v", err)
+	}
+	if spent.Action != ActionUnchanged {
+		t.Errorf("action = %q, want %q when no backup is left", spent.Action, ActionUnchanged)
 	}
 }
 

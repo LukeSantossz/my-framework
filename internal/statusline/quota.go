@@ -114,17 +114,22 @@ func (o RefreshOptions) now() time.Time {
 // quota, because dropping the fact on a rate limit removes it exactly when the
 // Developer most needs to see it. A session with no OAuth token has no plan
 // windows to report at all — that is a declared degradation, not an error, and
-// it must not invent a cache.
+// it invents no figures.
 func Refresh(opts RefreshOptions) error {
 	if opts.Home == "" {
 		return fmt.Errorf("no configuration directory to cache the quota in")
 	}
-	token, ok := oauthToken(opts.Home)
-	if !ok {
-		return nil
-	}
 	previous, _ := ReadCache(opts.Home)
 	now := opts.now()
+
+	token, ok := oauthToken(opts.Home)
+	if !ok {
+		// Nothing to report, but the absence still has to be recorded. Writing
+		// no cache leaves NextAllowed at zero, so every render finds a refresh
+		// due and spawns a detached fetch — every 30 seconds, forever, for a
+		// session that can never have a quota to fetch.
+		return writeCache(opts.Home, keep(previous, now, RefreshInterval))
+	}
 
 	endpoint := opts.Endpoint
 	if endpoint == "" {
@@ -214,20 +219,38 @@ func oauthToken(home string) (string, bool) {
 }
 
 // ClaimRefresh takes the lock that keeps concurrent renders from each spawning
-// their own fetch. A stale lock is taken over rather than respected forever: a
-// process killed mid-refresh would otherwise freeze the quota fact.
+// their own fetch.
+//
+// The claim is the exclusive creation of the lock file, not a check followed by
+// a write: two renders redrawing on the same tick both pass a check, and the
+// endpoint rate-limits per token, so the second fetch costs the figures a
+// 30-minute backoff to recover from — the opposite of what the lock is for.
+//
+// A stale lock is taken over rather than respected forever: a process killed
+// mid-refresh would otherwise freeze the quota fact. Only the render whose
+// removal of the abandoned file succeeds goes on to contest the fresh claim.
 func ClaimRefresh(home string, now time.Time) bool {
 	if home == "" {
 		return false
 	}
 	lock := filepath.Join(home, LockFileName)
-	if info, err := os.Stat(lock); err == nil {
-		if now.Sub(info.ModTime()) <= LockStale {
-			return false
-		}
+	if createdExclusively(lock) {
+		return true
 	}
-	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+	info, err := os.Stat(lock)
+	if err != nil || now.Sub(info.ModTime()) <= LockStale {
 		return false
 	}
-	return true
+	if err := os.Remove(lock); err != nil {
+		return false
+	}
+	return createdExclusively(lock)
+}
+
+func createdExclusively(lock string) bool {
+	f, err := os.OpenFile(lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+	if err != nil {
+		return false
+	}
+	return f.Close() == nil
 }

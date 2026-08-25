@@ -1,5 +1,16 @@
 # SPEC: feat(scripts): detach the R2 gate from Codex behind a reviewer backend seam
 
+## Status
+
+Retired — superseded by spec 0014 (rebuild the framework as a provider-agnostic
+harness) and, for the configuration decision, by
+`docs/adr/0006-configuration-split-policy-and-machine.md`.
+The git-config scope cascade and the rejection of a dedicated configuration file
+below were both reversed — configuration is now TOML in two layers, committed
+policy in `.framework.toml` and machine state in `~/.config/framework/config.toml`
+— the shell adapters under `scripts/reviewers/` and the runner that walked them
+were deleted by spec 0027, and `R2_BLOCKING` became `roles.<role>.blocking`.
+
 ## Problem
 
 The standards say the R2 reviewer is a role — "the requirement is the role, not a

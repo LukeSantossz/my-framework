@@ -1,7 +1,9 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 
@@ -9,7 +11,8 @@ import (
 	"github.com/LukeSantossz/my-framework/internal/design"
 )
 
-// designGate checks the rendered surfaces against docs/standards/design.md.
+// designGate checks the rendered surfaces against the design.md this
+// repository keeps with its standards.
 //
 // It lives here rather than among the check package's gates for the same reason
 // the instruction-file gate does: the list of surfaces is this project's
@@ -18,8 +21,25 @@ import (
 //
 // No model, no network: the whole gate is a parse and a set membership test.
 func designGate(env Env, cfg *config.Config) int {
-	palette, err := design.Load(env.RepoRoot)
+	surfaces := designSurfaces(cfg)
+
+	palette, err := design.Load(env.RepoRoot, standardsDir(cfg))
 	if err != nil {
+		// An absent standard is the absence of this gate's own input, not a
+		// failure of the repository. An adopter whose vendored corpus carries
+		// no design.md could otherwise not run `mf check` at all — the same
+		// adoption defect docs/specs/0027 fixed for the standards directory,
+		// left in place for one file inside it.
+		//
+		// It is only absence when nothing is declared. A repository that names
+		// design surfaces has said it renders something the identity governs,
+		// so a missing standard there is a contradiction rather than a gate
+		// that was never adopted, and docs/adr/0011 calls this gate binding.
+		if errors.Is(err, fs.ErrNotExist) && len(surfaces) == 0 {
+			fmt.Fprintf(env.Stdout, "ok   %-8s no %s here; nothing declares a surface it governs\n",
+				"design", filepath.ToSlash(filepath.Join(standardsDir(cfg), design.StandardFileName)))
+			return 0
+		}
 		// A standard that cannot be parsed stops the gate. Continuing would
 		// leave an empty palette accepting every colour, which is a gate
 		// reporting success exactly when it stopped checking.
@@ -29,7 +49,6 @@ func designGate(env Env, cfg *config.Config) int {
 
 	violations := append(palette.CheckNeutrality(), palette.CheckDerivation()...)
 
-	surfaces := designSurfaces(cfg)
 	checked := 0
 	for _, rel := range surfaces {
 		body, readErr := os.ReadFile(filepath.Join(env.RepoRoot, filepath.FromSlash(rel)))

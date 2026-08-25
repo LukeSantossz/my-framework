@@ -76,14 +76,6 @@ type Result struct {
 	Usage usage.Usage
 }
 
-// WithUsage attaches what the review consumed. It is a separate step because
-// accounting is observation: a review whose usage could not be determined still
-// stands, and losing it because the observation failed inverts their importance.
-func (r Result) WithUsage(u usage.Usage) Result {
-	r.Usage = u
-	return r
-}
-
 func (r Result) HasBlocking() bool {
 	for _, f := range r.Findings {
 		if f.Severity == SeverityBlocking {

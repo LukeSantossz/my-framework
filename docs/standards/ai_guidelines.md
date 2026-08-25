@@ -67,7 +67,9 @@ with a defined hierarchy so none is duplicated or skipped:
 
 `superpowers` is one backend of the R1 chain, not the layer itself: it runs inside a coding-agent session and cannot be started as a subprocess, so it contributes an attestation rather than an execution, and a session where it is absent counts as unavailable so the chain advances.
 
-When no second-provider tool is available, R1 plus the adjudication stage of CRURA (per `crura_method.md`) stand in for R2; note its absence in the PR. It is the adjudication that substitutes, not the line-by-line read, because adjudication is the part that runs unconditionally.
+When no second-provider tool is available, R1 plus the adjudication stage of CRURA (per `crura_method.md`) stand in for R2; note its absence in the PR. It is the adjudication that substitutes, not the line-by-line read, because adjudication is the part that runs unconditionally. This is the whole of the R2-absent fallback; it is stated once, here, and the Cross-Provider Review section below refers back to it rather than restating it.
+
+The Author's Self-Review is not part of that substitution. R1 already stands in for it, per R1 above, so naming it again here would offer as a replacement the thing R1 replaced — leaving a change whose only human check is the one CRURA makes triggered.
 
 The chain is walked by `mf review --role <r1|r2|r3>`, which takes the first backend that is actually available and names it. A role whose every backend is unavailable is reported as not having run, and that absence belongs in the PR: a layer that did not run is never the same as a layer that found nothing.
 
@@ -83,7 +85,7 @@ Two roles: the Author model develops the code; the Reviewer model, when a second
 - The Reviewer applies the same standards (`code_conventions.md`, `var_method.md`, this file) and reports: correctness defects, invented or unverified symbols, scope creep, security issues, convention violations.
 - The Reviewer does not rewrite the code; it reports findings. The Author resolves them or justifies the decision in the PR.
 - Record in the PR which model authored and which reviewed.
-- When no second provider is available, the Author's Self-Review and the human PR review (per `crura_method.md`) stand in for this step; note its absence in the PR.
+- When no second provider is available, the fallback is the one stated in Review Composition above — R1 plus CRURA's adjudication stage — and the absence is noted in the PR.
 - A Reviewer finding is advisory, not binding, but an unresolved finding must be addressed or justified, never silently dropped.
 
 ## Commits, PRs, and Issues

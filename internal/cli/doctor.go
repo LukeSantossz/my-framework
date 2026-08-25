@@ -2,10 +2,13 @@ package cli
 
 import (
 	"fmt"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 
 	"github.com/LukeSantossz/my-framework/internal/activate"
+	"github.com/LukeSantossz/my-framework/internal/agents"
 	"github.com/LukeSantossz/my-framework/internal/config"
 	"github.com/LukeSantossz/my-framework/internal/style"
 	"github.com/LukeSantossz/my-framework/internal/upgrade"
@@ -26,23 +29,53 @@ func runDoctor(env Env) int {
 	fmt.Fprintf(env.Stdout, "mf %s\n", version.Version)
 	fmt.Fprintf(env.Stdout, "repository: %s\n\n", env.RepoRoot)
 
+	// The standards comparison is computed here rather than beside the section
+	// that prints it, because the activation report needs one of its answers:
+	// whether the version this repository adopted is the version running.
+	rep, repErr := upgrade.Compare(env.RepoRoot, standardsDir(cfg), version.Version)
+
 	// Activation.
 	fmt.Fprintln(env.Stdout, "activation")
 	state := activate.HooksStatus(env.RepoRoot)
+	// Whether the versioned directory exists is asked before what the setting
+	// says, because it is the fact that decides whether any hook can run at all.
+	// Asked the other way round, a core.hooksPath inherited from a user's global
+	// configuration made every repository on the machine report a gate it did
+	// not have — and `mf init` then declined to wire anything, believing the job
+	// done.
 	switch {
+	case !state.Present && state.Canonical:
+		fmt.Fprintf(env.Stdout, "  hooks      core.hooksPath points at %s, but there is no %s directory in this repository — no hook runs%s\n",
+			activate.HooksDir, activate.HooksDir, inheritedNote(state))
+	case !state.Present:
+		fmt.Fprintf(env.Stdout, "  hooks      no %s directory in this repository, so there is no push gate\n", activate.HooksDir)
+	case state.Canonical && !state.Local:
+		fmt.Fprintf(env.Stdout, "  hooks      wired to %s by a setting outside this repository; no clone inherits it — run `mf hooks install`\n",
+			activate.HooksDir)
 	case state.Canonical:
 		fmt.Fprintf(env.Stdout, "  hooks      wired to %s\n", activate.HooksDir)
 	case state.Path != "":
-		fmt.Fprintf(env.Stdout, "  hooks      core.hooksPath points at %q, not %s — the gate does not run\n", state.Path, activate.HooksDir)
-	case !state.Present:
-		fmt.Fprintf(env.Stdout, "  hooks      no %s directory in this repository\n", activate.HooksDir)
+		fmt.Fprintf(env.Stdout, "  hooks      core.hooksPath points at %q, not %s — the gate does not run%s\n",
+			state.Path, activate.HooksDir, inheritedNote(state))
 	default:
 		fmt.Fprintf(env.Stdout, "  hooks      not wired; run `mf hooks install`\n")
 	}
-	if lock, ok := activate.ReadLock(env.RepoRoot); ok && lock.FrameworkVersion != "" {
-		fmt.Fprintf(env.Stdout, "  adopted    framework %s\n", lock.FrameworkVersion)
-	} else {
+	// A core.hooksPath replaces .git/hooks rather than adding to it. Nothing
+	// said so anywhere, and the hooks it silences were installed on purpose.
+	if state.Path != "" {
+		if shadowed := activate.ShadowedLocalHooks(env.RepoRoot); len(shadowed) > 0 {
+			fmt.Fprintf(env.Stdout, "  git hooks  core.hooksPath replaces .git/hooks, so %s no longer runs\n",
+				strings.Join(shadowed, ", "))
+		}
+	}
+	switch {
+	case rep.LockedVersion == "":
 		fmt.Fprintf(env.Stdout, "  adopted    no %s; run `mf init`\n", activate.LockFileName)
+	case rep.VersionMismatch():
+		fmt.Fprintf(env.Stdout, "  adopted    framework %s, which is not the build running (%s) — `mf upgrade` compares them\n",
+			rep.LockedVersion, rep.RunningVersion)
+	default:
+		fmt.Fprintf(env.Stdout, "  adopted    framework %s\n", rep.LockedVersion)
 	}
 
 	// Roles.
@@ -135,10 +168,10 @@ func runDoctor(env Env) int {
 
 	// Standards drift.
 	fmt.Fprintln(env.Stdout, "\nstandards")
-	if rep, err := upgrade.Compare(env.RepoRoot, version.Version); err == nil {
+	if repErr == nil {
 		fmt.Fprintf(env.Stdout, "  %s\n", rep.Summary())
 	} else {
-		fmt.Fprintf(env.Stdout, "  could not compare: %v\n", err)
+		fmt.Fprintf(env.Stdout, "  could not compare: %v\n", repErr)
 	}
 
 	// Reports only. Nothing above prevents work, so nothing above fails.
@@ -173,11 +206,87 @@ func orUnset(s string) string {
 	return s
 }
 
-func runInit(env Env) int {
+// inheritedNote names the scope a hooks path came from when it is not this
+// repository's. A value nobody can find in the repository is one people look
+// for in the wrong file.
+func inheritedNote(state activate.HooksState) string {
+	if state.Local || state.Path == "" {
+		return ""
+	}
+	return " (set outside this repository, so it applies to every repository on this machine)"
+}
+
+// chosenProvider is the reviewer an adopter names at activation time.
+//
+// Which provider reviews their code is theirs to pick, so nothing here ships a
+// default one: without these flags init writes no machine state at all, and
+// with them it writes each half into the layer that owns it — the route on the
+// machine, the chain that names it in committed policy (docs/adr/0006).
+type chosenProvider struct {
+	Name      string
+	Endpoint  string
+	APIKeyEnv string
+	Model     string
+	Kind      string
+}
+
+func (c chosenProvider) named() bool { return c.Name != "" }
+
+func runInit(env Env, args []string) int {
+	var chosen chosenProvider
+	for i := 0; i < len(args); i++ {
+		var into *string
+		switch args[i] {
+		case "--provider":
+			into = &chosen.Name
+		case "--endpoint":
+			into = &chosen.Endpoint
+		case "--api-key-env":
+			into = &chosen.APIKeyEnv
+		case "--model":
+			into = &chosen.Model
+		case "--kind":
+			into = &chosen.Kind
+		default:
+			fmt.Fprintf(env.Stderr, "mf init: unknown option %q\n", args[i])
+			return 2
+		}
+		value, ok := optionValue(env, "mf init", args, &i)
+		if !ok {
+			return 2
+		}
+		*into = value
+	}
+	if code := checkChosen(env, chosen); code != 0 {
+		return code
+	}
+
+	// Loaded before anything is written, for one value: where this repository
+	// keeps its standards. A repository that already configures a corpus — the
+	// submodule case — must not be handed a second one under docs/standards.
+	cfg, code := load(env)
+	if code != 0 {
+		return code
+	}
+
 	steps, err := activate.Init(activate.InitOptions{
 		RepoRoot:         env.RepoRoot,
 		FrameworkVersion: version.Version,
+		StandardsDir:     standardsDir(cfg),
+		R2Backend:        chosen.Name,
 	})
+	if chosen.named() && err == nil {
+		// After the scaffold, so a machine write cannot leave a repository
+		// half-activated if it fails.
+		step, writeErr := recordProvider(env, chosen)
+		steps = append(steps, step)
+		if writeErr != nil {
+			err = writeErr
+		}
+	}
+	if err == nil {
+		steps = append(steps, generateAgentFiles(env)...)
+	}
 	for _, s := range steps {
 		marker := "  "
 		if s.Changed {
@@ -191,7 +300,59 @@ func runInit(env Env) int {
 	}
 	fmt.Fprintln(env.Stdout, "\nNext: declare the Author for this branch so R2 can say more than `unknown`:")
 	fmt.Fprintln(env.Stdout, "  mf author declare --provider <name> --model <id>")
+	fmt.Fprintln(env.Stdout, "\nThen `mf doctor` reports what still has no route: a role with an empty chain")
+	fmt.Fprintf(env.Stdout, "reports that it did not run, and %s says how to give it one.\n", config.ProjectFileName)
 	return 0
+}
+
+// generateAgentFiles writes the vendor instruction files the freshly scaffolded
+// configuration declares.
+//
+// It is done here rather than inside activate because the targets are
+// configuration, and it generates only files that are absent: `mf agents sync`
+// is the command whose job is to overwrite them, and doing that as a side
+// effect of `mf init` would replace a CLAUDE.md a person wrote with one derived
+// from a source they have never seen. What it leaves alone it names, with the
+// command that would regenerate it.
+//
+// The configuration is re-read rather than reused, because the scaffold this
+// run may have just written is the file that declares the targets.
+func generateAgentFiles(env Env) []activate.Step {
+	cfg, err := config.Load(env.configOptions())
+	if err != nil {
+		return []activate.Step{{Name: "agent files", Message: "cannot read the configuration that declares them: " + err.Error()}}
+	}
+	targets := agentTargets(cfg)
+	if len(targets) == 0 {
+		return nil
+	}
+	var pending []agents.Target
+	var kept []string
+	for _, t := range targets {
+		if _, statErr := os.Stat(filepath.Join(env.RepoRoot, filepath.FromSlash(t.File))); statErr == nil {
+			kept = append(kept, t.File)
+			continue
+		}
+		pending = append(pending, t)
+	}
+
+	var steps []activate.Step
+	if len(pending) > 0 {
+		results, syncErr := agents.Sync(agents.Options{RepoRoot: env.RepoRoot, Targets: pending})
+		if syncErr != nil {
+			return append(steps, activate.Step{Name: "agent files", Message: "not generated: " + syncErr.Error()})
+		}
+		var written []string
+		for _, r := range results {
+			written = append(written, r.File)
+		}
+		steps = append(steps, activate.Step{Name: "agent files", Changed: true, Message: "generated " + strings.Join(written, ", ") + " from " + agents.SourcePath})
+	}
+	if len(kept) > 0 {
+		steps = append(steps, activate.Step{Name: "agent files", Message: "left untouched: " + strings.Join(kept, ", ") +
+			" — run `mf agents sync` to generate over what is already there"})
+	}
+	return steps
 }
 
 func runHooks(env Env, args []string) int {
@@ -203,6 +364,11 @@ func runHooks(env Env, args []string) int {
 	case "status":
 		state := activate.HooksStatus(env.RepoRoot)
 		fmt.Fprintf(env.Stdout, "hooks path: %s\n", orUnset(state.Path))
+		// Where the value came from is printed beside it: a path set outside the
+		// repository applies to every repository on this machine and travels
+		// with none of them, which is a different state from this repository
+		// having chosen it.
+		fmt.Fprintf(env.Stdout, "set here:   %v\n", state.Local)
 		fmt.Fprintf(env.Stdout, "canonical:  %v\n", state.Canonical)
 		fmt.Fprintf(env.Stdout, "directory:  present=%v\n", state.Present)
 		return 0
@@ -212,13 +378,25 @@ func runHooks(env Env, args []string) int {
 			return 1
 		}
 		fmt.Fprintf(env.Stdout, "core.hooksPath -> %s\n", activate.HooksDir)
+		if shadowed := activate.ShadowedLocalHooks(env.RepoRoot); len(shadowed) > 0 {
+			fmt.Fprintf(env.Stdout, "core.hooksPath replaces .git/hooks rather than adding to it, so %s no longer runs.\n",
+				strings.Join(shadowed, ", "))
+		}
 		return 0
 	case "uninstall":
+		state := activate.HooksStatus(env.RepoRoot)
 		if err := activate.UninstallHooks(env.RepoRoot); err != nil {
 			fmt.Fprintf(env.Stderr, "mf hooks uninstall: %v\n", err)
 			return 1
 		}
+		if !state.Local {
+			fmt.Fprintln(env.Stdout, "core.hooksPath was not set by this repository; nothing to remove")
+			return 0
+		}
 		fmt.Fprintln(env.Stdout, "core.hooksPath removed; the versioned directory is untouched")
+		if after := activate.HooksStatus(env.RepoRoot); after.Path != "" {
+			fmt.Fprintf(env.Stdout, "A setting outside this repository still points at %q.\n", after.Path)
+		}
 		return 0
 	}
 	fmt.Fprintf(env.Stderr, "mf hooks: unknown action %q (expected install, uninstall or status)\n", action)
@@ -226,7 +404,15 @@ func runHooks(env Env, args []string) int {
 }
 
 func runUpgrade(env Env) int {
-	rep, err := upgrade.Compare(env.RepoRoot, version.Version)
+	// The configuration is loaded for one value: where this repository keeps
+	// its standards. A repository whose configuration does not load is one
+	// whose standards location is unknown, and comparing the default location
+	// anyway would report an adopter's whole corpus as missing.
+	cfg, code := load(env)
+	if code != 0 {
+		return code
+	}
+	rep, err := upgrade.Compare(env.RepoRoot, standardsDir(cfg), version.Version)
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "mf upgrade: %v\n", err)
 		return 1
@@ -292,4 +478,67 @@ func runAuthor(env Env, args []string) int {
 	}
 	fmt.Fprintf(env.Stdout, "declared %s / %s as the Author of %s\n", provider, orUnset(model), head)
 	return 0
+}
+
+// checkChosen refuses half a route.
+//
+// A provider named without a way to reach it resolves, gets named in a chain,
+// and reports itself unavailable on every run for a reason nothing states —
+// worse than not having been configured at all, because it looks configured.
+func checkChosen(env Env, c chosenProvider) int {
+	if !c.named() {
+		for flag, value := range map[string]string{
+			"--endpoint": c.Endpoint, "--api-key-env": c.APIKeyEnv,
+			"--model": c.Model, "--kind": c.Kind,
+		} {
+			if value != "" {
+				fmt.Fprintf(env.Stderr, "mf init: %s describes a provider, so --provider has to name one\n", flag)
+				return 2
+			}
+		}
+		return 0
+	}
+	for _, missing := range []struct{ flag, value string }{
+		{"--endpoint", c.Endpoint},
+		{"--api-key-env", c.APIKeyEnv},
+	} {
+		if missing.value == "" {
+			fmt.Fprintf(env.Stderr, "mf init: --provider %s needs %s; a provider with no route is a backend that reports itself unavailable on every run\n", c.Name, missing.flag)
+			return 2
+		}
+	}
+	return 0
+}
+
+// recordProvider writes the adopter's chosen route into the machine layer.
+//
+// Every value goes through config.Set rather than being formatted here, so the
+// refusals that guard a committed file — a credential instead of a variable
+// name, a key that belongs in the other layer — guard this path too.
+func recordProvider(env Env, c chosenProvider) (activate.Step, error) {
+	kind := c.Kind
+	if kind == "" {
+		kind = "openai-compatible"
+	}
+	writes := []struct{ key, value string }{
+		{"providers." + c.Name + ".endpoint", c.Endpoint},
+		{"providers." + c.Name + ".api_key_env", c.APIKeyEnv},
+		{"providers." + c.Name + ".kind", kind},
+		{"backends." + c.Name + ".kind", "api"},
+		{"backends." + c.Name + ".provider", c.Name},
+		{"backends." + c.Name + ".model", c.Model},
+	}
+	for _, w := range writes {
+		if w.value == "" {
+			continue
+		}
+		if err := config.Set(env.configOptions(), w.key, w.value, config.TargetMachine); err != nil {
+			return activate.Step{Name: "provider", Message: err.Error()}, err
+		}
+	}
+	return activate.Step{
+		Name:    "provider",
+		Changed: true,
+		Message: fmt.Sprintf("recorded %s on this machine; %s names it in the R2 chain", c.Name, config.ProjectFileName),
+	}, nil
 }

@@ -5,9 +5,12 @@ Human review discipline. Counterpart to the Self-Review section of
 
 ## Benefits
 
-- The same change is inspected at every stage boundary: locally at R, on the
-  platform at RA, and finally by the human arbiter over the recorded review
-  layers.
+- Every change reaches a human arbiter who reads what the review layers
+  recorded and decides whether it merges. That stage is unconditional; the
+  line-by-line reads at R and RA are not, and fire on the Triggers below.
+- Human attention is spent where it has an independent basis for judgment — at
+  the Spec Gate before the code exists, and on the changes a Trigger selected —
+  rather than at a fixed rate on every diff.
 - Reduces the chance of forgetting what you did; forces understanding the
   solution.
 - Avoids trivial feedback from reviewers.

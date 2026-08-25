@@ -24,27 +24,41 @@ type Result struct {
 
 func (r Result) OK() bool { return len(r.Problems) == 0 }
 
+// Where a repository following this framework keeps the documents these gates
+// read, relative to its root.
+//
+// They are defaults rather than constants the gates use directly, for the
+// reason agents.DefaultPathPrefix already records for the generated instruction
+// files: a repository that vendors this framework as a `.standards` submodule
+// keeps the same documents under it, and a gate that can only read
+// `docs/standards` is a gate that adopter cannot run at all.
+const (
+	DefaultStandardsDir = "docs/standards"
+	DefaultSpecsDir     = "docs/specs"
+	DefaultADRDir       = "docs/adr"
+)
+
 type Options struct {
-	RepoRoot     string
+	RepoRoot string
+
+	// The document directories, each absolute or relative to RepoRoot, so a
+	// caller can hand a configured value straight through without knowing
+	// which of the two it holds. Empty means the default above.
 	StandardsDir string
 	SpecsDir     string
 	ADRDir       string
-	Base         string
-	ExemptPaths  []string
-	Repo         *vcs.Repo
+
+	Base        string
+	ExemptPaths []string
+	Repo        *vcs.Repo
 }
 
-// Defaults fills the paths a repository following this framework uses.
+// Defaults fills the paths a repository following this framework uses and
+// resolves the configured ones against its root.
 func (o Options) Defaults() Options {
-	if o.StandardsDir == "" {
-		o.StandardsDir = filepath.Join(o.RepoRoot, "docs", "standards")
-	}
-	if o.SpecsDir == "" {
-		o.SpecsDir = filepath.Join(o.RepoRoot, "docs", "specs")
-	}
-	if o.ADRDir == "" {
-		o.ADRDir = filepath.Join(o.RepoRoot, "docs", "adr")
-	}
+	o.StandardsDir = o.resolve(o.StandardsDir, DefaultStandardsDir)
+	o.SpecsDir = o.resolve(o.SpecsDir, DefaultSpecsDir)
+	o.ADRDir = o.resolve(o.ADRDir, DefaultADRDir)
 	if o.Base == "" {
 		o.Base = "main"
 	}
@@ -52,6 +66,33 @@ func (o Options) Defaults() Options {
 		o.Repo = vcs.Open(o.RepoRoot)
 	}
 	return o
+}
+
+func (o Options) resolve(dir, fallback string) string {
+	if dir == "" {
+		dir = fallback
+	}
+	if filepath.IsAbs(dir) {
+		return filepath.Clean(dir)
+	}
+	return filepath.Join(o.RepoRoot, filepath.FromSlash(dir))
+}
+
+// specsPrefix is where specs live as git names them: a slash path relative to
+// the repository root. The changed-file list arrives from git in that form, so
+// an absolute directory compared against it would match nothing and every
+// branch would be reported as carrying no spec.
+func (o Options) specsPrefix() string { return o.prefix(o.SpecsDir) }
+
+// prefix is any configured directory in the form git names paths in, which is
+// the form every answer git gives arrives in and every pathspec it takes has to
+// be written in.
+func (o Options) prefix(dir string) string {
+	rel, err := filepath.Rel(o.RepoRoot, dir)
+	if err != nil {
+		return filepath.ToSlash(dir)
+	}
+	return filepath.ToSlash(rel)
 }
 
 func (o Options) read(dir, name string) (string, error) {
@@ -104,15 +145,16 @@ func Spec(o Options) (Result, error) {
 		return res, nil
 	}
 
+	specsIn := o.specsPrefix()
 	var specs []string
 	for _, f := range changed {
-		if filepath.ToSlash(filepath.Dir(f)) == "docs/specs" && specFileName.MatchString(filepath.Base(f)) {
+		if filepath.ToSlash(filepath.Dir(f)) == specsIn && specFileName.MatchString(filepath.Base(f)) {
 			specs = append(specs, f)
 		}
 	}
 	if len(specs) == 0 {
 		res.Problems = append(res.Problems, Problem{
-			Message: fmt.Sprintf("this branch changes %d non-exempt path(s) but adds no spec under docs/specs/NNNN-<slug>.md", len(changed)),
+			Message: fmt.Sprintf("this branch changes %d non-exempt path(s) but adds no spec under %s/NNNN-<slug>.md", len(changed), specsIn),
 		})
 		return res, nil
 	}
@@ -223,21 +265,34 @@ var conventional = regexp.MustCompile(`^([a-z]+)(\([^)]+\))?!?: .+`)
 // describes the change and its intent, not that a model produced it.
 var attribution = regexp.MustCompile(`(?im)^\s*co-authored-by:|generated with \[?claude|🤖 generated with`)
 
+// generatedMerge matches the subjects git and the forges write when they join
+// two histories: `Merge branch 'main' into feat/x`, `Merge pull request #15
+// from owner/branch`, and the tag, commit and octopus variants of the same.
+//
+// It is not a vocabulary, so docs/adr/0009 does not put it in a standard: these
+// strings are git's and GitHub's, not this project's, and github.md has nothing
+// to say about them. It is only consulted where a parent count is unavailable —
+// see CommitMessage.
+var generatedMerge = regexp.MustCompile(`^Merge (branch|branches|remote-tracking branch|tag|commit|pull request) `)
+
+// Commit checks the subjects on this branch against the Type Table.
+//
+// Merge commits are skipped. github.md's Type Table governs the subject an
+// author writes, and a merge subject is generated — by git for `git merge`, by
+// the forge for a pull request. Over this repository's own history fifteen
+// `Merge pull request #N from ...` subjects fail the Conventional Commits
+// shape, and every branch that merges its base back in carries one, so
+// checking them would fail pull requests over text nobody typed and cannot
+// rewrite. The parent count is what identifies them, rather than the wording:
+// it is what git records, so it cannot be spoofed by a subject and cannot miss
+// a merge whose subject was edited.
 func Commit(o Options) (Result, error) {
 	o = o.Defaults()
 	res := Result{Name: "commit"}
 
-	doc, err := o.read(o.StandardsDir, "github.md")
-	if err != nil {
-		return res, fmt.Errorf("cannot read github.md: %w", err)
-	}
-	types, err := ParseTypeTable(doc)
+	types, valid, err := o.commitVocabulary()
 	if err != nil {
 		return res, err
-	}
-	valid := map[string]bool{}
-	for _, t := range types {
-		valid[t] = true
 	}
 
 	head, err := o.Repo.CurrentBranch()
@@ -252,26 +307,146 @@ func Commit(o Options) (Result, error) {
 	if err != nil {
 		return res, err
 	}
+	merges := 0
 	for _, c := range commits {
+		if c.Merge() {
+			merges++
+			continue
+		}
 		short := c.SHA
 		if len(short) > 8 {
 			short = short[:8]
 		}
-		m := conventional.FindStringSubmatch(c.Subject)
-		if m == nil {
-			res.Problems = append(res.Problems, Problem{File: short,
-				Message: fmt.Sprintf("subject %q is not Conventional Commits format", c.Subject)})
-		} else if !valid[m[1]] {
-			res.Problems = append(res.Problems, Problem{File: short,
-				Message: fmt.Sprintf("type %q is absent from the Type Table in github.md (valid: %s)", m[1], strings.Join(types, ", "))})
-		}
-		if attribution.MatchString(c.Subject + "\n" + c.Body) {
-			res.Problems = append(res.Problems, Problem{File: short,
-				Message: "carries a co-author or AI-attribution line, which github.md forbids"})
-		}
+		res.Problems = append(res.Problems, messageProblems(short, c.Subject, c.Body, types, valid)...)
 	}
-	res.Note = fmt.Sprintf("%d commit(s) checked against %d types read from github.md", len(commits), len(types))
+	res.Note = fmt.Sprintf("%d commit(s) checked against %d types read from github.md", len(commits)-merges, len(types))
+	if merges > 0 {
+		res.Note += fmt.Sprintf("; %d merge commit(s) skipped, whose subjects no author wrote", merges)
+	}
 	return res, nil
+}
+
+// CommitMessage checks the single message in a file, which is what the
+// commit-msg hook is handed as its argument.
+//
+// It exists because the branch mode above answers a different question at a
+// later moment: it reads the commits already recorded, so a subject the Type
+// Table rejects is reported one commit after the one that has to change, and
+// the author has to rewrite history to fix what they were about to type. The
+// vocabulary is the same and is read from the same document — per
+// docs/adr/0009 there is one Type Table and the binary carries no copy of it —
+// so the two modes cannot disagree about what is valid.
+//
+// git runs the commit-msg hook for `git merge` as well as for `git commit`,
+// handing it the MERGE_MSG it wrote itself, so a generated merge subject is
+// skipped here too. The parent count Commit uses is not available: the file
+// holds a message, and the commit it will become does not exist yet. The
+// wording is the only evidence there is, which is a weaker test — a subject
+// that begins "Merge branch " is taken at its word — and it is the right side
+// to be wrong on, since the alternative is a hook that blocks every merge.
+func CommitMessage(o Options, path string) (Result, error) {
+	o = o.Defaults()
+	res := Result{Name: "commit"}
+
+	types, valid, err := o.commitVocabulary()
+	if err != nil {
+		return res, err
+	}
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		return res, fmt.Errorf("cannot read the commit message: %w", err)
+	}
+
+	where := filepath.Base(path)
+	subject, body := splitMessage(string(raw))
+	switch {
+	case subject == "":
+		res.Problems = append(res.Problems, Problem{File: where,
+			Message: "the message is empty once git's own comment lines are removed, so there is no subject to check"})
+	case generatedMerge.MatchString(subject):
+		res.Note = fmt.Sprintf("%s carries a merge subject git generated; nothing an author wrote to check", where)
+		return res, nil
+	default:
+		res.Problems = append(res.Problems, messageProblems(where, subject, body, types, valid)...)
+	}
+	res.Note = fmt.Sprintf("%s checked against %d types read from github.md", where, len(types))
+	return res, nil
+}
+
+// commitVocabulary reads the Type Table both modes judge a subject against,
+// returning it in both the forms they need: ordered, so a failure can list what
+// is allowed in the document's own order, and indexed, so a lookup is one map
+// read.
+func (o Options) commitVocabulary() ([]string, map[string]bool, error) {
+	doc, err := o.read(o.StandardsDir, "github.md")
+	if err != nil {
+		return nil, nil, fmt.Errorf("cannot read github.md: %w", err)
+	}
+	types, err := ParseTypeTable(doc)
+	if err != nil {
+		return nil, nil, err
+	}
+	valid := make(map[string]bool, len(types))
+	for _, t := range types {
+		valid[t] = true
+	}
+	return types, valid, nil
+}
+
+// messageProblems is every rule github.md states about one message, applied
+// once. Both modes call it so that a subject rejected at commit time is
+// rejected in the same words at push time; two copies of these three rules
+// would be two chances to word them differently and one chance to fix only one.
+func messageProblems(where, subject, body string, types []string, valid map[string]bool) []Problem {
+	var problems []Problem
+	m := conventional.FindStringSubmatch(subject)
+	if m == nil {
+		problems = append(problems, Problem{File: where,
+			Message: fmt.Sprintf("subject %q is not Conventional Commits format", subject)})
+	} else if !valid[m[1]] {
+		problems = append(problems, Problem{File: where,
+			Message: fmt.Sprintf("type %q is absent from the Type Table in github.md (valid: %s)", m[1], strings.Join(types, ", "))})
+	}
+	if attribution.MatchString(subject + "\n" + body) {
+		problems = append(problems, Problem{File: where,
+			Message: "carries a co-author or AI-attribution line, which github.md forbids"})
+	}
+	return problems
+}
+
+// scissors is the line `git commit --verbose` puts above the diff it appends
+// for the author to read. Everything below it is stripped before the message is
+// recorded.
+const scissors = "# ------------------------ >8 ------------------------"
+
+// splitMessage reduces the file the hook is handed to the message git will
+// actually record: comment lines and the verbose diff removed, then split into
+// subject and body.
+//
+// Doing this is not optional. The file arrives before git's own cleanup, so its
+// first line is usually the "Please enter the commit message" comment, and
+// under `commit --verbose` it ends with a diff of the change. Checking the raw
+// text would report a comment as the subject and would find a forbidden
+// attribution line in any diff that happens to add one.
+func splitMessage(raw string) (subject, body string) {
+	raw = strings.ReplaceAll(raw, "\r\n", "\n")
+	if at := strings.Index(raw, scissors); at >= 0 {
+		raw = raw[:at]
+	}
+	var kept []string
+	for _, line := range strings.Split(raw, "\n") {
+		if strings.HasPrefix(line, "#") {
+			continue
+		}
+		if len(kept) == 0 && strings.TrimSpace(line) == "" {
+			continue
+		}
+		kept = append(kept, line)
+	}
+	if len(kept) == 0 {
+		return "", ""
+	}
+	return strings.TrimSpace(kept[0]), strings.Join(kept[1:], "\n")
 }
 
 // --- branch -----------------------------------------------------------------
@@ -374,11 +549,46 @@ func Docs(o Options) (Result, error) {
 	return res, nil
 }
 
+// refResolves reports whether a reference written in a standard names a file
+// that is there. A bare name may also be a sibling standard, which is why the
+// standards directory is one of the places it is looked for; a reference
+// carrying a path is written against a tree's root, so only the roots answer it.
 func refResolves(o Options, ref string) bool {
-	if strings.ContainsAny(ref, "/\\") {
-		return existsExactly(o.RepoRoot, filepath.FromSlash(ref))
+	rel := filepath.FromSlash(ref)
+	var bases []string
+	if !strings.ContainsAny(ref, "/\\") {
+		bases = append(bases, o.StandardsDir)
 	}
-	return existsExactly(o.StandardsDir, ref) || existsExactly(o.RepoRoot, ref)
+	bases = append(bases, o.RepoRoot)
+	if corpus := o.corpusRoot(); corpus != filepath.Clean(o.RepoRoot) {
+		bases = append(bases, corpus)
+	}
+	for _, base := range bases {
+		if existsExactly(base, rel) {
+			return true
+		}
+	}
+	return false
+}
+
+// corpusRoot is the root the documents' own cross-references are written
+// against. A standard naming `docs/standards/spec_method.md` means its sibling,
+// and where that sibling is depends on where the corpus was mounted: at the
+// repository root when the documents live in the repository, and at the
+// submodule when they are vendored into one. Resolving only against the
+// repository root reports every cross-reference in a vendored corpus as a
+// missing file — the whole corpus failing a gate over where it was checked out.
+//
+// It is derived from the standards directory rather than configured, because
+// there is nothing here for an adopter to decide: the corpus is laid out the
+// way this framework lays it out, and the only question is where that layout
+// begins.
+func (o Options) corpusRoot() string {
+	suffix := filepath.FromSlash(DefaultStandardsDir)
+	if trimmed := strings.TrimSuffix(o.StandardsDir, suffix); trimmed != o.StandardsDir {
+		return filepath.Clean(trimmed)
+	}
+	return filepath.Clean(o.RepoRoot)
 }
 
 // existsExactly reports whether rel exists under base with the case it was
@@ -427,9 +637,13 @@ func existsExactly(base, rel string) bool {
 // --- records ----------------------------------------------------------------
 
 // Records enforces the durability rule: numbers run from 0001 with no gap and
-// no duplicate. Contiguity is checked rather than a frozen list, because a
-// frozen list needs an edit per new record while contiguity holds for every
-// record ever added and still fails the moment one is deleted.
+// no duplicate, every document in the archive says it is one, and a record once
+// committed is still there.
+//
+// Contiguity is checked rather than a frozen list, because a frozen list needs
+// an edit per new record while contiguity holds for every record ever added and
+// still fails the moment one is deleted. It is not enough on its own, which is
+// what archive.go's three guards are for.
 func Records(o Options) (Result, error) {
 	o = o.Defaults()
 	res := Result{Name: "records"}
@@ -440,7 +654,38 @@ func Records(o Options) (Result, error) {
 		}
 		res.Problems = append(res.Problems, problems...)
 	}
-	sort.Slice(res.Problems, func(i, j int) bool { return res.Problems[i].File < res.Problems[j].File })
+	headers, err := specHeaders(o)
+	if err != nil {
+		return res, err
+	}
+	res.Problems = append(res.Problems, headers...)
+
+	a, err := loadArchive(o)
+	if err != nil {
+		return res, err
+	}
+	res.Problems = append(res.Problems, archivePins(o, a)...)
+	deleted, err := deletedRecords(o, a)
+	if err != nil {
+		return res, err
+	}
+	res.Problems = append(res.Problems, deleted...)
+	if len(a.Extracted) > 0 {
+		res.Note = fmt.Sprintf("%d archive pin(s) checked against the extractions %s records", len(a.Extracted), a.Source)
+	}
+
+	// Order by File and then by Message, a total ordering over the problems
+	// this gate can emit. Ordering on File alone is not enough: numbering
+	// finds several problems under the same File value ("specs"), the labels
+	// are walked in Go map order, and sort.Slice is not stable, so equal keys
+	// could come out in either order and the gate's output would diff between
+	// runs on an unchanged tree.
+	sort.Slice(res.Problems, func(i, j int) bool {
+		if res.Problems[i].File != res.Problems[j].File {
+			return res.Problems[i].File < res.Problems[j].File
+		}
+		return res.Problems[i].Message < res.Problems[j].Message
+	})
 	return res, nil
 }
 

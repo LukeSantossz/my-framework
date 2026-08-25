@@ -1,5 +1,10 @@
 name: ci
 
+# What a commit and a pull request are held to. The list of checks is not here:
+# it lives in gate.yml, which release.yml calls as well, so the bar a tag has
+# to clear and the bar main has to clear are the same object rather than two
+# lists that agree until someone edits one of them.
+
 on:
   push:
     branches: [main]
@@ -10,37 +15,7 @@ permissions:
   contents: read
 
 jobs:
-  checks:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-          # Full history: the durable-spec-archive guard resolves pinned
-          # extraction commits via git rev-parse.
-          fetch-depth: 0
-      - name: Shell tests
-        run: |
-          bash scripts/test/r2-review.test.sh
-          bash scripts/test/setup.test.sh
-          bash scripts/test/statusline.test.sh
-          bash scripts/test/docs-consistency.test.sh
-      - name: Docs consistency
-        run: bash scripts/test/docs-consistency.sh
-      # The Go toolchain reads the version from go.mod, so the pin lives in one
-      # place rather than being restated here and drifting.
-      - uses: actions/setup-go@v5
-        with:
-          go-version-file: go.mod
-          cache: true
-      - name: Go build and tests
-        run: |
-          go build ./...
-          go vet ./...
-          go test ./...
-      - name: Go formatting
-        run: |
-          unformatted="$(gofmt -l .)"
-          if [ -n "$unformatted" ]; then
-            echo "gofmt would change:"; echo "$unformatted"; exit 1
-          fi
+  gate:
+    uses: ./.github/workflows/gate.yml
+    permissions:
+      contents: read

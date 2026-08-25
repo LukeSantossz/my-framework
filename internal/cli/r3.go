@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/LukeSantossz/my-framework/internal/check"
+	"github.com/LukeSantossz/my-framework/internal/config"
 	"github.com/LukeSantossz/my-framework/internal/forge"
 	"github.com/LukeSantossz/my-framework/internal/report"
 	"github.com/LukeSantossz/my-framework/internal/role"
@@ -54,10 +56,24 @@ func pullContext(pr forge.PullRequest, repo *vcs.Repo, base, head string) string
 		b.WriteString(pr.Body)
 		b.WriteString("\n")
 	}
-	for _, spec := range linkedSpecs(repo, base, head) {
+	for _, spec := range linkedSpecs(repo, base, head, repoSpecsDir(repo.Root)) {
 		fmt.Fprintf(&b, "\n### Linked spec: %s\n\n%s\n", spec.path, spec.body)
 	}
 	return b.String()
+}
+
+// repoSpecsDir answers where a repository keeps its specs. R3 reads the
+// repository's own configuration here rather than being handed the value,
+// because the call above it is the one shared with the R1 and R2 paths, which
+// have no business carrying a document location only this reviewer reads. It is
+// the project layer that answers: where the specs are is policy that travels
+// with the repository, not machine state.
+func repoSpecsDir(root string) string {
+	cfg, err := config.Load(config.Options{RepoRoot: root})
+	if err != nil {
+		return check.DefaultSpecsDir
+	}
+	return specsDir(cfg)
 }
 
 type linkedSpec struct {
@@ -67,16 +83,19 @@ type linkedSpec struct {
 
 // linkedSpecs reads the specs this change adds or edits. Scope creep is one of
 // the five categories, and it cannot be judged without the scope.
-func linkedSpecs(repo *vcs.Repo, base, head string) []linkedSpec {
+func linkedSpecs(repo *vcs.Repo, base, head, specsIn string) []linkedSpec {
 	files, err := repo.ChangedFiles(base, head)
 	if err != nil {
 		return nil
 	}
+	// The changed-file list arrives from git as slash paths relative to the
+	// repository root, so the directory is compared in that form.
+	specsIn = filepath.ToSlash(specsIn)
 	var specs []linkedSpec
 	budget := specContextLimit
 	sort.Strings(files)
 	for _, f := range files {
-		if filepath.ToSlash(filepath.Dir(f)) != "docs/specs" || !strings.HasSuffix(f, ".md") {
+		if filepath.ToSlash(filepath.Dir(f)) != specsIn || !strings.HasSuffix(f, ".md") {
 			continue
 		}
 		body, readErr := os.ReadFile(filepath.Join(repo.Root, filepath.FromSlash(f)))

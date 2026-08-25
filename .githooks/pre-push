@@ -1,13 +1,103 @@
 #!/usr/bin/env bash
-# Pre-push: run the R2 cross-provider review (advisory by default).
-# Activate with: git config core.hooksPath .githooks
-# See docs/standards/r2_gate.md for behavior, env vars, and bypass.
+# Pre-push gate: the deterministic checks, then the R2 review.
+#
+# Wire it with `mf hooks install`, or by hand:
+#
+#   git config core.hooksPath .githooks
+#
+# THIS HOOK FAILS CLOSED. Every earlier version ended its two failure paths
+# with `|| exit 0` and printed nothing, so an adopter who wired core.hooksPath,
+# saw `mf doctor` report the hooks as wired, and pushed, had no gate at all and
+# was never told. A gate that cannot find its runner has not passed; it has not
+# run, and those are only the same thing to a hook that lies. So a missing
+# binary, an undiscoverable repository or a failing check stops the push and
+# says what to do about it.
+#
+# The consequence is deliberate and is the behaviour change this hook exists to
+# make: pushes that used to sail through a silent no-op now stop. `git push
+# --no-verify` is git's own bypass and always works; a bypass means the gates
+# did not run, which github.md's checklist requires to be recorded in the pull
+# request.
 set -u
 
-repo_root="$(git rev-parse --show-toplevel 2>/dev/null)" || exit 0
-runner="$repo_root/scripts/r2-review.sh"
+say() { printf 'mf pre-push: %s\n' "$1" >&2; }
 
-[ -f "$runner" ] || exit 0
+# --- the repository -----------------------------------------------------------
 
-bash "$runner"
+# Every gate below is a question about a repository, so failing to identify one
+# means no question can be asked. That is not a pass.
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$repo_root" ]; then
+  say "cannot determine the repository root (\`git rev-parse --show-toplevel\` found nothing)."
+  say "This hook only runs inside a git repository, so there is nothing here it can gate."
+  say "Push anyway with \`git push --no-verify\`, and record in the pull request that the gates did not run."
+  exit 1
+fi
+
+# --- the runner ---------------------------------------------------------------
+
+# The mf binary is the only implementation of these gates. The shell runner this
+# hook used to exec (scripts/r2-review.sh) was the second one, and the drift
+# between the two is what docs/specs/0027 deleted it to end.
+#
+# MF_BIN is a machine fact — where this machine keeps the binary — and is the
+# escape hatch for a checkout that is neither on PATH nor built in place.
+runner=""
+if [ -n "${MF_BIN:-}" ]; then
+  if [ ! -x "$MF_BIN" ]; then
+    say "MF_BIN is set to \"$MF_BIN\", which is not an executable file."
+    say "Correct it or unset it; an override that points at nothing must not be read as no override."
+    exit 1
+  fi
+  runner="$MF_BIN"
+elif command -v mf >/dev/null 2>&1; then
+  runner="mf"
+elif [ -x "$repo_root/mf" ]; then
+  # A binary built in place, which is how this repository's own CI runs it.
+  runner="$repo_root/mf"
+elif [ -x "$repo_root/mf.exe" ]; then
+  runner="$repo_root/mf.exe"
+fi
+
+if [ -z "$runner" ]; then
+  say "cannot find the \`mf\` binary, so the gates this hook runs did not run."
+  say ""
+  say "Install one of these, then push again:"
+  say "  - a release binary on PATH: github.com/LukeSantossz/my-framework/releases"
+  say "  - a build from a checkout of this framework: go build -o mf ./cmd/mf"
+  say "  - or point MF_BIN at a binary you already have: export MF_BIN=/path/to/mf"
+  say ""
+  say "A binary named \`mf\` or \`mf.exe\` at the root of this repository is also found."
+  say "To push without the gates: git push --no-verify — and say so in the pull request."
+  exit 1
+fi
+
+# --- the deterministic gates --------------------------------------------------
+
+# These call no model, cost nothing and are the rules this repository calls
+# binding: the Spec Gate, the commit and branch vocabularies, the documentation
+# invariants, the durable records, the instruction files and the design gate.
+# Nothing about them is advisory, so a failure stops the push.
+if ! "$runner" check; then
+  say ""
+  say "the checks above failed, so the push is stopped."
+  say "Fix what they name, or push with \`git push --no-verify\` and justify it in the pull request."
+  exit 1
+fi
+
+# --- the R2 review ------------------------------------------------------------
+
+# Skipping only the review, not the checks above: the review calls a model and
+# can take minutes, while the checks are free. A skip means R2 did not run, and
+# github.md's checklist requires that to be recorded.
+if [ "${SKIP_R2_REVIEW:-}" = "1" ]; then
+  say "R2 skipped by SKIP_R2_REVIEW=1. Record in the pull request that R2 did not run."
+  exit 0
+fi
+
+# The review is advisory by default and exits 0 on findings; it exits non-zero
+# when `roles.r2.blocking` is on and a reviewer classed a finding as blocking,
+# and when the run is misconfigured — a chain naming a backend nothing defines,
+# say, which is a gate that would otherwise pass by never running.
+"$runner" review --role r2
 exit $?

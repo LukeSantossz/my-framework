@@ -128,3 +128,43 @@ func TestCheckRunsTheDesignGateAmongTheOthers(t *testing.T) {
 		t.Errorf("the design gate produced no line: %q", out.String())
 	}
 }
+
+func TestCheckDesignSaysSoWhenTheStandardIsNotThere(t *testing.T) {
+	// An adopter whose vendored standards corpus carries no design.md could
+	// not run `mf check` at all: the gate reported the missing file as a
+	// failure of the repository rather than as the absence of its own input.
+	root := designRepo(t, "body {}")
+	if err := os.Remove(filepath.Join(root, "docs", "standards", "design.md")); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(root, ".framework.toml"), "version = 1\n")
+
+	e, out, _ := reviewEnv(t, root, "check", "design")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d with no standard and nothing declared: %s", code, out.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "design.md") || !strings.Contains(got, "ok   design") {
+		t.Errorf("the gate did not report its input as absent: %q", got)
+	}
+}
+
+func TestCheckDesignFailsWhenSurfacesAreDeclaredAndTheStandardIsNot(t *testing.T) {
+	// The other half: a repository that declares surfaces has said it renders
+	// something the identity governs, so an absent standard is a contradiction
+	// rather than an adopter who never had one. docs/adr/0011 calls this gate
+	// binding, and "absent means pass" would retire it by deleting a file.
+	root := designRepo(t, "body { background: #faf8f4; }\n")
+	if err := os.Remove(filepath.Join(root, "docs", "standards", "design.md")); err != nil {
+		t.Fatal(err)
+	}
+
+	e, out, _ := reviewEnv(t, root, "check", "design")
+	if code := Run(e); code == 0 {
+		t.Fatalf("deleting the standard turned the gate off: %s", out.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "FAIL design") || !strings.Contains(got, "design.md") {
+		t.Errorf("the failure does not name the gate and the missing document: %q", got)
+	}
+}

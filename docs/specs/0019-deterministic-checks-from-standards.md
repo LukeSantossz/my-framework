@@ -26,7 +26,7 @@ with the Gate-checked sections present, a non-empty "Does NOT include", and at l
 Acceptance Criterion. `commit` validates Conventional Commits against the parsed table
 and refuses AI-attribution trailers. `branch` validates the naming pattern with a type
 drawn from the same table. `docs` ports the invariants `scripts/test/docs-consistency.sh`
-already enforces. `adr` verifies numbering is contiguous and that no previously committed
+already enforces. `records` verifies numbering is contiguous and that no previously committed
 record disappeared.
 
 What is not checked here is not checked anywhere: no rule about process is delegated to a
@@ -61,7 +61,7 @@ crude on purpose, because a check nobody can predict is a check people route aro
     reporting.
   - Parsers for the Type Table and the spec template block, with named errors when a
     document's shape no longer matches.
-  - `mf check [spec|commit|branch|docs|adr]`, defaulting to all.
+  - `mf check [spec|commit|branch|docs|records]`, defaulting to all.
   - The exempt-path set for triviality, read from the project configuration.
   - Wiring the checks as the `inproc` backend kind the runner already carries.
   - Table-driven tests over fixture repositories, written first.

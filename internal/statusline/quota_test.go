@@ -6,6 +6,8 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -61,15 +63,29 @@ func TestRefreshRecordsBothQuotaWindows(t *testing.T) {
 	}
 }
 
-func TestRefreshWithoutAnOauthSessionWritesNothing(t *testing.T) {
+func TestRefreshWithoutAnOauthSessionRecordsWhenToLookAgain(t *testing.T) {
 	// An API-key session has no plan windows to report. That is a declared
-	// degradation, so it is not an error and it must not invent a cache.
+	// degradation, so it is not an error and it must invent no figures — but it
+	// must still record when to look again: a refresh that writes nothing leaves
+	// NextAllowed at zero, every render finds the refresh due, and the render
+	// pass spawns a detached fetch every redraw for a session that can never
+	// have a quota to fetch.
 	dir := t.TempDir()
 	if err := Refresh(RefreshOptions{Home: dir, Endpoint: "http://127.0.0.1:1", Now: fixedNow}); err != nil {
 		t.Fatalf("a missing OAuth session must not be an error: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(dir, CacheFileName)); !os.IsNotExist(err) {
-		t.Error("a cache was written for a session with no quota to report")
+	cache := readCache(t, dir)
+	if cache.FiveHour != nil || cache.SevenDay != nil {
+		t.Errorf("figures were invented for a session with no quota to report: %+v", cache)
+	}
+	if want := fixedNow().Add(RefreshInterval).UnixMilli(); cache.NextAllowed != want {
+		t.Errorf("NextAllowed = %d, want %d", cache.NextAllowed, want)
+	}
+	if RefreshDue(cache, fixedNow()) {
+		t.Error("the next render would spawn another fetch for a session that can never have one to make")
+	}
+	if cache.Quota(fixedNow()).Known {
+		t.Error("a recorded absence was rendered as a reading")
 	}
 }
 
@@ -119,6 +135,56 @@ func TestAFailedRefreshKeepsTheLastFiguresWithTheNormalInterval(t *testing.T) {
 	}
 	if want := fixedNow().Add(RefreshInterval).UnixMilli(); cache.NextAllowed != want {
 		t.Errorf("NextAllowed = %d, want %d", cache.NextAllowed, want)
+	}
+}
+
+func TestExactlyOneOfManyConcurrentRendersClaimsTheRefresh(t *testing.T) {
+	// A claim that stats before it writes lets every render redrawing on the
+	// same tick pass the check, and the endpoint rate-limits per token: the
+	// second fetch costs the figures a 30-minute backoff to recover from.
+	dir := t.TempDir()
+	now := time.Now()
+	const renders = 16
+
+	var start, done sync.WaitGroup
+	var claims atomic.Int64
+	start.Add(1)
+	for range renders {
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			start.Wait()
+			if ClaimRefresh(dir, now) {
+				claims.Add(1)
+			}
+		}()
+	}
+	start.Done()
+	done.Wait()
+
+	if got := claims.Load(); got != 1 {
+		t.Errorf("%d of %d concurrent renders claimed the refresh, want exactly 1", got, renders)
+	}
+}
+
+func TestAStaleClaimIsTakenOver(t *testing.T) {
+	// A process killed mid-refresh would otherwise freeze the quota fact
+	// forever, so a lock older than the refresh it was taken for is contested
+	// rather than respected.
+	dir := t.TempDir()
+	now := time.Now()
+	if !ClaimRefresh(dir, now) {
+		t.Fatal("the first claim on an unlocked directory was refused")
+	}
+	if ClaimRefresh(dir, now) {
+		t.Fatal("a fresh claim was taken twice")
+	}
+	abandoned := now.Add(-2 * LockStale)
+	if err := os.Chtimes(filepath.Join(dir, LockFileName), abandoned, abandoned); err != nil {
+		t.Fatal(err)
+	}
+	if !ClaimRefresh(dir, now) {
+		t.Error("a lock left behind by a killed process was respected forever")
 	}
 }
 

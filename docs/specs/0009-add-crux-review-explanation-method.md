@@ -116,7 +116,10 @@ Three behaviors extend the reference format:
     the existing TDD stage.
   - Making the explainer a blocking review gate; it is advisory only.
   - Vendoring the skill file into the repository.
-  - Any Redis, MiniRedis, or portfolio-class material from `AULA.md`.
+  - Any of the reference skill's own course material — its Redis and
+    MiniRedis examples and its portfolio-class framing. What is adopted from
+    `ex/` is the artifact contract above, never the subject matter it was
+    written to explain.
   - Changing the definitions of R1, R2, R3, or CRURA; the Method only
     cross-references them.
   - Any README change beyond an optional Engineering Decisions row, added only

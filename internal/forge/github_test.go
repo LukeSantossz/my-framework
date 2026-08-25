@@ -5,28 +5,50 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
 	"strings"
 	"testing"
 )
 
 // fakeGitHub records what it was asked and answers with what the test scripted.
 type fakeGitHub struct {
-	pull     string
-	comments string
-	patched  []string
-	posted   []string
-	server   *httptest.Server
+	pull string
+	// commentPages holds one JSON array per page, in order, the way the forge
+	// serves them. A single-page thread is just a one-element slice.
+	commentPages []string
+	// pagesRequested records the page numbers asked for, so a test can assert
+	// the walk stopped rather than paging on forever.
+	pagesRequested []int
+	patched        []string
+	posted         []string
+	server         *httptest.Server
 }
 
 func newFake(t *testing.T, pull, comments string) *fakeGitHub {
+	return newFakePaged(t, pull, comments)
+}
+
+func newFakePaged(t *testing.T, pull string, commentPages ...string) *fakeGitHub {
 	t.Helper()
-	f := &fakeGitHub{pull: pull, comments: comments}
+	f := &fakeGitHub{pull: pull, commentPages: commentPages}
 	f.server = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case strings.Contains(r.URL.Path, "/pulls/"):
 			fmt.Fprint(w, f.pull)
 		case r.Method == http.MethodGet && strings.Contains(r.URL.Path, "/comments"):
-			fmt.Fprint(w, f.comments)
+			page, err := strconv.Atoi(r.URL.Query().Get("page"))
+			if err != nil || page < 1 {
+				// The client must ask for an explicit page; without one the
+				// forge's default would silently hide everything past page 1.
+				w.WriteHeader(http.StatusBadRequest)
+				return
+			}
+			f.pagesRequested = append(f.pagesRequested, page)
+			if page > len(f.commentPages) {
+				fmt.Fprint(w, `[]`)
+				return
+			}
+			fmt.Fprint(w, f.commentPages[page-1])
 		case r.Method == http.MethodPatch:
 			var body map[string]string
 			json.NewDecoder(r.Body).Decode(&body)
@@ -146,6 +168,63 @@ func TestUpsertIgnoresCommentsThatAreNotItsOwn(t *testing.T) {
 	}
 	if len(f.patched) != 0 {
 		t.Errorf("a comment this tool did not write was edited: %v", f.patched)
+	}
+}
+
+// fullPageOfOtherPeoplesComments builds a page the walk cannot stop on: it is
+// exactly the page size, so the only way to learn what follows is to ask.
+func fullPageOfOtherPeoplesComments(firstID int) string {
+	bodies := make([]string, 0, commentPageSize)
+	for i := 0; i < commentPageSize; i++ {
+		bodies = append(bodies, fmt.Sprintf(`{"id":%d,"body":"a human comment"}`, firstID+i))
+	}
+	return "[" + strings.Join(bodies, ",") + "]"
+}
+
+func TestUpsertFindsItsCommentPastTheFirstPage(t *testing.T) {
+	// On a thread with more than a page of comments the marker is not on page
+	// one. Reading only that page would find nothing and post again on every
+	// run, turning the gate into the comment spam Marker exists to prevent.
+	third := fmt.Sprintf(`[{"id":3001,"body":%q}]`, Marker+"\nold findings")
+	f := newFakePaged(t, samePR,
+		fullPageOfOtherPeoplesComments(1000),
+		fullPageOfOtherPeoplesComments(2000),
+		third)
+
+	action, err := f.client().UpsertComment(7, "new findings")
+	if err != nil {
+		t.Fatalf("UpsertComment: %v", err)
+	}
+	if action != "replaced" {
+		t.Fatalf("action = %q, want replaced; the marker on page 3 was not found", action)
+	}
+	if len(f.posted) != 0 {
+		t.Errorf("a duplicate comment was appended: %v", f.posted)
+	}
+	if len(f.patched) != 1 || !strings.Contains(f.patched[0], "new findings") {
+		t.Errorf("patched = %v", f.patched)
+	}
+	if got := fmt.Sprint(f.pagesRequested); got != "[1 2 3]" {
+		t.Errorf("pages requested = %s, want [1 2 3]", got)
+	}
+}
+
+func TestUpsertStopsPagingAtTheFirstShortPage(t *testing.T) {
+	// A page shorter than the page size is the last one. Asking for another
+	// spends a round trip to be told what the short page already said.
+	f := newFakePaged(t, samePR,
+		fullPageOfOtherPeoplesComments(1000),
+		`[{"id":2001,"body":"a human comment"}]`)
+
+	action, err := f.client().UpsertComment(7, "findings")
+	if err != nil {
+		t.Fatalf("UpsertComment: %v", err)
+	}
+	if action != "posted" {
+		t.Errorf("action = %q, want posted", action)
+	}
+	if got := fmt.Sprint(f.pagesRequested); got != "[1 2]" {
+		t.Errorf("pages requested = %s, want [1 2]", got)
 	}
 }
 

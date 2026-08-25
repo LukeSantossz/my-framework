@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -79,23 +81,100 @@ func TestClassifiesACLIBackendUnavailableUsingItsConfiguredPatterns(t *testing.T
 	}
 }
 
-func TestACLIFailureThatMatchesNoPatternIsAReviewNotAnAbsence(t *testing.T) {
-	// A pattern that stops matching must stop the chain and name this backend
-	// rather than silently pretending a review happened somewhere else.
+func TestACLIFailureThatMatchesNoPatternIsAFailureNotAReview(t *testing.T) {
+	// A crashed, mis-argumented or killed reviewer did not review. Recording its
+	// output as one would stop the chain, name it as the backend that ran, and
+	// publish "Reviewed by <it>" on the pull request for a process that produced
+	// no review at all.
 	b := &CLI{
 		BackendName: "codex", ProviderName: "openai", Command: "codex",
 		Patterns: []string{"usage limit"},
 		LookPath: func(string) (string, error) { return "/usr/bin/codex", nil },
 		Run: func(context.Context, string, string, []string) (string, error) {
-			return "found a real problem in handler.go", errors.New("exit 1")
+			return "error: unknown flag --base", errors.New("exit status 2")
 		},
 	}
 	res, err := b.Review(context.Background(), req())
-	if err != nil {
+	if !IsUnavailable(err) {
+		t.Fatalf("err = %v, want Unavailable so the chain tries the next backend", err)
+	}
+	if len(res.Findings) != 0 {
+		t.Errorf("a failed process was recorded as findings: %+v", res.Findings)
+	}
+	if !strings.Contains(err.Error(), "exit status 2") || !strings.Contains(err.Error(), "unknown flag") {
+		t.Errorf("reason %q carries neither what failed nor what it printed", err)
+	}
+}
+
+func TestACLIThatExitsCleanlyWithNoOutputIsNotACompletedReview(t *testing.T) {
+	// Zero exit and an empty answer is the shape a killed or misconfigured
+	// agentic reviewer takes most often, and it is indistinguishable from a
+	// review that found nothing — which is the false negative this framework
+	// treats as worst.
+	b := &CLI{
+		BackendName: "codex", ProviderName: "openai", Command: "codex",
+		LookPath: func(string) (string, error) { return "/usr/bin/codex", nil },
+		Run: func(context.Context, string, string, []string) (string, error) {
+			return "   \n", nil
+		},
+	}
+	_, err := b.Review(context.Background(), req())
+	if !IsUnavailable(err) {
+		t.Fatalf("err = %v, want Unavailable", err)
+	}
+	if !strings.Contains(err.Error(), "no output") {
+		t.Errorf("reason %q does not say the backend answered with nothing", err)
+	}
+}
+
+func TestAppliesTheWallClockBudgetToACLIBackendToo(t *testing.T) {
+	// Without it a hung agentic reviewer holds `mf review`, and the pre-push
+	// hook behind it, open forever — while `mf doctor` reports a timeout that
+	// was never in force.
+	b := &CLI{
+		BackendName: "codex", Command: "codex", Budget: 20 * time.Millisecond,
+		LookPath: func(string) (string, error) { return "/usr/bin/codex", nil },
+		Run: func(ctx context.Context, _, _ string, _ []string) (string, error) {
+			<-ctx.Done()
+			return "", ctx.Err()
+		},
+	}
+	_, err := b.Review(context.Background(), req())
+	if !IsUnavailable(err) {
+		t.Fatalf("err = %v, want Unavailable", err)
+	}
+	if !strings.Contains(err.Error(), "budget") {
+		t.Errorf("error %q does not name the budget", err)
+	}
+}
+
+func TestSendsTheRolesOwnSystemPromptToAPromptDrivenCLI(t *testing.T) {
+	// `roles.explain.backends = ["gemini"]` is shipped configuration. With the
+	// review instructions hardcoded into the expansion, `mf explain` paid a
+	// backend to answer with findings and then rejected the answer for not
+	// being an explainer.
+	var gotArgs []string
+	b := &CLI{
+		BackendName: "gemini", ProviderName: "google", Command: "gemini",
+		Args:     []string{"--prompt", "{{.Prompt}}"},
+		LookPath: func(string) (string, error) { return "/usr/bin/gemini", nil },
+		Run: func(_ context.Context, _, _ string, args []string) (string, error) {
+			gotArgs = args
+			return "ok", nil
+		},
+	}
+	r := req()
+	r.Role = "explain"
+	r.System = "Explain this change to a newcomer. Never answer with findings.\n\n"
+	if _, err := b.Review(context.Background(), r); err != nil {
 		t.Fatalf("Review: %v", err)
 	}
-	if len(res.Findings) != 1 {
-		t.Fatalf("got %d findings, want 1", len(res.Findings))
+	joined := strings.Join(gotArgs, " ")
+	if !strings.Contains(joined, "Never answer with findings") {
+		t.Errorf("argv %q does not carry the role's own system prompt", joined)
+	}
+	if strings.Contains(joined, "Report findings only") {
+		t.Errorf("argv %q still carries the review instructions to a role that is not a review", joined)
 	}
 }
 
@@ -296,6 +375,24 @@ func TestAnInSessionBackendIsSatisfiedByAnAttestationForThisChange(t *testing.T)
 	}
 }
 
+func TestAnInSessionBackendSaysHowAnAttestationIsRecorded(t *testing.T) {
+	// An absence nobody can act on is a dead end rather than a fallback: this
+	// backend is the whole of R1's shipped chain, so a reader who is told only
+	// that it did not run has no way to make it run.
+	b := &InSession{
+		BackendName:  "superpowers",
+		HowToAttest:  func(role string) string { return "record " + role + " with git config" },
+		ProviderName: "anthropic",
+	}
+	_, err := b.Review(context.Background(), req())
+	if !IsUnavailable(err) {
+		t.Fatalf("err = %v, want Unavailable", err)
+	}
+	if !strings.Contains(err.Error(), "record r2 with git config") {
+		t.Errorf("reason %q leaves the user with no way to fill the absence", err)
+	}
+}
+
 func TestAnAttestationForAnotherChangeDoesNotSatisfyThisOne(t *testing.T) {
 	b := &InSession{
 		BackendName:    "superpowers",
@@ -465,5 +562,49 @@ func TestUsageSurvivesAnUnparseableAnswer(t *testing.T) {
 	}
 	if !res.Usage.Known {
 		t.Error("usage was lost on the prose path; the call still cost what it cost")
+	}
+}
+
+func TestDescribeNamesTheModelTheReviewWouldActuallyUse(t *testing.T) {
+	// A dry run exists to show what a real run would do. Review applies the
+	// per-backend override before it sends anything, so a Describe that skips
+	// it reports model="" — the exact value Review treats as "no model
+	// configured", which is the one answer a reader would act on.
+	a := &API{
+		BackendName: "acme",
+		Endpoint:    "https://example.invalid/v1",
+		Shape:       "openai",
+		Model:       "acme-2",
+	}
+	got := a.Describe(Request{Base: "main", Head: "HEAD"})
+	if !strings.Contains(got, `model="acme-2"`) {
+		t.Errorf("Describe does not name the model the review would use: %s", got)
+	}
+}
+
+// TestAKilledCommandCannotHoldItsOutputPipeOpenForever guards the WaitDelay
+// that makes the review budget mean anything.
+//
+// The failure it guards against was observed, not theorised: a push under a
+// 240-second budget was still running after ten minutes, and a review under a
+// deliberately short 15-second budget ran until an external timeout killed it
+// at 121 seconds. The cause is that Stdout is an io.Writer, so Go copies
+// through an OS pipe and Wait blocks until every writer closes it, while
+// CommandContext kills only the process it started. On Windows `codex` is an
+// npm shim: a batch file that spawns node, so the kill reaches the shim and
+// node goes on holding the pipe. With the delay set the same review returns in
+// 23 seconds and the chain advances.
+//
+// This asserts the delay is configured rather than reproducing the orphaned
+// grandchild, which needs a process tree this suite cannot build portably. It
+// is a regression guard for a one-line removal, and it is honest about being
+// only that: the behaviour itself was verified by hand, as recorded above.
+func TestAKilledCommandCannotHoldItsOutputPipeOpenForever(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=^$")
+	if _, err := runWith(context.Background(), cmd); err != nil {
+		t.Fatalf("running a trivial command: %v", err)
+	}
+	if cmd.WaitDelay <= 0 {
+		t.Error("no WaitDelay: a killed command can hold its output pipe open past the budget")
 	}
 }

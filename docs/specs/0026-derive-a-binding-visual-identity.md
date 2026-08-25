@@ -22,7 +22,7 @@ stated.
 The result is binding. `docs/standards/design.md` becomes a standard with a gate,
 `mf check design`, which reads the palette out of the standard the way every other
 deterministic check reads its vocabulary out of the document that owns it
-(`docs/adr/0009-deterministic-checks-derive-from-standards.md`). The gate fails a
+(`docs/adr/0009-checks-derive-vocabularies-from-standards.md`). The gate fails a
 rendered surface that uses a colour the standard does not declare.
 
 Derivation is checked, not asserted. The standard records a one-way fingerprint of each

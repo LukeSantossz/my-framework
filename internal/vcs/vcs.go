@@ -4,8 +4,10 @@ package vcs
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os/exec"
+	"sort"
 	"strings"
 )
 
@@ -135,7 +137,17 @@ type Commit struct {
 	SHA     string
 	Subject string
 	Body    string
+
+	// Parents is how many commits this one sits on top of. It is carried
+	// because a caller checking message conventions has to be able to tell a
+	// subject an author wrote from one git or a forge generated: a merge has
+	// two or more parents, and nothing in its text reliably says so.
+	Parents int
 }
+
+// Merge reports whether this commit joins two histories rather than adding to
+// one.
+func (c Commit) Merge() bool { return c.Parents > 1 }
 
 // Commits lists what head adds over base, newest last.
 func (r *Repo) Commits(base, head string) ([]Commit, error) {
@@ -147,7 +159,7 @@ func (r *Repo) Commits(base, head string) ([]Commit, error) {
 	// A record separator no commit message will contain, so a body with blank
 	// lines cannot be mistaken for the end of an entry.
 	const sep = "\x1e"
-	out, err := r.git("log", "--reverse", "--format=%H%x1f%s%x1f%b"+sep, base+".."+head)
+	out, err := r.git("log", "--reverse", "--format=%H%x1f%P%x1f%s%x1f%b"+sep, base+".."+head)
 	if err != nil {
 		return nil, err
 	}
@@ -157,23 +169,176 @@ func (r *Repo) Commits(base, head string) ([]Commit, error) {
 		if entry == "" {
 			continue
 		}
-		parts := strings.SplitN(entry, "\x1f", 3)
-		if len(parts) < 2 {
+		parts := strings.SplitN(entry, "\x1f", 4)
+		if len(parts) < 3 {
 			continue
 		}
-		c := Commit{SHA: parts[0], Subject: parts[1]}
-		if len(parts) == 3 {
-			c.Body = parts[2]
+		c := Commit{SHA: parts[0], Parents: len(strings.Fields(parts[1])), Subject: parts[2]}
+		if len(parts) == 4 {
+			c.Body = parts[3]
 		}
 		commits = append(commits, c)
 	}
 	return commits, nil
 }
 
-// ConfigGet reads a repository-scoped setting. Absence is not an error.
+// PathsEverAdded lists every path git history records as having been added
+// under the given directories, whether or not it is still there. Paths come
+// back as git names them — slash-separated and relative to the repository root
+// — sorted and without duplicates.
+//
+// It exists because absence is invisible to anything that reads the working
+// tree: a durable record deleted rather than retired in place leaves nothing
+// behind to notice, and the archive it belonged to still looks complete. Only
+// history remembers that it was ever there.
+//
+// It answers about the history this clone has. A shallow clone reports only
+// what its window reaches, so a caller that treats the answer as complete
+// wants a full checkout — which is why the workflow running these gates fetches
+// with depth 0.
+func (r *Repo) PathsEverAdded(dirs ...string) ([]string, error) {
+	if len(dirs) == 0 {
+		return nil, nil
+	}
+	args := append([]string{"log", "--diff-filter=A", "--name-only", "--format=", "--"}, dirs...)
+	out, err := r.git(args...)
+	if err != nil {
+		return nil, err
+	}
+	seen := map[string]bool{}
+	var paths []string
+	for _, line := range strings.Split(out, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" || seen[line] {
+			continue
+		}
+		seen[line] = true
+		paths = append(paths, line)
+	}
+	sort.Strings(paths)
+	return paths, nil
+}
+
+// RenamedPaths maps each path git history records as renamed, under the given
+// directories, to the name that commit gave it. Paths come back as git names
+// them, slash-separated and relative to the repository root.
+//
+// It is the companion PathsEverAdded needs to be read correctly. git detects
+// renames by default, so the commit that renames a file reports it as R and the
+// new name never appears as an addition: a caller comparing added paths against
+// the working tree sees the old name missing, with nothing saying where it went,
+// and reports a file as deleted that is sitting there under another name.
+//
+// One step per entry, and the caller walks the chain. A file renamed twice has
+// two records here, and only the caller knows whether it wants the end of the
+// chain or each stage of it. A chain can also loop — a name given back to an
+// earlier file — so a caller that walks it needs to remember where it has been.
+func (r *Repo) RenamedPaths(dirs ...string) (map[string]string, error) {
+	if len(dirs) == 0 {
+		return nil, nil
+	}
+	args := append([]string{"log", "--diff-filter=R", "--name-status", "--format=", "--"}, dirs...)
+	out, err := r.git(args...)
+	if err != nil {
+		return nil, err
+	}
+	renames := map[string]string{}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Split(strings.TrimSpace(line), "\t")
+		if len(fields) != 3 || !strings.HasPrefix(fields[0], "R") {
+			continue
+		}
+		from, to := strings.TrimSpace(fields[1]), strings.TrimSpace(fields[2])
+		if from == "" || to == "" {
+			continue
+		}
+		// git logs newest first, so the first record of a name is the most
+		// recent thing that happened to it. A name reused by a later file would
+		// otherwise be overwritten by the older rename and send a caller
+		// walking the chain into history that no longer applies.
+		if _, seen := renames[from]; seen {
+			continue
+		}
+		renames[from] = to
+	}
+	return renames, nil
+}
+
+// ObjectID resolves an object name — `HEAD:docs/specs/0001-a.md`, a tag, a
+// commit — to the id of the object it names.
+//
+// Comparing two ids is how a caller asks whether two files are byte-identical
+// without reading either: git stores content addressed by hash, and the hash is
+// taken after the index's line-ending normalisation, so a Windows checkout and
+// a Linux one agree about a file they both hold. A name that does not resolve
+// is an error rather than an empty id, because an empty id would compare equal
+// to another empty one and report two absent files as a match.
+func (r *Repo) ObjectID(object string) (string, error) {
+	out, err := r.git("rev-parse", "--verify", "--quiet", object)
+	if err != nil {
+		return "", fmt.Errorf("object %q does not resolve in this repository", object)
+	}
+	id := strings.TrimSpace(out)
+	if id == "" {
+		return "", fmt.Errorf("object %q does not resolve in this repository", object)
+	}
+	return id, nil
+}
+
+// ConfigGet reads the value in effect, from whichever scope defines it.
+// Absence is not an error.
 func (r *Repo) ConfigGet(key string) (string, error) {
-	out, err := r.git("config", "--get", key)
+	return r.configValue("config", "--get", key)
+}
+
+// ConfigGetLocal reads only what this repository's own configuration says.
+//
+// It is a separate call rather than a flag on ConfigGet because the difference
+// between the two is a difference in meaning, not in scope: a value inherited
+// from a user's global configuration applies to every repository on the machine
+// and travels with none of them, so reporting it as this repository's own
+// decision makes every clone look activated. Absence is not an error.
+func (r *Repo) ConfigGetLocal(key string) (string, error) {
+	return r.configValue("config", "--local", "--get", key)
+}
+
+// configValue is what makes both readers' absence contract true.
+//
+// `git config --get` exits 1 for a key nobody set, which reaches here as a
+// command failure indistinguishable from a broken configuration file. Both
+// readers documented absence as a normal answer and returned that failure
+// anyway, so every caller had to know the documentation was wrong and treat a
+// non-nil error as "unset" — which is also how a genuine failure would have
+// been read as an unset key, silently.
+//
+// Exit 1 is the only status git uses for a key it could not read as set, so
+// every other status still surfaces. A malformed key shares that status; the
+// keys here are literals in this package's callers, so the cost is a typo
+// resolving as absent rather than as an error, and the alternative is matching
+// git's message text.
+func (r *Repo) configValue(args ...string) (string, error) {
+	out, err := r.git(args...)
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return "", nil
+	}
 	return strings.TrimSpace(out), err
+}
+
+// GitDir resolves the repository's git directory, which may be relative to the
+// root. It asks git rather than joining onto `.git`, because a worktree and a
+// submodule both keep theirs somewhere else and a hardcoded join reports on a
+// directory that is not the one in use.
+//
+// Deliberately not `rev-parse --git-path hooks`: git special-cases that name
+// and answers with core.hooksPath, so asking it where the hooks are returns the
+// directory that replaced them rather than the one that was replaced.
+func (r *Repo) GitDir() (string, error) {
+	out, err := r.git("rev-parse", "--git-dir")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
 }
 
 func (r *Repo) ConfigSetLocal(key, value string) error {

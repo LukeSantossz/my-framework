@@ -11,8 +11,8 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - `crura_method.md`: human review discipline.
 - `github.md`: Conventional Commits (canonical type vocabulary), branch naming, PR/Issue/README templates.
 - `token_economy.md`: controlled token consumption (Caveman), with the scope boundary against versioned artifacts.
-- `skills_guidelines.md`: external-capability inventory — pipeline stage, install/verify, and declared fallback per skill.
-- `r2_gate.md`: operational R2 cross-provider gate — the reviewer backend chain, its adapter contract, and its configuration.
+- `skills_guidelines.md`: external-capability inventory — pipeline stage, install/verify, and declared fallback per capability.
+- `r2_gate.md`: operational R2 cross-provider gate — the reviewer backend chain, how a backend reports itself unavailable, and its configuration.
 - `status_line.md`: the facts a coding agent's status line must show and in what order, across Claude Code and Codex.
 - `crux_method.md`: the CRUX review-time explanation aid — a transient, interactive explainer of an implemented change that feeds R1 and the CRURA Review.
 - `design.md`: the visual identity of the surfaces this framework renders, in the `DESIGN.md` format — colour roles, typefaces and scale, with what it deliberately does not reach.
@@ -21,8 +21,8 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 
 - All output in English: identifiers, comments, commit/PR/issue text, documentation.
 - Specify before building: a non-trivial change starts with a `SPEC.md` that passes the Spec Gate, per `spec_method.md`. The spec is the source of truth for intent and scope.
-- Specs are durable: an approved spec is authored directly under `docs/specs/NNNN-<slug>.md` and archived there, never overwritten by the next change, per `spec_method.md`. A spec or ADR number is never reused: a superseded record is marked Retired in place, keeping its number and its file, rather than deleted.
-- Decision records flow: a SPEC's Design Decision is promoted at the Spec Gate to a durable ADR under `docs/adr/` when it is hard to reverse, surprising, and a real trade-off; the SPEC's Alternatives Considered records the rejected options in the durable spec archive while the ADR stays the curated rationale home, and the README Engineering Decisions indexes the ADR. See `docs/adr/0001-decision-records-flow.md` and `docs/adr/0002-durable-spec-archive.md`.
+- Specs are durable: an approved spec is authored directly under the specs directory (`paths.specs`, `docs/specs/` by default) as `NNNN-<slug>.md` and archived there, never overwritten by the next change, per `spec_method.md`. A spec or ADR number is never reused: a superseded or withdrawn record is marked in place and keeps its number and its file, rather than being deleted. The marking is a `## Status` section added immediately below the record's title, reading `Retired — superseded by <record>` or `Withdrawn — <reason>`; nothing else in the record is edited, so the archive keeps what was actually approved. `mf check records` enforces the rule. See `spec_method.md`.
+- Decision records flow: a SPEC's Design Decision is promoted at the Spec Gate to a durable ADR under the ADR directory (`paths.adr`, `docs/adr/` by default) when it is hard to reverse, surprising, and a real trade-off; the SPEC's Alternatives Considered records the rejected options in the durable spec archive while the ADR stays the curated rationale home, and the README Engineering Decisions indexes the ADR. Per `spec_method.md`.
 - The canonical type vocabulary lives only in the Type Table in `github.md`. Commits, PR titles, issue titles, and branch names draw from it. No parallel list exists.
 - Naming flows from `code_conventions.md` (general) to `var_method.md` (suffixes); the suffix guide is the lowest layer of precedence.
 - Test-first order (red-green-refactor) is project policy, run by the Superpowers TDD phase when that plugin is installed and recorded in `code_conventions.md` and `ai_guidelines.md`; the policy binds whether or not the tool is present.
@@ -33,13 +33,19 @@ Norms for AI-oriented development. The same rules apply whether code is written 
 - Authority between sources: a repository's standards override user-global defaults (per the Precedence section of `code_conventions.md`); Safety and Correctness are never overridden.
 - Visual identity per `design.md`: the surfaces this framework renders use only the colour roles it declares, in both polarities, and it declares no chromatic accent — a tool whose provider is configuration must not wear a vendor's. `mf check design` enforces it. It reaches neither the status line nor terminal output beyond honouring `NO_COLOR`.
 - Status line per `status_line.md`: the five facts and their order are fixed across
-  Claude Code and Codex; how a tool draws them is not. Applying the contract is
-  machine state, so it is a command of its own — `mf statusline apply` — and is the
-  only command that writes outside the repository.
-- Activation is bootstrapped, not assumed: `bash scripts/setup.sh` applies the local
-  activation state (hooks path, triage labels) and reports the toolchain; CI
-  (`.github/workflows/ci.yml`) runs the shell tests and the docs-consistency checks
-  (`scripts/test/docs-consistency.sh`) on every push and pull request to `main`.
+  Claude Code and Codex; how a tool draws them is not. Applying the contract rewrites
+  configuration that governs every project on the machine, so it is a command of its
+  own — `mf statusline apply`, undone by `mf statusline revert` — and never a step
+  `mf init` performs on a Developer's behalf.
+- Activation is bootstrapped, not assumed: `mf init` scaffolds the policy file, the
+  standards, the agent-instruction source and the versioned hooks, points
+  `core.hooksPath` at them, and records the adopted framework version. The gates then
+  run from those hooks — `pre-push` runs `mf check` and `mf review --role r2`,
+  `commit-msg` runs `mf check commit` — and both fail closed: a hook that cannot find
+  its runner stops the push rather than passing in silence. The same `mf check` belongs
+  in CI, where a hook a contributor never wired cannot be the only place it runs; in
+  this repository that is the `gates` job of `.github/workflows/gate.yml`, and an
+  adopter wires the equivalent for their own forge.
 
 ## Reading Order
 
