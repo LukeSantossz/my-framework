@@ -73,9 +73,6 @@ var forbidden = map[Artifact]string{
 	CodeComment: "the why-not-what rule stands; brevity does not license dropping intent",
 }
 
-// Allows reports whether terse style may be applied to this artifact.
-func Allows(a Artifact) bool { return permitted[a] }
-
 // Compose returns the prompt with the terse instruction appended, or the prompt
 // unchanged and an error. The base is never rewritten, only extended: a style
 // layer that edits the instruction it decorates can silently drop the sentence

@@ -1,5 +1,14 @@
+# Every text file is stored and checked out with LF, on every platform. Without
+# this, `core.autocrlf=true` (the Windows default) hands the working tree CRLF
+# and `gofmt -l .` then reports every Go file as unformatted, which makes the
+# formatting gate unusable on the primary development machine and pushes call
+# sites into hand-compensating for CRLF.
+* text=auto eol=lf
+
 # Shell scripts and git hooks must stay LF so they run under POSIX shells
 # (a CRLF shebang breaks `#!/usr/bin/env bash` with "bad interpreter").
+# Restated below the blanket rule so the requirement survives any future
+# narrowing of it.
 *.sh text eol=lf
 .githooks/* text eol=lf
 # The status line renderer carries a shebang for the same reason.

@@ -67,8 +67,10 @@ type Backend interface {
 }
 
 // Unavailable means the backend did not review: not installed, not
-// authenticated, out of quota, unreachable, or out of time. The chain advances.
-// It is deliberately distinct from a review that found problems.
+// authenticated, out of quota, unreachable, out of time — or started and failed
+// without producing a review. The chain advances. It is deliberately distinct
+// from a review that found problems, because that distinction is what decides
+// whether a pull request may say this backend reviewed the change.
 type Unavailable struct {
 	Backend string
 	Reason  string
@@ -126,6 +128,12 @@ type CLI struct {
 	Patterns     []string
 	WorkDir      string
 
+	// Budget is the total wall-clock time one review may take. An agentic
+	// reviewer explores the repository and can sit silent for minutes, so this
+	// is elapsed time rather than socket inactivity, exactly as the api kind
+	// treats it. Zero means no deadline, which is only ever right in a test.
+	Budget time.Duration
+
 	// Model and Effort override the chain-wide values for this backend only.
 	Model  string
 	Effort string
@@ -151,7 +159,12 @@ func expand(arg string, req Request) string {
 		// that is handed a prompt needs the role and the diff sent to it.
 		// Without this the declarative form could not express the second, and a
 		// prompt-driven CLI would still need a hand-written adapter.
-		"{{.Prompt}}", systemPrompt+req.Instructions+"\n\n"+userPrompt(req),
+		//
+		// The system prompt comes from systemFor rather than from the review
+		// constant, so a role that is not a review — the CRUX explainer, whose
+		// shipped chain is a prompt-driven cli backend — cannot be handed
+		// instructions to answer with findings and then be judged for doing so.
+		"{{.Prompt}}", systemFor(req)+req.Instructions+"\n\n"+userPrompt(req),
 	).Replace(arg)
 }
 
@@ -168,6 +181,21 @@ func (c *CLI) Describe(req Request) string {
 	return c.Command + " " + strings.Join(c.argv(req), " ")
 }
 
+// Review runs the configured command and records what it printed.
+//
+// Every way of not reviewing is reported as unavailability rather than as an
+// error that stops the chain, and the reason says which way it was. The choice
+// is deliberate: a reviewer that crashed produced no review, exactly like one
+// that was never installed, so the property worth preserving is that the chain
+// still tries the next backend and the run still names what happened. Failing
+// hard instead would let a mis-argumented backend at the head of a chain lock a
+// repository out of R2 entirely, and this framework never lets a reviewer that
+// did not run stand in the way of a push.
+//
+// What must never happen is the third option: recording a failed or silent
+// process as a review. That marks the chain as having reviewed, stops it, and
+// publishes "Reviewed by <this backend>" on the pull request for output no
+// reviewer produced.
 func (c *CLI) Review(ctx context.Context, req Request) (report.Result, error) {
 	lookPath := c.LookPath
 	if lookPath == nil {
@@ -177,25 +205,58 @@ func (c *CLI) Review(ctx context.Context, req Request) (report.Result, error) {
 		return report.Result{}, &Unavailable{Backend: c.BackendName, Reason: c.Command + " is not installed"}
 	}
 
+	if c.Budget > 0 {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, c.Budget)
+		defer cancel()
+	}
+
 	run := c.Run
 	if run == nil {
 		run = runCommand
 	}
 	out, err := run(ctx, c.WorkDir, c.Command, c.argv(req))
 	if err != nil {
+		if c.Budget > 0 && ctx.Err() == context.DeadlineExceeded {
+			return report.Result{}, &Unavailable{Backend: c.BackendName,
+				Reason: fmt.Sprintf("no answer within the %s budget", c.Budget)}
+		}
 		// Matching a vendor's error text is confined to the backend that owns
-		// that vendor. A pattern that stops matching reads an unavailable tool
-		// as one that reviewed, so the chain stops early and names it rather
-		// than falling through silently — which is why the report always names
-		// the backend that ran.
+		// that vendor, because the distinction between an unavailable tool and
+		// a failed one cannot be recovered from outside it.
 		if matchesAny(out, c.Patterns) {
 			return report.Result{}, &Unavailable{Backend: c.BackendName, Reason: "quota, authentication, or network"}
 		}
+		return report.Result{}, &Unavailable{Backend: c.BackendName,
+			Reason: fmt.Sprintf("%s failed (%v): %s", c.Command, err, snippet(out))}
+	}
+	if strings.TrimSpace(out) == "" {
+		// A clean exit with nothing to show is what a killed or misconfigured
+		// agentic reviewer looks like most often, and it is indistinguishable
+		// from a review that found nothing — the false negative this framework
+		// treats as the worst outcome.
+		return report.Result{}, &Unavailable{Backend: c.BackendName,
+			Reason: c.Command + " exited successfully but produced no output, so nothing was reviewed"}
 	}
 	// An agentic CLI cannot be asked for a schema, so its output is recorded
 	// verbatim as one finding. Reporting nothing would be read as a clean
 	// review.
 	return report.Unstructured(c.BackendName, c.ProviderName, req.Model, out), nil
+}
+
+// snippet bounds what a failing command's output contributes to a reason, and
+// flattens it to one line. The whole of it can be a stack trace, and this text
+// is read in a terminal skip line and inside a markdown list item on the pull
+// request, neither of which survives an embedded newline.
+func snippet(out string) string {
+	flat := strings.Join(strings.Fields(out), " ")
+	if flat == "" {
+		return "it printed nothing"
+	}
+	if len(flat) > 300 {
+		return flat[:300] + "…"
+	}
+	return flat
 }
 
 func matchesAny(text string, patterns []string) bool {
@@ -259,6 +320,11 @@ func (a *API) Name() string     { return a.BackendName }
 func (a *API) Provider() string { return a.ProviderName }
 
 func (a *API) Describe(req Request) string {
+	// The overrides are applied here for the same reason Review applies them:
+	// a dry run that reports a different model from the one the real run would
+	// send is worse than no dry run, and the value it reported without this was
+	// the empty string Review itself reads as "no model configured".
+	req = withOverrides(req, a.Model, a.Effort)
 	return fmt.Sprintf("POST %s (%s) model=%q, diff of %s vs %s, budget %s",
 		a.Endpoint, a.Shape, req.Model, req.Head, req.Base, a.Budget)
 }
@@ -476,6 +542,12 @@ type InSession struct {
 	BackendName    string
 	ProviderName   string
 	HasAttestation func(role, headSHA string) bool
+
+	// HowToAttest renders the command that records an attestation for a role.
+	// The store belongs to the caller, not to this backend, but an absence
+	// nobody is told how to fill is a dead end rather than a fallback — and
+	// this backend is the whole of R1's shipped chain.
+	HowToAttest func(role string) string
 }
 
 func (s *InSession) Name() string     { return s.BackendName }
@@ -487,8 +559,11 @@ func (s *InSession) Describe(req Request) string {
 
 func (s *InSession) Review(_ context.Context, req Request) (report.Result, error) {
 	if s.HasAttestation == nil || !s.HasAttestation(req.Role, req.HeadSHA) {
-		return report.Result{}, &Unavailable{Backend: s.BackendName,
-			Reason: "no in-session attestation for this change; it cannot be started as a subprocess"}
+		reason := "no in-session attestation for this change; it cannot be started as a subprocess"
+		if s.HowToAttest != nil {
+			reason += ". " + s.HowToAttest(req.Role)
+		}
+		return report.Result{}, &Unavailable{Backend: s.BackendName, Reason: reason}
 	}
 	return report.Result{
 		Backend:  s.BackendName,

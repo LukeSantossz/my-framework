@@ -175,7 +175,6 @@ type Report struct {
 
 	Cases      []CaseResult
 	ByCategory map[string]CategoryScore
-	Failed     []string
 }
 
 type CategoryScore struct {

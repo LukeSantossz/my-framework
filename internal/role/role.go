@@ -23,6 +23,10 @@ import (
 type CrossProviderState string
 
 const (
+	// StateVerified and StateDeclared both describe the Author's side of the
+	// claim, and only that side: whether an independent signal corroborated the
+	// declaration. Neither says anything about the Reviewer's provider, which
+	// is a label in configuration that nothing here can check — see state.
 	StateVerified CrossProviderState = "verified"
 	StateDeclared CrossProviderState = "declared"
 	StateUnknown  CrossProviderState = "unknown"
@@ -133,7 +137,29 @@ func (r *Runner) checkContradiction() error {
 
 // state resolves how strongly the cross-provider requirement holds for the
 // backend that actually reviewed.
+//
+// Both sides of the comparison are names somebody typed into configuration, and
+// only the Author's side has anything behind it: the environment fingerprint
+// corroborates it independently. The Reviewer's side has nothing. A backend
+// declared `provider = "openai"` whose machine layer points that provider at
+// another vendor's endpoint still reports "openai" here, and this package
+// cannot see the endpoint at all.
+//
+// Detecting the vendor behind an arbitrary OpenAI-compatible URL was considered
+// and rejected — issue #16 — because that shape is exactly what Ollama, vLLM,
+// DeepSeek, Groq and a dozen others speak, and no reliable signal distinguishes
+// them. So the honest move is not to guess but to say what was corroborated and
+// what was not, in the line meant for the pull request: on the principle the
+// chain already holds, an unverified claim presented as an enforced one is worse
+// than no claim, because the reader trusts it.
 func (r *Runner) state(reviewerProvider string) (CrossProviderState, string) {
+	// Repeated in every satisfying state rather than written once at the end of
+	// the run, because this note is what a reader copies into the PR's
+	// review-layers record, and half of it copied is the half that overclaims.
+	reviewer := fmt.Sprintf(
+		"reviewer %s (a configured label; nothing here checked it against the endpoint that backend reached)",
+		reviewerProvider)
+
 	if r.Declaration == nil {
 		return StateUnknown, "no Author Declaration for this branch; run `mf author declare` while authoring"
 	}
@@ -143,9 +169,11 @@ func (r *Runner) state(reviewerProvider string) (CrossProviderState, string) {
 			reviewerProvider)
 	}
 	if r.Fingerprint != "" {
-		return StateVerified, fmt.Sprintf("author %s (corroborated), reviewer %s", r.Declaration.Provider, reviewerProvider)
+		return StateVerified, fmt.Sprintf(
+			"author %s (corroborated by an environment fingerprint), %s", r.Declaration.Provider, reviewer)
 	}
-	return StateDeclared, fmt.Sprintf("author %s (declared, not corroborated), reviewer %s", r.Declaration.Provider, reviewerProvider)
+	return StateDeclared, fmt.Sprintf(
+		"author %s (declared, not corroborated), %s", r.Declaration.Provider, reviewer)
 }
 
 func unavailableReason(err error) string {

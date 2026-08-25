@@ -169,6 +169,40 @@ func TestReportsDeclaredWhenOnlyTheBranchRecordAssertsIt(t *testing.T) {
 	}
 }
 
+func TestSaysWhichSideOfTheClaimWasCorroboratedAndWhichWasNot(t *testing.T) {
+	// Both provider names are labels written by hand in configuration. On this
+	// machine `providers.openai.endpoint` points at another vendor entirely, so
+	// a reviewer labelled "openai" reaches DeepSeek and the check still reports
+	// "openai". Nothing here can see that, so the note must not let a pull
+	// request reader read the state as independence somebody established.
+	for _, tc := range []struct {
+		name        string
+		fingerprint string
+		want        CrossProviderState
+	}{
+		{"corroborated author", "anthropic", StateVerified},
+		{"declared author", "", StateDeclared},
+	} {
+		r := &Runner{Role: "r2", RequireCrossProvider: true,
+			Chain:       []backend.Backend{&fake{name: "codex", provider: "openai"}},
+			Declaration: &vcs.Declaration{Provider: "anthropic"},
+			Fingerprint: tc.fingerprint}
+		out, err := r.Run(context.Background(), request())
+		if err != nil {
+			t.Fatalf("%s: Run: %v", tc.name, err)
+		}
+		if out.CrossProvider != tc.want {
+			t.Fatalf("%s: state = %q, want %q", tc.name, out.CrossProvider, tc.want)
+		}
+		if !strings.Contains(out.CrossProviderNote, "label") {
+			t.Errorf("%s: note %q does not say the Reviewer's provider is an unchecked label", tc.name, out.CrossProviderNote)
+		}
+		if !strings.Contains(out.CrossProviderNote, "endpoint") {
+			t.Errorf("%s: note %q does not say what was never checked against that label", tc.name, out.CrossProviderNote)
+		}
+	}
+}
+
 func TestReportsUnknownAndDoesNotSatisfyR2WhenNothingRecordedTheAuthor(t *testing.T) {
 	r := &Runner{Role: "r2", RequireCrossProvider: true,
 		Chain: []backend.Backend{&fake{name: "codex", provider: "openai"}}}

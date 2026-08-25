@@ -19,19 +19,25 @@ import (
 // the quota refresh happens in a detached process the render pass only
 // schedules.
 func runStatusline(env Env, args []string) int {
-	action := "render"
+	// The action defaults to render, and so must the arguments: reaching for
+	// args[1:] after an action nobody typed panicked, which for the caller is a
+	// crash in the one command whose whole contract is to degrade rather than
+	// fail. The status line runs this on every redraw of the prompt.
+	action, rest := "render", args
 	if len(args) > 0 {
-		action = args[0]
+		action, rest = args[0], args[1:]
 	}
 	switch action {
 	case "render":
-		return statuslineRender(env, args[1:])
+		return statuslineRender(env, rest)
 	case "apply":
-		return statuslineApply(env, args[1:])
+		return statuslineApply(env, rest)
+	case "revert":
+		return statuslineRevert(env, rest)
 	case "refresh":
-		return statuslineRefresh(env, args[1:])
+		return statuslineRefresh(env, rest)
 	}
-	fmt.Fprintf(env.Stderr, "mf statusline: unknown action %q (expected render, apply or refresh)\n", action)
+	fmt.Fprintf(env.Stderr, "mf statusline: unknown action %q (expected render, apply, revert or refresh)\n", action)
 	return 2
 }
 
@@ -145,10 +151,13 @@ func statuslineRefresh(env Env, args []string) int {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--version":
-			if i+1 < len(args) {
-				i++
-				version = args[i]
+			// Ignoring the missing value would refresh under a version nobody
+			// asked for and report success for it.
+			value, ok := optionValue(env, "mf statusline refresh", args, &i)
+			if !ok {
+				return 2
 			}
+			version = value
 		default:
 			fmt.Fprintf(env.Stderr, "mf statusline refresh: unknown option %q\n", args[i])
 			return 2
@@ -173,10 +182,12 @@ func statuslineRefresh(env Env, args []string) int {
 
 // statuslineApply writes the contract into both agents' configurations.
 //
-// This is the only command that writes outside the repository, which is why it
-// is a command of its own rather than part of `mf init`: Codex's [tui] section
-// has no per-project form, so applying the contract governs every project on
-// the machine and nobody should get that by running an activation step.
+// It is a command of its own rather than part of `mf init` because of what it
+// writes, not because it is alone in writing outside the repository — several
+// commands do that. The others write files this framework created; this one
+// rewrites a file the Developer set up, and Codex's [tui] section has no
+// per-project form, so applying the contract governs every project on the
+// machine. Nobody should get that by running an activation step.
 func statuslineApply(env Env, args []string) int {
 	for _, a := range args {
 		fmt.Fprintf(env.Stderr, "mf statusline apply: unknown option %q\n", a)
@@ -229,6 +240,42 @@ func statuslineApply(env Env, args []string) int {
 	return 0
 }
 
+// statuslineRevert puts back what the last apply replaced.
+//
+// Apply is the one command that rewrites a file the Developer owns, which
+// makes it the one that owes the machine a way back: a Developer who applied the
+// contract to see what it does should not have to work out which backup name
+// belongs to which run, in a directory the framework does not own.
+func statuslineRevert(env Env, args []string) int {
+	for _, a := range args {
+		fmt.Fprintf(env.Stderr, "mf statusline revert: unknown option %q\n", a)
+		return 2
+	}
+
+	failures := 0
+	for _, target := range []struct{ agent, dir, file string }{
+		{"codex", codexHome(env), "config.toml"},
+		{"claude", claudeHome(env), "settings.json"},
+	} {
+		if target.dir == "" {
+			fmt.Fprintf(env.Stdout, "%-7s no home directory could be resolved; skipped\n", target.agent)
+			failures++
+			continue
+		}
+		res, err := statusline.Revert(filepath.Join(target.dir, target.file))
+		if err != nil {
+			fmt.Fprintf(env.Stderr, "%-7s %v\n", target.agent, err)
+			failures++
+			continue
+		}
+		printReverted(env, target.agent, res)
+	}
+	if failures > 0 {
+		return 1
+	}
+	return 0
+}
+
 func printApplied(env Env, agent string, res statusline.Result) {
 	switch res.Action {
 	case statusline.ActionUnchanged:
@@ -241,6 +288,15 @@ func printApplied(env Env, agent string, res statusline.Result) {
 	}
 }
 
+func printReverted(env Env, agent string, res statusline.Result) {
+	if res.Action != statusline.ActionRestored {
+		fmt.Fprintf(env.Stdout, "%-7s no backup left to restore: %s\n", agent, res.Target)
+		return
+	}
+	fmt.Fprintf(env.Stdout, "%-7s restored %s\n", agent, res.Target)
+	fmt.Fprintf(env.Stdout, "        from <- %s\n", filepath.Base(res.Backup))
+}
+
 // renderCommand is what Claude Code will run each redraw: this binary, by
 // absolute path. A bare `mf` would depend on the PATH of whatever process the
 // agent happens to spawn the status line from.
@@ -249,8 +305,20 @@ func renderCommand() (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("cannot resolve this binary's path: %w", err)
 	}
-	if strings.ContainsAny(self, " \t") {
-		return fmt.Sprintf("%q statusline render", self), nil
-	}
-	return self + " statusline render", nil
+	return shellQuote(self) + " statusline render", nil
+}
+
+// shellQuote wraps a path so the shell that runs the command receives it
+// unchanged.
+//
+// It is always quoted, and quoted for a shell rather than for Go. Go's %q is
+// the wrong syntax twice over: on Windows it doubles every backslash, so
+// `C:\Users\x\mf.exe` reaches the agent as a path that does not exist; and
+// quoting only when a space is present leaves the same path bare, where a POSIX
+// shell eats the backslashes instead. Single quotes are literal in every shell
+// this command is handed to, so both the space and the backslash survive.
+func shellQuote(path string) string {
+	// A single quote cannot appear inside single quotes: the run has to be
+	// closed, the quote escaped outside it, and the run reopened.
+	return "'" + strings.ReplaceAll(path, "'", `'\''`) + "'"
 }

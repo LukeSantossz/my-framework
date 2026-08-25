@@ -123,6 +123,88 @@ func TestStatuslineApplyWritesBothConfigurationsAndIsIdempotent(t *testing.T) {
 	}
 }
 
+func TestTheClaudeCommandSurvivesTheShellThatWillRunIt(t *testing.T) {
+	// Claude Code hands this string to a shell, so Go quoting is the wrong
+	// syntax twice over: it doubles every backslash in a Windows path, and
+	// leaving the path bare lets a POSIX shell eat them instead.
+	command, err := renderCommand()
+	if err != nil {
+		t.Fatal(err)
+	}
+	self, err := os.Executable()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := "'" + self + "' statusline render"; command != want {
+		t.Errorf("renderCommand() = %s\nwant %s", command, want)
+	}
+}
+
+func TestShellQuotingSurvivesSpacesBackslashesAndQuotes(t *testing.T) {
+	for _, c := range []struct{ path, want string }{
+		{`C:\Users\dev\mf.exe`, `'C:\Users\dev\mf.exe'`},
+		{`/opt/my tools/mf`, `'/opt/my tools/mf'`},
+		{`/home/o'brien/mf`, `'/home/o'\''brien/mf'`},
+	} {
+		if got := shellQuote(c.path); got != c.want {
+			t.Errorf("shellQuote(%q) = %s, want %s", c.path, got, c.want)
+		}
+	}
+}
+
+func TestStatuslineRevertRestoresWhatApplyReplaced(t *testing.T) {
+	codexHome, claudeHome := t.TempDir(), t.TempDir()
+	vars := map[string]string{"CODEX_HOME": codexHome, "CLAUDE_HOME": claudeHome}
+	toml := "[tui]\nstatus_line = [\"model\"]\n"
+	settings := `{"model":"opus[1m]","statusLine":{"type":"command","command":"node /somewhere/personal.js"}}`
+	if err := os.WriteFile(filepath.Join(codexHome, "config.toml"), []byte(toml), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(claudeHome, "settings.json"), []byte(settings), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e, _, errOut := statuslineEnv(t, "", vars, "statusline", "apply")
+	if code := Run(e); code != 0 {
+		t.Fatalf("apply exit %d: %s", code, errOut.String())
+	}
+
+	back, out, errOut := statuslineEnv(t, "", vars, "statusline", "revert")
+	if code := Run(back); code != 0 {
+		t.Fatalf("revert exit %d: %s", code, errOut.String())
+	}
+	if !strings.Contains(out.String(), "restored") {
+		t.Errorf("the command did not say what it put back: %q", out.String())
+	}
+	for path, want := range map[string]string{
+		filepath.Join(codexHome, "config.toml"):    toml,
+		filepath.Join(claudeHome, "settings.json"): settings,
+	} {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != want {
+			t.Errorf("%s was not restored:\n%s\nwant\n%s", path, body, want)
+		}
+	}
+}
+
+func TestStatuslineRejectsAFlagWithNoValue(t *testing.T) {
+	// Ignoring the missing value refreshes under a version nobody asked for and
+	// reports success for it. The home is a temporary one so a rejection that
+	// stops working reaches an empty directory rather than the operator's own
+	// credentials.
+	e, _, errOut := statuslineEnv(t, "", map[string]string{"CLAUDE_HOME": t.TempDir()},
+		"statusline", "refresh", "--version")
+	if code := Run(e); code != 2 {
+		t.Fatalf("exit %d, want 2", code)
+	}
+	if !strings.Contains(errOut.String(), "--version") {
+		t.Errorf("stderr %q does not name the option that lacks a value", errOut.String())
+	}
+}
+
 func TestStatuslineRejectsAnUnknownAction(t *testing.T) {
 	e, _, errOut := statuslineEnv(t, "", nil, "statusline", "wat")
 	if code := Run(e); code == 0 {
@@ -130,5 +212,19 @@ func TestStatuslineRejectsAnUnknownAction(t *testing.T) {
 	}
 	if !strings.Contains(errOut.String(), "wat") {
 		t.Errorf("stderr %q does not name the action", errOut.String())
+	}
+}
+
+func TestStatuslineWithNoActionRenders(t *testing.T) {
+	// `mf statusline` defaults to render, and the status line runs it on every
+	// redraw of the agent's prompt. Reaching for the arguments after an action
+	// that was never typed panicked, which for the caller is a crash in the one
+	// command that is supposed to degrade rather than fail.
+	e, out, errOut := statuslineEnv(t, "", map[string]string{"CLAUDE_HOME": t.TempDir()}, "statusline")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, out.String(), errOut.String())
+	}
+	if out.String() == "" {
+		t.Error("the default action produced no line")
 	}
 }

@@ -3,6 +3,7 @@ package statusline
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -18,7 +19,8 @@ const (
 	CodexStatusLine   = `status_line = ["model-with-reasoning", "context-used", "context-window-size", "used-tokens", "five-hour-limit", "weekly-limit", "current-dir", "git-branch"]`
 	CodexStatusColors = `status_line_use_colors = true`
 
-	tuiSection = "[tui]"
+	tuiTable  = "tui"
+	tuiHeader = "[" + tuiTable + "]"
 )
 
 // Action says what applying the contract did. "unchanged" is a distinct outcome
@@ -30,6 +32,7 @@ type Action string
 const (
 	ActionWritten   Action = "written"
 	ActionUnchanged Action = "unchanged"
+	ActionRestored  Action = "restored"
 )
 
 // Result is one configuration file's outcome.
@@ -39,8 +42,99 @@ type Result struct {
 	Backup string
 }
 
-func backupPath(target string, now time.Time) string {
-	return target + ".bak." + now.Format("20060102150405")
+// backupAttempts caps the search for a free backup name. The timestamp only
+// resolves to the second, so the sequence exists for applies that land inside
+// one; a hundred of them is already past what any sequence of applies produces.
+const backupAttempts = 100
+
+// writeBackup copies what is about to be replaced to a name nothing else holds.
+//
+// The name is claimed by creating it exclusively rather than by checking first:
+// two applies in the same second share a timestamp, and the loser of a plain
+// write would silently overwrite the copy of the configuration the Developer
+// actually hand-wrote — the one thing that makes replacing it recoverable.
+//
+// The sequence is fixed-width so the names sort in the order they were taken,
+// which is what lets Revert find the newest.
+func writeBackup(target string, now time.Time, body []byte) (string, error) {
+	base := target + ".bak." + now.Format("20060102150405")
+	for n := 0; n < backupAttempts; n++ {
+		name := base
+		if n > 0 {
+			name = fmt.Sprintf("%s.%02d", base, n)
+		}
+		f, err := os.OpenFile(name, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if errors.Is(err, os.ErrExist) {
+			continue
+		}
+		if err != nil {
+			return "", err
+		}
+		if _, err := f.Write(body); err != nil {
+			f.Close()
+			return "", err
+		}
+		if err := f.Close(); err != nil {
+			return "", err
+		}
+		return name, nil
+	}
+	return "", fmt.Errorf("no free backup name beside %s", target)
+}
+
+// Revert restores the newest backup over the configuration it was taken from.
+//
+// Apply pushes a backup and revert pops it, so a machine can be walked back
+// through however many applies it took: restoring without removing would make
+// every revert after the first a no-op reporting success. Nothing is lost by
+// removing it, because what it held is now the file itself.
+func Revert(target string) (Result, error) {
+	res := Result{Target: target}
+	newest, err := newestBackup(target)
+	if err != nil {
+		return res, err
+	}
+	if newest == "" {
+		res.Action = ActionUnchanged
+		return res, nil
+	}
+	body, err := os.ReadFile(newest)
+	if err != nil {
+		return res, fmt.Errorf("cannot read %s: %w", newest, err)
+	}
+	if err := os.WriteFile(target, body, 0o644); err != nil {
+		return res, fmt.Errorf("cannot restore %s: %w", target, err)
+	}
+	if err := os.Remove(newest); err != nil {
+		return res, fmt.Errorf("cannot remove %s once restored: %w", newest, err)
+	}
+	res.Action, res.Backup = ActionRestored, newest
+	return res, nil
+}
+
+// newestBackup finds the last backup taken of target, or "" when there is none.
+// The directory is read rather than globbed because a `[` anywhere in the
+// operator's home directory is a glob metacharacter and would match nothing.
+func newestBackup(target string) (string, error) {
+	dir := filepath.Dir(target)
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return "", nil
+		}
+		return "", fmt.Errorf("cannot read %s: %w", dir, err)
+	}
+	prefix := filepath.Base(target) + ".bak."
+	newest := ""
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasPrefix(e.Name(), prefix) && e.Name() > newest {
+			newest = e.Name()
+		}
+	}
+	if newest == "" {
+		return "", nil
+	}
+	return filepath.Join(dir, newest), nil
 }
 
 // ApplyCodex writes the contract into Codex's TOML, leaving every unrelated
@@ -66,8 +160,8 @@ func ApplyCodex(codexHome string, now time.Time) (Result, error) {
 	// carrying a hand-rolled status line is the one that most needed
 	// standardizing — and the backup is what keeps the replacement recoverable.
 	if len(existing) > 0 {
-		backup := backupPath(target, now)
-		if err := os.WriteFile(backup, existing, 0o644); err != nil {
+		backup, err := writeBackup(target, now, existing)
+		if err != nil {
 			return res, fmt.Errorf("cannot back up %s: %w", target, err)
 		}
 		res.Backup = backup
@@ -87,7 +181,7 @@ func ApplyCodex(codexHome string, now time.Time) (Result, error) {
 // not ours to normalise in a file we do not own.
 func codexConfigWithContract(existing string) string {
 	if strings.TrimSpace(existing) == "" {
-		return tuiSection + "\n" + CodexStatusLine + "\n" + CodexStatusColors + "\n"
+		return tuiHeader + "\n" + CodexStatusLine + "\n" + CodexStatusColors + "\n"
 	}
 
 	lines := strings.Split(existing, "\n")
@@ -106,10 +200,10 @@ func codexConfigWithContract(existing string) string {
 			continue
 		}
 
-		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		if table, isHeader := tomlTable(trimmed); isHeader {
 			// `[tui.model_availability_nux]` is a different table and must not
 			// be mistaken for the section being edited.
-			inTui = trimmed == tuiSection
+			inTui = table == tuiTable
 			if inTui {
 				sawTui = true
 			}
@@ -139,9 +233,49 @@ func codexConfigWithContract(existing string) string {
 		for len(out) > 0 && strings.TrimSpace(out[len(out)-1]) == "" {
 			out = out[:len(out)-1]
 		}
-		out = append(out, "", tuiSection, CodexStatusLine, CodexStatusColors, "")
+		out = append(out, "", tuiHeader, CodexStatusLine, CodexStatusColors, "")
 	}
 	return strings.Join(out, "\n")
+}
+
+// tomlTable reports which table a line opens, and whether it opens one at all.
+//
+// A header is not simply a line wrapped in brackets: TOML allows padding inside
+// them and a comment after them, and `[tui] # my terminal settings` names the
+// same table as `[tui]`. Reading either as ordinary content costs more than the
+// section it missed — the rewrite stays in whichever table it thought it was in
+// and strips the two keys from the next one, and the [tui] it never saw gets a
+// second one appended, which leaves Codex a file it refuses to parse while the
+// command reports success.
+func tomlTable(trimmed string) (string, bool) {
+	if !strings.HasPrefix(trimmed, "[") {
+		return "", false
+	}
+	header := strings.TrimSpace(stripComment(trimmed))
+	if len(header) < 2 || !strings.HasSuffix(header, "]") {
+		return "", false
+	}
+	name := strings.TrimSpace(header[1 : len(header)-1])
+	return strings.Trim(name, `"'`), true
+}
+
+// stripComment cuts a line at the `#` that starts a comment, leaving one inside
+// a quoted key alone: `["a#b"]` names a table rather than commenting one out.
+func stripComment(line string) string {
+	quote := rune(0)
+	for i, r := range line {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+			}
+		case r == '"' || r == '\'':
+			quote = r
+		case r == '#':
+			return line[:i]
+		}
+	}
+	return line
 }
 
 func tomlKey(line string) string {
@@ -195,8 +329,8 @@ func ApplyClaude(claudeHome, command string, now time.Time) (Result, error) {
 		return res, fmt.Errorf("cannot create %s: %w", claudeHome, err)
 	}
 	if len(existing) > 0 {
-		backup := backupPath(target, now)
-		if err := os.WriteFile(backup, existing, 0o644); err != nil {
+		backup, err := writeBackup(target, now, existing)
+		if err != nil {
 			return res, fmt.Errorf("cannot back up %s: %w", target, err)
 		}
 		res.Backup = backup

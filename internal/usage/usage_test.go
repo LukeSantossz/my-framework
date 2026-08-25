@@ -1,8 +1,12 @@
 package usage
 
 import (
+	"bytes"
+	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 )
 
@@ -186,6 +190,102 @@ func TestStoreKeepsTheEstimatedMarkingThroughTheAggregate(t *testing.T) {
 	}
 	if !s.Read().Usage.Estimated {
 		t.Error("the cumulative total lost the estimated marking")
+	}
+}
+
+func TestStoreDoesNotLoseARunToAConcurrentWriter(t *testing.T) {
+	// A dropped run is invisible after the fact: the file that lost it still
+	// parses, still looks like a plausible total, and nothing anywhere says a
+	// number went missing. That is why this is asserted rather than trusted.
+	s := Store{Path: filepath.Join(t.TempDir(), "usage.json")}
+	const writers, each = 8, 25
+
+	var start, done sync.WaitGroup
+	start.Add(1)
+	failures := make(chan error, writers)
+	for i := 0; i < writers; i++ {
+		done.Add(1)
+		go func() {
+			defer done.Done()
+			start.Wait()
+			for j := 0; j < each; j++ {
+				if err := s.Add(Usage{InputTokens: 1, Known: true}); err != nil {
+					failures <- err
+					return
+				}
+			}
+		}()
+	}
+	start.Done()
+	done.Wait()
+	close(failures)
+	for err := range failures {
+		t.Fatalf("Add: %v", err)
+	}
+
+	got := s.Read()
+	if got.Runs != writers*each {
+		t.Errorf("runs = %d, want %d; %d run(s) were overwritten by a concurrent writer",
+			got.Runs, writers*each, writers*each-got.Runs)
+	}
+	if got.Usage.InputTokens != writers*each {
+		t.Errorf("input tokens = %d, want %d; tokens were lost with the runs that carried them",
+			got.Usage.InputTokens, writers*each)
+	}
+}
+
+// usageChildEnv names the store a re-executed copy of this test binary should
+// write to. Its presence is what turns the test below into the child half of
+// the experiment rather than the parent half.
+const usageChildEnv = "MF_USAGE_CONCURRENT_CHILD"
+
+const (
+	childProcesses = 4
+	childAdds      = 20
+)
+
+func TestStoreDoesNotLoseARunToAConcurrentProcess(t *testing.T) {
+	// The reported failure is two processes, not two goroutines: r2 and r3 run
+	// as parallel CI jobs and share one usage.json. A lock that lives inside a
+	// single process would satisfy the test above while leaving that defect
+	// exactly where it was, so the real shape is reproduced here.
+	if path := os.Getenv(usageChildEnv); path != "" {
+		child := Store{Path: path}
+		for i := 0; i < childAdds; i++ {
+			if err := child.Add(Usage{InputTokens: 1, Known: true}); err != nil {
+				t.Fatalf("child Add: %v", err)
+			}
+		}
+		return
+	}
+
+	s := Store{Path: filepath.Join(t.TempDir(), "usage.json")}
+	type child struct {
+		cmd    *exec.Cmd
+		output *bytes.Buffer
+	}
+	children := make([]child, 0, childProcesses)
+	for i := 0; i < childProcesses; i++ {
+		var out bytes.Buffer
+		cmd := exec.Command(os.Args[0], "-test.run=^"+t.Name()+"$")
+		cmd.Env = append(os.Environ(), usageChildEnv+"="+s.Path)
+		cmd.Stdout = &out
+		cmd.Stderr = &out
+		if err := cmd.Start(); err != nil {
+			t.Fatalf("starting a writer process: %v", err)
+		}
+		children = append(children, child{cmd: cmd, output: &out})
+	}
+	for _, c := range children {
+		if err := c.cmd.Wait(); err != nil {
+			t.Fatalf("a writer process failed: %v\n%s", err, c.output.String())
+		}
+	}
+
+	want := childProcesses * childAdds
+	if got := s.Read(); got.Runs != want {
+		t.Errorf("runs = %d, want %d; %d run(s) were overwritten by another process",
+			got.Runs, want, want-got.Runs)
 	}
 }
 

@@ -17,8 +17,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
+	"time"
 )
 
 // Usage is one review's consumption, in disjoint buckets.
@@ -255,21 +255,34 @@ func (s Store) Read() Totals {
 	return t
 }
 
+// Add folds one run into the cumulative total.
+//
+// The update is a read-modify-write of a file that is not private to this
+// process: r2 and r3 run as parallel CI jobs against the same store, and two
+// runs finishing together would otherwise leave only one of them recorded. That
+// loss is silent — the survivor's file still parses and still reads as a
+// plausible total — so the exclusion is taken rather than hoped for.
 func (s Store) Add(u Usage) error {
 	if !u.Known {
 		return nil
 	}
+	if s.Path == "" {
+		return fmt.Errorf("no usage store path configured; nothing was recorded")
+	}
+	release, err := s.lock()
+	if err != nil {
+		return err
+	}
+	defer release()
+
 	t := s.Read()
 	t.Runs++
 	t.Usage = t.Usage.Add(u)
-	if err := os.MkdirAll(filepath.Dir(s.Path), 0o755); err != nil {
-		return err
-	}
 	encoded, err := json.MarshalIndent(t, "", "  ")
 	if err != nil {
 		return err
 	}
-	return os.WriteFile(s.Path, append(encoded, '\n'), 0o644)
+	return s.writeAtomically(append(encoded, '\n'))
 }
 
 func (s Store) Reset() error {
@@ -279,12 +292,105 @@ func (s Store) Reset() error {
 	return nil
 }
 
-// SortedModels is a small helper for reporting a price table back.
-func (t Table) SortedModels() []string {
-	models := make([]string, 0, len(t))
-	for m := range t {
-		models = append(models, m)
+// The lock is a directory, created and removed by name, rather than an advisory
+// lock from the operating system: the writers are separate `mf` processes on
+// whatever platform the user runs, and no portable advisory lock exists in the
+// standard library. A directory rather than a sentinel file because creating one
+// is atomic on every platform and nothing keeps a handle to it — a lock file is
+// the same idea, but on Windows an unlinked one lingers in a delete-pending
+// state that makes the next creation fail as a permission error instead of as
+// contention, which is exactly the distinction this loop must be able to draw.
+const (
+	// lockPoll is how often a waiting writer retries. Short, because the
+	// critical section is one small read and one small write.
+	lockPoll = 5 * time.Millisecond
+
+	// lockWait bounds the wait so a jammed store degrades to a reported
+	// accounting failure rather than a hung review. Accounting is observation:
+	// the review it belongs to has already happened and must not be held up.
+	lockWait = 10 * time.Second
+
+	// lockStale is when a held lock is treated as abandoned. A process killed
+	// mid-update leaves the directory behind, and a counter that stops counting
+	// until someone deletes it by hand is a worse failure than the race it was
+	// guarding against.
+	lockStale = 2 * time.Minute
+
+	// lockDenyGrace is how long a refusal to create the lock is read as
+	// contention rather than as a real refusal. Windows leaves a just-removed
+	// name in a delete-pending state where re-creating it is denied for
+	// permission instead of reported as existing, and under several writers
+	// that window is hit constantly. It clears in milliseconds, so a refusal
+	// that outlasts this is a directory this process genuinely cannot write,
+	// and it is returned rather than waited out for the full budget.
+	lockDenyGrace = 2 * time.Second
+)
+
+func (s Store) lockPath() string { return s.Path + ".lock" }
+
+// lock takes the store for this writer and returns the function that gives it
+// back. The release only removes what this call created, so deferring it is
+// safe on every path that follows.
+func (s Store) lock() (func(), error) {
+	if err := os.MkdirAll(filepath.Dir(s.Path), 0o755); err != nil {
+		return nil, err
 	}
-	sort.Strings(models)
-	return models
+	path := s.lockPath()
+	deadline := time.Now().Add(lockWait)
+	var deniedSince time.Time
+	for {
+		err := os.Mkdir(path, 0o755)
+		switch {
+		case err == nil:
+			return func() { os.Remove(path) }, nil
+		case os.IsExist(err):
+			deniedSince = time.Time{}
+			if info, statErr := os.Stat(path); statErr == nil && time.Since(info.ModTime()) > lockStale {
+				// Taking someone else's lock is only defensible because it is
+				// this old: a writer still inside the critical section cannot
+				// have held it for minutes, since the section is two file
+				// operations.
+				os.Remove(path)
+			}
+		case os.IsPermission(err):
+			if deniedSince.IsZero() {
+				deniedSince = time.Now()
+			} else if time.Since(deniedSince) > lockDenyGrace {
+				return nil, err
+			}
+		default:
+			return nil, err
+		}
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("another writer still holds %s after %s; this run's usage was not recorded",
+				path, lockWait)
+		}
+		time.Sleep(lockPoll)
+	}
+}
+
+// writeAtomically replaces the store in one step. `mf usage` and `mf doctor`
+// read it without taking the lock, and Read answers a parse failure with an
+// empty total, so a truncate-then-write would let a reader see the running
+// total as zero and be given no reason to doubt it.
+func (s Store) writeAtomically(data []byte) error {
+	tmp, err := os.CreateTemp(filepath.Dir(s.Path), filepath.Base(s.Path)+".*.tmp")
+	if err != nil {
+		return err
+	}
+	name := tmp.Name()
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(name)
+		return err
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(name)
+		return err
+	}
+	if err := os.Rename(name, s.Path); err != nil {
+		os.Remove(name)
+		return err
+	}
+	return nil
 }

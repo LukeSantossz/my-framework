@@ -110,32 +110,68 @@ func (c *Client) PullRequest(number int) (PullRequest, error) {
 	}, nil
 }
 
+// commentPageSize is the maximum the comments endpoint accepts. A smaller page
+// would only mean more round trips for the same answer.
+const commentPageSize = 100
+
+// commentPageLimit bounds the walk so a forge that ignores the page parameter
+// and keeps returning a full page cannot spin here forever. At the page size
+// above this covers ten thousand comments, which is far past any thread a
+// person would still be reading.
+const commentPageLimit = 100
+
+// findMarkedComment returns the id of this tool's own comment on the thread, or
+// found=false when it has never commented there.
+//
+// Every page is walked rather than only the first. A busy pull request pushes
+// the marker off page one, and a marker that cannot be found is a marker that
+// does nothing: each run would post another comment, which is exactly the
+// behaviour Marker exists to prevent.
+func (c *Client) findMarkedComment(number int) (id int64, found bool, err error) {
+	for page := 1; page <= commentPageLimit; page++ {
+		raw, status, err := c.do(http.MethodGet, fmt.Sprintf(
+			"/repos/%s/%s/issues/%d/comments?per_page=%d&page=%d",
+			c.Owner, c.Repo, number, commentPageSize, page), nil)
+		if err != nil {
+			return 0, false, err
+		}
+		if status != http.StatusOK {
+			return 0, false, fmt.Errorf("listing comments page %d returned HTTP %d", page, status)
+		}
+		var comments []struct {
+			ID   int64  `json:"id"`
+			Body string `json:"body"`
+		}
+		if err := json.Unmarshal(raw, &comments); err != nil {
+			return 0, false, fmt.Errorf("comment list page %d was not JSON: %w", page, err)
+		}
+		for _, existing := range comments {
+			if strings.Contains(existing.Body, Marker) {
+				return existing.ID, true, nil
+			}
+		}
+		// A short page is the last one. Asking for the next would cost a round
+		// trip to learn what this page already said.
+		if len(comments) < commentPageSize {
+			return 0, false, nil
+		}
+	}
+	return 0, false, fmt.Errorf("gave up looking for the review comment after %d pages", commentPageLimit)
+}
+
 // UpsertComment replaces this tool's previous comment when one exists, and
 // posts a new one otherwise. It reports which happened.
 func (c *Client) UpsertComment(number int, body string) (string, error) {
 	if !strings.Contains(body, Marker) {
 		body = Marker + "\n" + body
 	}
-	raw, status, err := c.do(http.MethodGet, fmt.Sprintf("/repos/%s/%s/issues/%d/comments?per_page=100", c.Owner, c.Repo, number), nil)
+	existingID, found, err := c.findMarkedComment(number)
 	if err != nil {
 		return "", err
 	}
-	if status != http.StatusOK {
-		return "", fmt.Errorf("listing comments returned HTTP %d", status)
-	}
-	var comments []struct {
-		ID   int64  `json:"id"`
-		Body string `json:"body"`
-	}
-	if err := json.Unmarshal(raw, &comments); err != nil {
-		return "", fmt.Errorf("comment list was not JSON: %w", err)
-	}
-	for _, existing := range comments {
-		if !strings.Contains(existing.Body, Marker) {
-			continue
-		}
+	if found {
 		_, patchStatus, patchErr := c.do(http.MethodPatch,
-			fmt.Sprintf("/repos/%s/%s/issues/comments/%d", c.Owner, c.Repo, existing.ID),
+			fmt.Sprintf("/repos/%s/%s/issues/comments/%d", c.Owner, c.Repo, existingID),
 			map[string]string{"body": body})
 		if patchErr != nil {
 			return "", patchErr

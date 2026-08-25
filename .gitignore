@@ -1,6 +1,3 @@
-# Superpowers orchestration artifacts are transient, not versioned (SPEC.md is the design artifact)
-docs/superpowers/
-
 # Built binaries. The release pipeline publishes them; a working tree does not.
 /mf
 /mf.exe
