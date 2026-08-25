@@ -72,7 +72,11 @@ CRUX feeds R1 and the CRURA Review; it is not R1, R2, or R3, and it never blocks
 a ship. Fallbacks degrade deliberately, never silently. If no backend in the
 explain chain is available — or the one that answers does not answer with an
 explainer — none is produced: the reviewer reads the diff directly and the Pull
-Request notes the CRUX aid was absent, mirroring the R2 no-reviewer fallback.
+Request notes the CRUX aid was absent. Reading the diff directly is this aid's
+own fallback, not R2's: the R2-absent fallback is R1 plus CRURA's adjudication
+stage (`ai_guidelines.md` Review Composition), which substitutes a review layer
+rather than a reading aid. What the two share is only the recording — a step
+that degraded says so in the Pull Request instead of reading as one that ran.
 When the explainer is produced but the anti-slop pass was not run, the explainer
 is still useful and its prose gets a manual pass; the degraded step is flagged
 on the page itself, not silent. `skills_guidelines.md` records the explainer's

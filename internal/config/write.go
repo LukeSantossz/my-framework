@@ -100,6 +100,17 @@ func Set(opts Options, key, value string, target Target) error {
 			return fmt.Errorf("refusing to write %s: %s", key, msg)
 		}
 	}
+	// Only in the project layer, because that is where the rule lives: the
+	// loader refuses a committed command that names a path or an interpreter,
+	// and refuses it for the whole file, so a write that lands one there costs
+	// everybody who clones the repository a hand edit before anything loads.
+	// The machine layer carries no such rule and must not gain one here — a
+	// user's own file cannot run a repository's code on them.
+	if target == TargetProject && strings.HasPrefix(key, "backends.") && strings.HasSuffix(key, ".command") {
+		if msg := commandProblem(value); msg != "" {
+			return fmt.Errorf("refusing to write %s: %s", key, msg)
+		}
+	}
 
 	path := opts.MachinePath
 	seed := "version = 1\n"

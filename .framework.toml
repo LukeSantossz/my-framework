@@ -40,6 +40,7 @@ version = 1
 [paths]
 standards = "docs/standards"
 specs = "docs/specs"
+adr = "docs/adr"
 agents_file = "AGENTS.md"
 
 [review]
@@ -60,12 +61,12 @@ backends = ["superpowers"]
 # ai_guidelines.md, so the built-in answer is already the one this repository
 # wants for everybody; leaving the key out is also what lets a machine or a
 # single run raise the bar without editing committed policy, which a declared
-# `blocking = false` here would forbid. Three ways to turn it on, in the
-# cascade's own order:
+# `blocking = false` here would forbid. Three ways to turn it on, in the order
+# the loader applies them, so each line outranks the one above it:
 #
 #   mf config set roles.r2.blocking true --machine   # this machine, always
-#   MF_ROLES_R2_BLOCKING=1 git push                  # this push only
 #   blocking = true                                  # every clone, once committed
+#   MF_ROLES_R2_BLOCKING=1 git push                  # this push only
 #
 # With it on, a finding a reviewer classed as blocking stops the pre-push hook.
 # A finding it classed as advisory does not, and neither does a chain where no
@@ -96,7 +97,7 @@ backends = ["gemini"]
 
 # A machine may define backends of its own, under the same key space. A name
 # defined here wins over a machine definition of that name, whole rather than
-# field by field, so a machine adds reviewers and never substitutes one this
+# field by field, so a machine adds backends and never substitutes one this
 # file already chose.
 
 # Runs inside a coding-agent session, so it cannot be started as a subprocess.

@@ -72,6 +72,8 @@ Three paths. **Once the next tag is published, prefer the prebuilt binary**: it 
 gh release download v0.4.0 --repo LukeSantossz/my-framework \
   --pattern 'mf_v0.4.0_linux_amd64' --pattern 'SHA256SUMS'
 sha256sum --ignore-missing -c SHA256SUMS
+# macOS ships no sha256sum; there the same check is:
+#   shasum -a 256 --ignore-missing -c SHA256SUMS
 install -m 0755 mf_v0.4.0_linux_amd64 ~/.local/bin/mf
 ```
 

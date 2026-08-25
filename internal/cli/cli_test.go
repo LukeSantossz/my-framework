@@ -212,6 +212,9 @@ func TestEveryCommandThatReadsTheRepositoryRefusesOutsideOne(t *testing.T) {
 		{"init"}, {"doctor"}, {"check"}, {"hooks", "status"}, {"upgrade"},
 		{"agents", "check"}, {"models", "list"}, {"config", "list"},
 		{"author", "declare", "--provider", "x"},
+		// The three that read a diff or a document out of the repository, and
+		// resolve every one of those paths against the root.
+		{"review"}, {"eval"}, {"explain", "x"},
 	} {
 		e, _, errOut := outsideARepository(t, args...)
 		if code := Run(e); code == 0 {

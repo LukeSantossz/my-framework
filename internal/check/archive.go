@@ -179,7 +179,7 @@ func specHeaders(o Options) ([]Problem, error) {
 // up in transit removed: the byte-order mark an editor may write, and the
 // carriage return a Windows checkout carries.
 func firstLine(body string) string {
-	body = strings.TrimPrefix(body, "")
+	body = strings.TrimPrefix(body, "\uFEFF")
 	line, _, _ := strings.Cut(body, "\n")
 	return strings.TrimRight(line, "\r")
 }
@@ -228,6 +228,13 @@ func archivePins(o Options, a archive) []Problem {
 // far as it was fetched, so a deletion older than that window goes unreported;
 // the workflow that runs these gates checks out with fetch-depth 0, which is
 // where the guard has its full reach.
+//
+// A rename is not a deletion, and history does not say so on its own: git
+// reports the renaming commit as R, so the new name never appears among the
+// additions and the old one is simply missing from the tree. Read without the
+// rename records, that is indistinguishable from a record someone removed, and
+// the gate demanded a deletion-archive entry for a document still sitting in
+// the archive under a clearer slug.
 func deletedRecords(o Options, a archive) ([]Problem, error) {
 	dirs := o.recordDirs()
 	// No history means nothing was ever added, so nothing can have been
@@ -239,12 +246,16 @@ func deletedRecords(o Options, a archive) ([]Problem, error) {
 	if err != nil {
 		return nil, err
 	}
+	renames, err := o.Repo.RenamedPaths(dirs...)
+	if err != nil {
+		return nil, err
+	}
 	var problems []Problem
 	for _, rel := range added {
 		if !specFileName.MatchString(path.Base(rel)) {
 			continue
 		}
-		if existsExactly(o.RepoRoot, filepath.FromSlash(rel)) {
+		if presentUnderAnyName(o.RepoRoot, rel, renames) {
 			continue
 		}
 		carrier, accounted := a.Deleted[rel]
@@ -259,6 +270,30 @@ func deletedRecords(o Options, a archive) ([]Problem, error) {
 		}
 	}
 	return problems, nil
+}
+
+// presentUnderAnyName reports whether the record history added as rel is still
+// in the tree, following every rename it was given.
+//
+// The chain is walked to its end rather than one step, because a record renamed
+// twice is still the same record; and a name history hands back to a later file
+// can loop, so where the walk has already been is remembered. A record renamed
+// and then deleted reaches an end that is not there and is reported as the
+// deletion it is.
+func presentUnderAnyName(root, rel string, renames map[string]string) bool {
+	seen := map[string]bool{}
+	for name := rel; !seen[name]; {
+		if existsExactly(root, filepath.FromSlash(name)) {
+			return true
+		}
+		seen[name] = true
+		next, renamed := renames[name]
+		if !renamed {
+			return false
+		}
+		name = next
+	}
+	return false
 }
 
 // recordDirs is the record directories as git names them: slash paths relative

@@ -87,6 +87,12 @@ It is missing.
 // numbered file carrying the header that says what it is.
 const specStub = "# SPEC: chore(x): a stub\n"
 
+// byteOrderMark is spelled as a rune rather than pasted in, because pasting it
+// would make it as invisible here as it is in the document that carries one —
+// and a test whose subject cannot be seen in its own source is one nobody can
+// maintain.
+var byteOrderMark = string(rune(0xFEFF))
+
 // --- spec -------------------------------------------------------------------
 
 func TestSpecFailsANonTrivialBranchThatCarriesNoSpec(t *testing.T) {
@@ -794,6 +800,21 @@ func TestRecordsFailsASpecMissingTheHeaderThatSaysWhatItIs(t *testing.T) {
 	}
 }
 
+func TestRecordsAcceptsASpecWhoseHeaderCarriesAByteOrderMark(t *testing.T) {
+	// A BOM is invisible in the editor that wrote it, so the gate rejected a
+	// file whose first line the author could see was exactly right, and named
+	// the header as the fault. The mark is transit damage, not content.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a.md"), byteOrderMark+specStub)
+	res, err := Records(opts(root))
+	if err != nil {
+		t.Fatalf("Records: %v", err)
+	}
+	if !res.OK() {
+		t.Errorf("a spec carrying a byte-order mark must pass: %+v", res.Problems)
+	}
+}
+
 func TestRecordsFailsAStrayDocumentInTheSpecsDirectory(t *testing.T) {
 	// The specs directory is the archive. A file in it that is not a spec is
 	// either a spec that lost its header or something that does not belong.
@@ -833,6 +854,47 @@ func TestRecordsFailsARecordThatHistorySaysWasDeleted(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("no problem names the deleted record: %+v", res.Problems)
+	}
+}
+
+func TestRecordsAcceptsARecordThatWasRenamedRatherThanRemoved(t *testing.T) {
+	// git detects renames by default, so the commit that renames a record
+	// reports it as R and the new name never appears as an addition. Reading
+	// additions alone left the old name missing from the tree, and the gate
+	// reported a deletion for a record still sitting there — naming the
+	// deletion archive as the remedy for something nobody deleted.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a.md"), specStub)
+	git(t, root, "add", ".")
+	git(t, root, "commit", "-m", "docs: one record")
+	git(t, root, "mv", "docs/specs/0001-a.md", "docs/specs/0001-a-clearer-slug.md")
+	git(t, root, "commit", "-m", "docs: rename the record")
+
+	res, err := Records(opts(root))
+	if err != nil {
+		t.Fatalf("Records: %v", err)
+	}
+	if !res.OK() {
+		t.Errorf("a renamed record is still in the tree and must not be reported deleted: %+v", res.Problems)
+	}
+}
+
+func TestRecordsStillFailsARecordDeletedAfterBeingRenamed(t *testing.T) {
+	// The rename chain is followed to its end, not treated as an excuse: a
+	// record renamed and then deleted is as gone as one deleted outright, and
+	// resolving renames must not become a way to leave the archive.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a.md"), specStub)
+	git(t, root, "add", ".")
+	git(t, root, "commit", "-m", "docs: one record")
+	git(t, root, "mv", "docs/specs/0001-a.md", "docs/specs/0001-a-clearer-slug.md")
+	git(t, root, "commit", "-m", "docs: rename the record")
+	git(t, root, "rm", "-q", "docs/specs/0001-a-clearer-slug.md")
+	git(t, root, "commit", "-m", "docs: remove it after all")
+
+	res, _ := Records(opts(root))
+	if res.OK() {
+		t.Fatal("a record deleted at the end of a rename chain must still fail")
 	}
 }
 

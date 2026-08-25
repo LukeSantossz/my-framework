@@ -309,6 +309,31 @@ func TestConfigSetWritesABackendIntoTheMachineLayer(t *testing.T) {
 	}
 }
 
+func TestConfigSetRefusesACommittedCommandTheLoaderWouldRefuse(t *testing.T) {
+	// `mf config set backends.x.command sh --project` wrote the value and left
+	// the repository unloadable for everybody who clones it — the exact failure
+	// the layer guards exist to prevent, applied to the one field that decides
+	// what code runs on a contributor's machine.
+	for _, command := range []string{"sh", "./scripts/review.sh", "node"} {
+		opts := fixture(t, "version = 1\n", "version = 1\n")
+		err := Set(opts, "backends.x.command", command, TargetProject)
+		assertRefused(t, err, "backends.x.command")
+		if _, loadErr := Load(opts); loadErr != nil {
+			t.Errorf("the refusal of %q still left a configuration that does not load: %v", command, loadErr)
+		}
+	}
+}
+
+func TestConfigSetAllowsACommandOnTheMachineWhereTheLoaderDoes(t *testing.T) {
+	// The committed-command rule guards a contributor against the repository.
+	// A user's own machine file cannot do that to them, and the loader says so
+	// too: refusing here would put a real route out of reach for no gain.
+	opts := fixture(t, "version = 1\n", "version = 1\n")
+	if err := Set(opts, "backends.x.command", "sh", TargetMachine); err != nil {
+		t.Errorf("Set(backends.x.command) into the machine layer: %v", err)
+	}
+}
+
 func TestConfigSetRefusesAPathThatLeavesTheRepository(t *testing.T) {
 	// Caught at write time for the same reason as the layer guards: the loader
 	// would refuse the file afterwards, and a refused file is everyone's problem

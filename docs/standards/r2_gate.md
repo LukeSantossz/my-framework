@@ -297,21 +297,21 @@ with an underscore, prefixed `MF_`. `roles.r2.backends` is `MF_ROLES_R2_BACKENDS
 | `roles.<role>.blocking` | A blocking finding from this role stops its caller | `false` |
 | `roles.<role>.require_cross_provider` | This role carries the cross-provider rule | `true` for `r2`, `false` otherwise |
 | `review.base` | Branch to review against | `main` |
-| `review.model`, `review.effort` | Applied to whichever backend runs | `effort` is `high` |
+| `review.model`, `review.effort` | Chain-wide, for a backend that pins neither of its own | `effort` is `high` |
 | `review.max_diff_bytes` | Diff size limit before truncation | `30000` |
 | `review.timeout_seconds` | Total wall-clock budget for one review | `240` |
 | `backends.<name>.kind` | `cli`, `api`, `in-session`, `external` or `inproc` | — |
 | `backends.<name>.provider` | The provider label this backend claims | — |
 | `backends.<name>.command`, `.args` | For a `cli` backend | — |
 | `backends.<name>.unavailable_patterns` | What this tool's failures look like when it is unavailable | — |
-| `backends.<name>.model`, `.effort` | Override for one backend | — |
+| `backends.<name>.model`, `.effort` | Pins one backend, outranking the chain-wide `review.*` | — |
 | `providers.<name>.kind` | `openai-compatible`, `anthropic` or `google` | `openai-compatible` |
 | `providers.<name>.endpoint` | Base URL, without `/chat/completions` | — |
 | `providers.<name>.api_key_env` | **Name** of the environment variable holding the key | — |
 | `paths.standards`, `paths.specs`, `paths.adr`, `paths.agents_file` | Where the gates look | `docs/standards`, `docs/specs`, `docs/adr`, `AGENTS.md` |
 
 A backend a machine defines is shadowed by a project backend of the same name **whole**,
-never field by field, so a machine adds reviewers and never quietly substitutes one the
+never field by field, so a machine adds backends and never quietly substitutes one the
 repository already chose.
 
 **Secrets are never stored here.** `providers.<name>.api_key_env` holds the *name* of the
@@ -339,7 +339,11 @@ the drift these gates exist to catch.
   blocking. Same key, run scope; `mf config set roles.r2.blocking true --machine` is the
   persistent form.
 - `MF_REVIEW_BASE=<branch>`, `MF_ROLES_R2_BACKENDS=<list>`, `MF_REVIEW_MODEL=<model>`,
-  `MF_REVIEW_EFFORT=<effort>`: the same keys, for one run.
+  `MF_REVIEW_EFFORT=<effort>`: the same keys, for one run. `MF_REVIEW_MODEL` and
+  `MF_REVIEW_EFFORT` are chain-wide, so they reach only a backend that pins neither of
+  its own — a backend carrying `backends.<name>.model` keeps it. That is the point of a
+  per-backend pin: a chain mixes models deliberately, and a value meant to fill the gaps
+  must not silently retune the reviewer a repository benchmarked and chose.
 - `MF_BIN=<path>`: where this machine keeps the binary, for a checkout that is neither on
   `PATH` nor built in place. The hooks refuse a value that is not executable rather than
   reading a broken override as no override.

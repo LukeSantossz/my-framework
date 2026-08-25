@@ -131,7 +131,18 @@ jobs:
           # base. Restoring the two refs the gates are about is what makes the
           # job report on the change rather than on the checkout.
           git switch --force-create "$HEAD_REF" "$HEAD_SHA"
-          git branch --force "$BASE_REF" "origin/$BASE_REF"
+          # The two names can be one branch: a fork may propose its own `main`,
+          # and the head ref carries no owner. git refuses to force-update the
+          # branch a worktree has checked out, so the unguarded update exited
+          # 128 there and, under `bash -e`, ended the job before any gate ran.
+          # Nothing is lost by skipping it. There is no second ref to restore —
+          # the three gates that ask what a branch adds over its base find head
+          # and base equal and report "on the base branch", which is the honest
+          # answer for a change that named no branch of its own — and the other
+          # four gates read the tree and are unaffected either way.
+          if [ "$HEAD_REF" != "$BASE_REF" ]; then
+            git branch --force "$BASE_REF" "origin/$BASE_REF"
+          fi
           ./mf check
 
       - name: Gates (no branch under review)

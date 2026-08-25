@@ -50,10 +50,12 @@ Accepted.
   above name is gone. `scripts/r2-review.sh`, `scripts/setup.sh` and the parity guard that pinned
   their literals equal were deleted with the shell path, and `CODEX_REVIEW_MODEL` and
   `git config codexreview.model` resolve nowhere. The default now lives in exactly one
-  place, as `model` on `[backends.codex]` in `.framework.toml`, where it is per-backend
-  so a fallback never inherits it; the per-run override is `MF_BACKENDS_CODEX_MODEL` and
-  the per-repository one is that key. Two literals held equal by a guard became one
-  literal, which is the shape this ADR's incident argued for.
+  place, as `model` on `[backends.codex]` in `.framework.toml`. Being per-backend is what
+  makes that one place enough: it outranks the chain-wide `review.model`, so a fallback
+  never inherits Terra and no run-scoped `MF_REVIEW_MODEL` quietly retunes the reviewer
+  this ADR benchmarked. Overriding *this* backend for one run is still possible, and
+  says which backend it means: `MF_BACKENDS_CODEX_MODEL`. Two literals held equal by a
+  guard became one literal, which is the shape this ADR's incident argued for.
 
 ## Numbering history
 

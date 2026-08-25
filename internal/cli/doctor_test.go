@@ -268,6 +268,20 @@ func TestUsageRejectsAnUnknownAction(t *testing.T) {
 	}
 }
 
+// withIsolatedGitConfig points this process's git at an empty global
+// configuration and switches the system one off, so a hooks assertion is
+// decided by the code under test rather than by whatever the developer running
+// it has configured for themselves.
+func withIsolatedGitConfig(t *testing.T) {
+	t.Helper()
+	file := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", file)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+}
+
 // withGlobalHooksPath points this process's git at a scratch global
 // configuration carrying core.hooksPath.
 func withGlobalHooksPath(t *testing.T, value string) {
@@ -318,6 +332,7 @@ func TestDoctorSaysAWiringCameFromOutsideTheRepository(t *testing.T) {
 func TestDoctorNamesTheLocalHooksThatCoreHooksPathSilences(t *testing.T) {
 	// Setting core.hooksPath replaces .git/hooks rather than adding to it, so a
 	// hook already installed there stops firing. Nothing mentioned that anywhere.
+	withIsolatedGitConfig(t)
 	root := gitRepo(t, "version = 1\n")
 	if err := os.MkdirAll(filepath.Join(root, ".githooks"), 0o755); err != nil {
 		t.Fatal(err)

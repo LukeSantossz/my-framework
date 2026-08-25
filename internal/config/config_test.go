@@ -731,6 +731,16 @@ func TestRefusesAConfiguredPathThatLeavesTheRepository(t *testing.T) {
 	}
 }
 
+func TestAcceptsARelativePathWhoseSecondCharacterIsAColon(t *testing.T) {
+	// A Windows drive prefix is a letter and a colon. Reading any second byte
+	// of ':' as one refused a directory inside the repository that no platform
+	// resolves anywhere else.
+	project := "version = 1\n\n[paths]\nspecs = \"9:15-notes/specs\"\n"
+	if _, err := Load(fixture(t, project, minimalMachine)); err != nil {
+		t.Errorf("a relative path was refused as absolute: %v", err)
+	}
+}
+
 func TestRefusesAConfiguredPathThatIsEmpty(t *testing.T) {
 	// Declared-empty is a real statement everywhere else, and this is the one
 	// place it cannot be honoured: every consumer joins it onto the root, so an
@@ -824,9 +834,7 @@ kind = "cli"
 provider = "openai"
 command = "codex"
 `
-	cfg := mustLoad(t, fixture(t, "", ""))
-	_ = cfg
-	cfg = mustLoad(t, fixture(t, project, ""))
+	cfg := mustLoad(t, fixture(t, project, ""))
 	if problems := cfg.Validate(); len(problems) > 0 {
 		t.Errorf("validate reported %s for a cli backend whose provider has no endpoint", renderProblems(problems))
 	}
@@ -867,5 +875,41 @@ provider = "deepseek"
 		if got[i] != want[i] {
 			t.Fatalf("BackendNames() = %v, want %v (sorted)", got, want)
 		}
+	}
+}
+
+func TestAnEnvironmentOverrideOnABackendFieldReachesTheBackend(t *testing.T) {
+	// `mf config get backends.codex.model` reported the override while
+	// `mf review` went on sending the committed value, because the resolved
+	// entries and the decoded backend were two answers to one question. A key
+	// that reports one value and applies another is worse than either alone:
+	// the reader checks, is told it took, and is wrong.
+	project := `
+version = 1
+[backends.codex]
+kind = "cli"
+provider = "openai"
+command = "codex"
+model = "gpt-5.6-terra"
+`
+	opts := fixture(t, project, "")
+	opts.Env = func(name string) string {
+		if name == "MF_BACKENDS_CODEX_MODEL" {
+			return "zzz-test"
+		}
+		return ""
+	}
+	cfg := mustLoad(t, opts)
+
+	value, _, _ := cfg.Get("backends.codex.model")
+	b, _, ok := cfg.Backend("codex")
+	if !ok {
+		t.Fatal("the backend does not resolve at all")
+	}
+	if b.Model != value {
+		t.Errorf("Backend() says %q while Get() says %q; one of them is what a review will use", b.Model, value)
+	}
+	if b.Model != "zzz-test" {
+		t.Errorf("the environment override did not reach the backend: %q", b.Model)
 	}
 }

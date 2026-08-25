@@ -605,17 +605,52 @@ func (c *Config) BackendNames() []string {
 }
 
 func (c *Config) Backend(name string) (Backend, Layer, bool) {
+	var (
+		b     Backend
+		layer Layer
+		found bool
+	)
 	if c.Project != nil {
-		if b, ok := c.Project.Backends[name]; ok {
-			return b, LayerProject, true
+		b, found = c.Project.Backends[name]
+		layer = LayerProject
+	}
+	if !found && c.Machine != nil {
+		b, found = c.Machine.Backends[name]
+		layer = LayerMachine
+	}
+	if !found {
+		return Backend{}, LayerDefault, false
+	}
+	return c.withResolvedFields(name, b), layer, true
+}
+
+// withResolvedFields lays the cascade over a decoded backend.
+//
+// The definition is read whole from one file, but the flat entries carry a
+// layer the files do not: the environment. Without this, `mf config get
+// backends.codex.model` reported an override while `mf review` went on sending
+// the committed value — one question with two answers, and the reader checked,
+// was told it took, and was wrong.
+//
+// Only the scalar fields participate. A list is a definition rather than a
+// setting, and `MF_BACKENDS_CODEX_ARGS` splitting one on commas would silently
+// mangle an argument that contains one. The route fields are absent for the
+// reason validateStatic refuses them in a committed file: where a backend is
+// reached is a provider's business, not a per-run override.
+func (c *Config) withResolvedFields(name string, b Backend) Backend {
+	prefix := "backends." + name + "."
+	for key, into := range map[string]*string{
+		"kind":     &b.Kind,
+		"provider": &b.Provider,
+		"command":  &b.Command,
+		"model":    &b.Model,
+		"effort":   &b.Effort,
+	} {
+		if value, _, ok := c.Get(prefix + key); ok && value != "" {
+			*into = value
 		}
 	}
-	if c.Machine != nil {
-		if b, ok := c.Machine.Backends[name]; ok {
-			return b, LayerMachine, true
-		}
-	}
-	return Backend{}, LayerDefault, false
+	return b
 }
 
 // Validate answers what only the finished cascade can answer, and is separate
@@ -924,12 +959,22 @@ func pathProblem(value string) string {
 // absoluteAnywhere reports whether a path is absolute on any platform. A drive
 // letter is absolute only on Windows and a leading slash only elsewhere, but
 // this file travels between them, so both are refused on both.
+//
+// A drive prefix is a *letter* followed by a colon, so the first position is
+// checked for one. Reading any second byte of ':' as a drive refused values
+// like `9:15-notes/specs`, which no platform resolves outside the repository:
+// the rule is here to catch `C:\standards`, not every colon.
 func absoluteAnywhere(value string) bool {
 	if strings.HasPrefix(filepath.ToSlash(value), "/") {
 		return true
 	}
 	if len(value) >= 2 && value[1] == ':' {
-		return true
+		// Lowercasing by hand rather than through strings: a drive letter is
+		// ASCII, and unicode folding would admit letters no filesystem names a
+		// drive with.
+		if c := value[0] | 0x20; c >= 'a' && c <= 'z' {
+			return true
+		}
 	}
 	return filepath.IsAbs(value)
 }

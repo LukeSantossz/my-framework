@@ -4,14 +4,37 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/LukeSantossz/my-framework/internal/version"
 )
 
+// isolateGitConfig points this process's git at an empty global configuration
+// and switches the system one off.
+//
+// Not tidiness: `git init` copies init.templateDir when the developer
+// configures one, so a machine with a template carrying hooks fails the
+// shadowing test for a reason that test does not test — and a machine with a
+// global core.hooksPath decides the wiring assertions here instead of the code
+// under test.
+//
+// A test staging its own global configuration calls withGlobalHooksPath after
+// repo, so that its scratch file is the one in effect.
+func isolateGitConfig(t *testing.T) {
+	t.Helper()
+	file := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(file, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", file)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+}
+
 func repo(t *testing.T, withHooksDir bool) string {
 	t.Helper()
+	isolateGitConfig(t)
 	root := t.TempDir()
 	run := func(args ...string) {
 		t.Helper()
@@ -192,8 +215,8 @@ func TestHooksStatusSeparatesThisRepositorysSettingFromAnInheritedOne(t *testing
 	// A global core.hooksPath applies to every repository on the machine. It is
 	// still a real setting, so it is reported — but reporting it as this
 	// repository's own is what made every clone claim to be activated.
-	withGlobalHooksPath(t, HooksDir)
 	root := repo(t, false)
+	withGlobalHooksPath(t, HooksDir)
 	state := HooksStatus(root)
 	if state.Path != HooksDir {
 		t.Errorf("path = %q, want the inherited value reported", state.Path)
@@ -207,8 +230,8 @@ func TestHooksStatusSeparatesThisRepositorysSettingFromAnInheritedOne(t *testing
 }
 
 func TestInitIsNotFooledByAGlobalHooksPath(t *testing.T) {
-	withGlobalHooksPath(t, HooksDir)
 	root := repo(t, true)
+	withGlobalHooksPath(t, HooksDir)
 	steps, err := Init(InitOptions{RepoRoot: root, FrameworkVersion: "1.2.3"})
 	if err != nil {
 		t.Fatalf("Init: %v", err)
@@ -234,6 +257,29 @@ func TestInitLeavesAHooksPathSomeoneElseSet(t *testing.T) {
 	}
 	if !strings.Contains(hooks.Message, ".husky") {
 		t.Errorf("message %q does not name what it left alone", hooks.Message)
+	}
+}
+
+func TestInitSaysWhenItTakesOverAHooksPathSetOutsideTheRepository(t *testing.T) {
+	// A global core.hooksPath is not this repository's decision, so wiring here
+	// is right — but git honours one hooks path, and the tool that set the
+	// global one loses its gate in this repository the moment mf writes a local
+	// value. That happened, and the step reported only the new path.
+	root := repo(t, true)
+	withGlobalHooksPath(t, ".husky")
+	steps, err := Init(InitOptions{RepoRoot: root, FrameworkVersion: "1.2.3"})
+	if err != nil {
+		t.Fatalf("Init: %v", err)
+	}
+	if !HooksStatus(root).Canonical {
+		t.Fatalf("init left this repository unwired: %+v", steps)
+	}
+	hooks := stepNamed(t, steps, "hooks")
+	if !hooks.Changed {
+		t.Error("init wired the repository and reported no change")
+	}
+	if !strings.Contains(hooks.Message, ".husky") {
+		t.Errorf("message %q does not name the path that no longer runs here", hooks.Message)
 	}
 }
 
@@ -379,6 +425,59 @@ func TestInitGivesARepositoryWithNoHooksTheOnesThisBuildCarries(t *testing.T) {
 	}
 	if !stepNamed(t, steps, "hooks").Changed || !HooksStatus(root).Canonical {
 		t.Error("init wrote the hooks and then did not wire them")
+	}
+}
+
+func TestInitLeavesTheShippedHooksExecutableOnEveryRun(t *testing.T) {
+	// The executable bit was set only on the run that wrote the files, so a
+	// hook that lost it — a checkout that does not carry modes, a copy through
+	// a zip — stayed unrunnable through every later activation. git then fails
+	// the push with an exec error rather than reporting a missing gate, which
+	// is the harder failure to read of the two.
+	if runtime.GOOS == "windows" {
+		t.Skip("the filesystem carries no executable bit here")
+	}
+	root := repo(t, false)
+	if _, err := Init(InitOptions{RepoRoot: root, FrameworkVersion: "1.2.3"}); err != nil {
+		t.Fatal(err)
+	}
+	hook := filepath.Join(root, HooksDir, "pre-push")
+	if err := os.Chmod(hook, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Init(InitOptions{RepoRoot: root, FrameworkVersion: "1.2.3"}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(hook)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm()&0o111 == 0 {
+		t.Errorf("pre-push mode is %v; git runs a hook by executing it", info.Mode().Perm())
+	}
+}
+
+func TestInitLeavesTheModeOfAFileItDoesNotShipAlone(t *testing.T) {
+	// The versioned directory is the repository's, not this framework's: an
+	// adopter keeps their own scripts and notes beside the shipped hooks, and a
+	// blanket chmod over the directory would decide the mode of every one.
+	if runtime.GOOS == "windows" {
+		t.Skip("the filesystem carries no executable bit here")
+	}
+	root := repo(t, true)
+	theirs := filepath.Join(root, HooksDir, "README.md")
+	if err := os.WriteFile(theirs, []byte("# how our hooks work\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Init(InitOptions{RepoRoot: root, FrameworkVersion: "1.2.3"}); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(theirs)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if info.Mode().Perm()&0o111 != 0 {
+		t.Errorf("a file this build does not ship was made executable: %v", info.Mode().Perm())
 	}
 }
 

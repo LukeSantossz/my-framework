@@ -4,6 +4,7 @@ package vcs
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"os/exec"
 	"sort"
@@ -218,6 +219,51 @@ func (r *Repo) PathsEverAdded(dirs ...string) ([]string, error) {
 	return paths, nil
 }
 
+// RenamedPaths maps each path git history records as renamed, under the given
+// directories, to the name that commit gave it. Paths come back as git names
+// them, slash-separated and relative to the repository root.
+//
+// It is the companion PathsEverAdded needs to be read correctly. git detects
+// renames by default, so the commit that renames a file reports it as R and the
+// new name never appears as an addition: a caller comparing added paths against
+// the working tree sees the old name missing, with nothing saying where it went,
+// and reports a file as deleted that is sitting there under another name.
+//
+// One step per entry, and the caller walks the chain. A file renamed twice has
+// two records here, and only the caller knows whether it wants the end of the
+// chain or each stage of it. A chain can also loop — a name given back to an
+// earlier file — so a caller that walks it needs to remember where it has been.
+func (r *Repo) RenamedPaths(dirs ...string) (map[string]string, error) {
+	if len(dirs) == 0 {
+		return nil, nil
+	}
+	args := append([]string{"log", "--diff-filter=R", "--name-status", "--format=", "--"}, dirs...)
+	out, err := r.git(args...)
+	if err != nil {
+		return nil, err
+	}
+	renames := map[string]string{}
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Split(strings.TrimSpace(line), "\t")
+		if len(fields) != 3 || !strings.HasPrefix(fields[0], "R") {
+			continue
+		}
+		from, to := strings.TrimSpace(fields[1]), strings.TrimSpace(fields[2])
+		if from == "" || to == "" {
+			continue
+		}
+		// git logs newest first, so the first record of a name is the most
+		// recent thing that happened to it. A name reused by a later file would
+		// otherwise be overwritten by the older rename and send a caller
+		// walking the chain into history that no longer applies.
+		if _, seen := renames[from]; seen {
+			continue
+		}
+		renames[from] = to
+	}
+	return renames, nil
+}
+
 // ObjectID resolves an object name — `HEAD:docs/specs/0001-a.md`, a tag, a
 // commit — to the id of the object it names.
 //
@@ -242,8 +288,7 @@ func (r *Repo) ObjectID(object string) (string, error) {
 // ConfigGet reads the value in effect, from whichever scope defines it.
 // Absence is not an error.
 func (r *Repo) ConfigGet(key string) (string, error) {
-	out, err := r.git("config", "--get", key)
-	return strings.TrimSpace(out), err
+	return r.configValue("config", "--get", key)
 }
 
 // ConfigGetLocal reads only what this repository's own configuration says.
@@ -254,7 +299,29 @@ func (r *Repo) ConfigGet(key string) (string, error) {
 // and travels with none of them, so reporting it as this repository's own
 // decision makes every clone look activated. Absence is not an error.
 func (r *Repo) ConfigGetLocal(key string) (string, error) {
-	out, err := r.git("config", "--local", "--get", key)
+	return r.configValue("config", "--local", "--get", key)
+}
+
+// configValue is what makes both readers' absence contract true.
+//
+// `git config --get` exits 1 for a key nobody set, which reaches here as a
+// command failure indistinguishable from a broken configuration file. Both
+// readers documented absence as a normal answer and returned that failure
+// anyway, so every caller had to know the documentation was wrong and treat a
+// non-nil error as "unset" — which is also how a genuine failure would have
+// been read as an unset key, silently.
+//
+// Exit 1 is the only status git uses for a key it could not read as set, so
+// every other status still surfaces. A malformed key shares that status; the
+// keys here are literals in this package's callers, so the cost is a typo
+// resolving as absent rather than as an error, and the alternative is matching
+// git's message text.
+func (r *Repo) configValue(args ...string) (string, error) {
+	out, err := r.git(args...)
+	var exit *exec.ExitError
+	if errors.As(err, &exit) && exit.ExitCode() == 1 {
+		return "", nil
+	}
 	return strings.TrimSpace(out), err
 }
 

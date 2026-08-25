@@ -38,6 +38,17 @@ and the shell test suites go, and the `mf` binary becomes the only way any gate 
 The dual implementation is what produced the drift, and a guard that compares the two is
 a permanent tax on every future backend change; removing one side removes the class.
 
+That set includes `scripts/test/docs-consistency.sh`, and this spec supersedes the
+decision in `0019` that held it back. `0019` kept the script out of its own deletion
+scope on one stated condition — that the submodule consumer running it directly had no
+migration path yet — and this spec is what supplies that path: `mf check docs` already
+ports the invariants the script enforced, and the configurable standards directory above
+is what lets a `.standards` consumer run the checks at all. The condition is met, so the
+exception ends with the reason for it rather than outliving it; keeping the script now
+would restore, in miniature, the dual implementation this decision exists to remove.
+`0019` is otherwise untouched: its five checks ship, its record stands as approved, and
+only the retention it scoped out is overtaken here.
+
 Give the machine layer backends. This is what `docs/adr/0006` already decided and the
 loader never implemented, and it is what lets a role chain be completed by a machine or
 a CI secret instead of by editing committed policy. It also makes R3 reachable in CI,

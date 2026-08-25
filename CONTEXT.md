@@ -49,8 +49,9 @@ skill, an external forge app, or a deterministic in-process check. A Backend dec
 own Provider and classifies its own tool's failures, which is what lets a chain tell
 "unavailable" from "reviewed with findings". Either configuration layer may define one,
 and a name the Project Layer defines shadows a Machine Layer definition of that name
-whole rather than field by field: a machine adds reviewers and never substitutes one the
-repository chose, and merging the two would produce a definition nobody wrote.
+whole rather than field by field: a machine adds Backends of its own, and adds their names
+to the Role chains the repository left open, but never substitutes one the repository
+chose — and merging the two would produce a definition nobody wrote.
 _Avoid_: adapter (the script implementing one), reviewer (the role it may fill), plugin.
 
 **Role**:

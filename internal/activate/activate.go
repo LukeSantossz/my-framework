@@ -386,6 +386,22 @@ func Init(o InitOptions) ([]Step, error) {
 		// the decision is handed back rather than made here.
 		steps = append(steps, Step{Name: "hooks", Message: "core.hooksPath is set to " + state.Path + " here and mf did not set it; " +
 			"left untouched — git honours one hooks path, so removing that one is your decision"})
+	case state.Path != "" && !state.Canonical:
+		// The value came from outside this repository, so it is not a decision
+		// this repository made and wiring here is right. But git honours one
+		// hooks path, and the local value about to be written switches the
+		// inherited one off in this repository — silently, unless it is said
+		// here. This is the one replacement the package's rule allows, and
+		// naming it is what keeps it from being a loss.
+		//
+		// An inherited value that already names the versioned directory falls
+		// through to the wiring below instead: nothing is switched off, and
+		// saying otherwise would report a loss that did not happen.
+		if err := InstallHooks(o.RepoRoot); err != nil {
+			return steps, err
+		}
+		steps = append(steps, Step{Name: "hooks", Changed: true, Message: "core.hooksPath -> " + HooksDir +
+			"; a setting outside this repository pointed at " + state.Path + ", which no longer applies here"})
 	default:
 		if err := InstallHooks(o.RepoRoot); err != nil {
 			return steps, err
@@ -453,6 +469,41 @@ func insideSubmodule(root, dir string) (string, bool) {
 	return "", false
 }
 
+// materialiseHooks writes the versioned hooks this build carries.
+//
+// They go in with the executable bit set, which an embedded filesystem does not
+// carry: git runs a hook by executing it, so a hook copied in without the bit
+// is one that never fires on any platform that has one — and it fails as an
+// unrunnable file rather than as a missing gate, which is harder to read.
+//
+// The mode is applied on every activation, not only on the run that wrote the
+// files. A hook can arrive without the bit long after it was first written — a
+// checkout from an archive that carries no modes, a copy across filesystems —
+// and setting it only when something was written left that hook unrunnable
+// through every later `mf init`, with nothing reporting it.
+//
+// Only the names this build ships are touched. The versioned directory belongs
+// to the repository, not to this framework: an adopter keeps their own scripts
+// and notes there, and a blanket chmod over the directory would decide the mode
+// of files nobody here wrote.
+func materialiseHooks(root string) (Step, error) {
+	step, err := materialise(root, framework.Hooks, framework.HooksPrefix, HooksDir, "hook files", "hook", "")
+	if err != nil {
+		return step, err
+	}
+	return step, fs.WalkDir(framework.Hooks, framework.HooksPrefix, func(p string, d fs.DirEntry, walkErr error) error {
+		if walkErr != nil || d.IsDir() {
+			return walkErr
+		}
+		rel := strings.TrimPrefix(p, framework.HooksPrefix+"/")
+		dest := filepath.Join(root, HooksDir, filepath.FromSlash(rel))
+		if _, statErr := os.Stat(dest); statErr != nil {
+			return nil
+		}
+		return os.Chmod(dest, 0o755)
+	})
+}
+
 // materialise copies one embedded tree into the repository, file by file,
 // skipping every destination that already exists.
 //
@@ -461,35 +512,7 @@ func insideSubmodule(root, dir string) (string, bool) {
 // restored the shipped text would delete the adopter's work. `mf upgrade` is
 // the command that reports how a local document differs from this build, and it
 // applies nothing for the same reason.
-// materialiseHooks writes the versioned hooks this build carries.
 //
-// They go in with the executable bit set, which an embedded filesystem does not
-// carry: git runs a hook by executing it, so a hook copied in without the bit
-// is one that never fires on any platform that has one — and it fails as an
-// unrunnable file rather than as a missing gate, which is harder to read.
-func materialiseHooks(root string) (Step, error) {
-	step, err := materialise(root, framework.Hooks, framework.HooksPrefix, HooksDir, "hook files", "hook", "")
-	if err != nil {
-		return step, err
-	}
-	if !step.Changed {
-		return step, nil
-	}
-	entries, readErr := os.ReadDir(filepath.Join(root, HooksDir))
-	if readErr != nil {
-		return step, readErr
-	}
-	for _, e := range entries {
-		if e.IsDir() {
-			continue
-		}
-		if chmodErr := os.Chmod(filepath.Join(root, HooksDir, e.Name()), 0o755); chmodErr != nil {
-			return step, chmodErr
-		}
-	}
-	return step, nil
-}
-
 // unchangedHint is appended when nothing was written, and only there: it names
 // what a reader can do about the copies that were left alone. It is a parameter
 // because only the standards have such a command — `mf upgrade` compares that

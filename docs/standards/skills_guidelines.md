@@ -65,8 +65,11 @@ the process.
   it is reachable from here.
 - Fallback: per `ai_guidelines.md` Review Composition — R1 plus CRURA's
   adjudication stage stand in for R2, and the PR notes the absence. The chain
-  advances past an unavailable backend first: `gemini` is next in the shipped
-  order, and a machine may add an `api` backend of its own.
+  advances past an unavailable backend first, but only onto a backend something
+  actually named: `roles.r2.backends` ships as `codex` alone, so `gemini` or an
+  `api` backend of a machine's own reviews only once a project or a machine has
+  put it in that chain. Until one is, an unavailable Codex CLI is a chain with
+  nothing after it, and the fallback above is the whole of the answer.
 
 ## The CRUX Explainer
 
