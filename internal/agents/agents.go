@@ -156,12 +156,29 @@ type Result struct {
 type Options struct {
 	RepoRoot string
 	Targets  []Target
+
+	// SourcePath is where the marked-up instructions live, as configured.
+	// Empty takes the layout this framework ships with. It is a parameter for
+	// the reason the standards directory became one: a repository that vendors
+	// these documents as a submodule keeps the source inside it, and generating
+	// from a path that only resolves here left `mf agents sync` as the one
+	// command such a repository could not run.
+	SourcePath string
+}
+
+// sourcePath resolves the configured source, or the shipped layout.
+func (o Options) sourcePath() string {
+	if o.SourcePath != "" {
+		return o.SourcePath
+	}
+	return SourcePath
 }
 
 func load(o Options) (Source, error) {
-	body, err := os.ReadFile(filepath.Join(o.RepoRoot, filepath.FromSlash(SourcePath)))
+	src := o.sourcePath()
+	body, err := os.ReadFile(filepath.Join(o.RepoRoot, filepath.FromSlash(src)))
 	if err != nil {
-		return Source{}, fmt.Errorf("cannot read %s: %w", SourcePath, err)
+		return Source{}, fmt.Errorf("cannot read %s: %w", src, err)
 	}
 	return Parse(string(body))
 }

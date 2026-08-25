@@ -276,3 +276,51 @@ func TestAddingAVendorNeedsNoCodeChange(t *testing.T) {
 		t.Errorf("the new vendor did not get its roles:\n%s", body)
 	}
 }
+
+func TestReadsTheSourceWhereTheRepositoryKeepsIt(t *testing.T) {
+	// The submodule consumer again. Its standards moved behind `paths.standards`
+	// and its records behind `paths.specs`, but the document those files are
+	// generated from stayed hardcoded, so `mf agents sync` was the one command
+	// that still could not find its input there.
+	root := t.TempDir()
+	vendored := filepath.Join(root, ".standards", "docs", "agents")
+	if err := os.MkdirAll(vendored, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(vendored, "instructions.md"),
+		[]byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	results, err := Sync(Options{
+		RepoRoot:   root,
+		SourcePath: ".standards/docs/agents/instructions.md",
+		Targets:    []Target{{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared"}}},
+	})
+	if err != nil {
+		t.Fatalf("Sync from a relocated source: %v", err)
+	}
+	if len(results) != 1 || !results[0].Changed {
+		t.Fatalf("nothing was written: %+v", results)
+	}
+	if _, err := os.Stat(filepath.Join(root, "CLAUDE.md")); err != nil {
+		t.Errorf("the vendor file was not generated: %v", err)
+	}
+}
+
+func TestTheSourcePathFallsBackToTheShippedLayout(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "docs", "agents")
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "instructions.md"), []byte(source), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Sync(Options{
+		RepoRoot: root,
+		Targets:  []Target{{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared"}}},
+	}); err != nil {
+		t.Fatalf("Sync with no configured source: %v", err)
+	}
+}

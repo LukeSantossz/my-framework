@@ -338,7 +338,7 @@ func generateAgentFiles(env Env) []activate.Step {
 
 	var steps []activate.Step
 	if len(pending) > 0 {
-		results, syncErr := agents.Sync(agents.Options{RepoRoot: env.RepoRoot, Targets: pending})
+		results, syncErr := agents.Sync(agents.Options{RepoRoot: env.RepoRoot, Targets: pending, SourcePath: agentsSource(cfg)})
 		if syncErr != nil {
 			return append(steps, activate.Step{Name: "agent files", Message: "not generated: " + syncErr.Error()})
 		}
@@ -346,7 +346,7 @@ func generateAgentFiles(env Env) []activate.Step {
 		for _, r := range results {
 			written = append(written, r.File)
 		}
-		steps = append(steps, activate.Step{Name: "agent files", Changed: true, Message: "generated " + strings.Join(written, ", ") + " from " + agents.SourcePath})
+		steps = append(steps, activate.Step{Name: "agent files", Changed: true, Message: "generated " + strings.Join(written, ", ") + " from " + agentsSource(cfg)})
 	}
 	if len(kept) > 0 {
 		steps = append(steps, activate.Step{Name: "agent files", Message: "left untouched: " + strings.Join(kept, ", ") +
