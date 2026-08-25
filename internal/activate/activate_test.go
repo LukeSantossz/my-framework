@@ -47,6 +47,12 @@ func repo(t *testing.T, withHooksDir bool) string {
 	run("init", "-b", "main")
 	run("config", "user.email", "t@example.invalid")
 	run("config", "user.name", "T")
+	// git forks `gc --auto` after a commit and goes on writing into
+	// .git/objects after the test body returns, so t.TempDir() fails its own
+	// cleanup with "directory not empty" — a flake unrelated to what is
+	// asserted here, which took down a release build.
+	run("config", "gc.auto", "0")
+	run("config", "maintenance.auto", "false")
 	if withHooksDir {
 		if err := os.MkdirAll(filepath.Join(root, HooksDir), 0o755); err != nil {
 			t.Fatal(err)

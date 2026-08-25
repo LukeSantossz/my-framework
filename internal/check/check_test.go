@@ -36,6 +36,12 @@ func fixtureRepoAt(t *testing.T, standardsRel, specsRel string) string {
 	git(t, root, "config", "user.email", "t@example.invalid")
 	git(t, root, "config", "user.name", "T")
 	git(t, root, "config", "commit.gpgsign", "false")
+	// git forks `gc --auto` after a commit and goes on writing into
+	// .git/objects after the test body returns, so t.TempDir() fails its own
+	// cleanup with "directory not empty" — a flake unrelated to what is
+	// asserted here, which took down a release build.
+	git(t, root, "config", "gc.auto", "0")
+	git(t, root, "config", "maintenance.auto", "false")
 	git(t, root, "add", ".")
 	git(t, root, "commit", "-m", "chore: seed")
 	return root
