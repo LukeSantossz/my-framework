@@ -9,29 +9,37 @@ on:
   push:
     tags: ["v*"]
 
+# Read by default. Only the job that uploads the release asks for more, so a
+# job added later has to state its own need rather than inherit write.
 permissions:
-  contents: write
+  contents: read
 
 jobs:
+  gate:
+    # The same gate main is held to, called rather than restated. This job used
+    # to be a shorter list of its own — no gofmt check, no shell suites, one
+    # platform — which meant a tag could publish exactly what a commit would
+    # have been rejected for.
+    uses: ./.github/workflows/gate.yml
+    permissions:
+      contents: read
+
   build:
+    needs: gate
     runs-on: ubuntu-latest
+    permissions:
+      # `gh release create` uploads the assets, and that is the only write in
+      # this workflow.
+      contents: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
-
-      # The suites gate the release. A tag that cannot pass them is a tag that
-      # should not become a download.
-      - name: Tests
-        run: |
-          go vet ./...
-          go test ./...
-          bash scripts/test/docs-consistency.sh
 
       - name: Build
         env:
@@ -50,6 +58,33 @@ jobs:
               -ldflags "-s -w -X github.com/LukeSantossz/my-framework/internal/version.Version=${TAG}" \
               -o "dist/${name}${ext}" ./cmd/mf
           done
+
+      # The linker silently ignores -X when the symbol path does not resolve:
+      # a renamed package, a moved module path or a typo above produces an exit
+      # code of 0 and binaries that all report 0.0.0-dev. Nothing else in this
+      # workflow ever runs one, so the stamping was unverified from the day it
+      # was written. The native build is executed here and asked what version
+      # it thinks it is, before anything is checksummed or uploaded.
+      - name: Version smoke test
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          binary="dist/mf_${TAG}_linux_amd64"
+          if ! out="$("./$binary" doctor)"; then
+            echo "the freshly built $binary could not run \`mf doctor\`:"
+            printf '%s\n' "$out"
+            exit 1
+          fi
+          # doctor names the build on its first line, which is the only place
+          # the binary reports its own version.
+          reported="${out%%$'\n'*}"
+          if [ "$reported" != "mf ${TAG}" ]; then
+            echo "$binary reports \"$reported\", expected \"mf ${TAG}\"."
+            echo "The -X symbol path in the build step no longer names a real"
+            echo "variable, so the version was never stamped in."
+            exit 1
+          fi
+          echo "$binary reports $reported"
 
       - name: Checksums
         working-directory: dist

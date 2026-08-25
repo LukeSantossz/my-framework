@@ -133,3 +133,22 @@ func TestEvalRejectsAnUnknownOption(t *testing.T) {
 		t.Errorf("stderr %q does not name the bad option", errOut.String())
 	}
 }
+
+func TestEvalRejectsAnOptionWhoseValueIsMissing(t *testing.T) {
+	// Silently ignoring it would measure the default role and print the figure
+	// under a heading the caller never asked for.
+	root, machine := evalRepo(t, "http://unused")
+	for _, args := range [][]string{
+		{"eval", "--role"},
+		{"eval", "--backend"},
+	} {
+		e, _, errOut := reviewEnv(t, root, args...)
+		e.MachinePath = machine
+		if code := Run(e); code != 2 {
+			t.Errorf("%v: exit %d, want 2", args, code)
+		}
+		if !strings.Contains(errOut.String(), "expects a value") {
+			t.Errorf("%v: stderr %q does not say the value is missing", args, errOut.String())
+		}
+	}
+}

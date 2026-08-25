@@ -9,7 +9,17 @@
 //   4. five-hour and weekly quota       (Codex: five-hour-limit, weekly-limit)
 //   5. directory and git branch         (Codex: current-dir, git-branch)
 //
-// Installed into CLAUDE_HOME by `scripts/setup.sh --statusline`; Claude Code
+// SUPERSEDED. `mf statusline apply` wires Claude Code to `mf statusline
+// render`, which is the Go port of this file and the only renderer this
+// framework installs; `scripts/setup.sh --statusline`, which used to copy this
+// into CLAUDE_HOME, was deleted with the rest of the shell path by
+// docs/specs/0027. Nothing in this repository installs or tests it any more.
+//
+// It is kept, unchanged and unreferenced, only because the one downstream
+// consumer takes this repository as a `.standards` submodule and has not
+// migrated to the binary. docs/specs/0025 scoped its removal out until that
+// happens, and this is the note saying that is now the only reason it is here.
+// A consumer still using it copies it into CLAUDE_HOME by hand; Claude Code
 // runs it once per render with the session JSON on stdin.
 //
 // A fact this cannot read degrades to a placeholder. The status line is not a

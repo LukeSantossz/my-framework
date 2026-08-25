@@ -267,6 +267,140 @@ func TestUsageRejectsAnUnknownAction(t *testing.T) {
 	}
 }
 
+// withGlobalHooksPath points this process's git at a scratch global
+// configuration carrying core.hooksPath.
+func withGlobalHooksPath(t *testing.T, value string) {
+	t.Helper()
+	file := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(file, []byte("[core]\n\thooksPath = "+value+"\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", file)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+}
+
+func TestDoctorReportsHooksAsUnwiredWhenOnlyAGlobalHooksPathIsSet(t *testing.T) {
+	// A global core.hooksPath = .githooks applies to every repository on the
+	// machine. In one that has no .githooks directory there is no hook to run,
+	// and doctor reported it as wired because it read the setting before it read
+	// the repository.
+	withGlobalHooksPath(t, ".githooks")
+	root := gitRepo(t, "version = 1\n")
+	e, out, _ := reviewEnv(t, root, "doctor")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	got := out.String()
+	if strings.Contains(got, "wired to .githooks") {
+		t.Errorf("doctor claims a gate that does not exist:\n%s", got)
+	}
+	if !strings.Contains(got, "no .githooks directory") {
+		t.Errorf("doctor does not say the directory is missing:\n%s", got)
+	}
+}
+
+func TestDoctorSaysAWiringCameFromOutsideTheRepository(t *testing.T) {
+	// The directory is here and the hooks do run, so this is not "unwired" — but
+	// nothing in the repository says so, and the next clone inherits none of it.
+	withGlobalHooksPath(t, ".githooks")
+	root := gitRepo(t, "version = 1\n")
+	if err := os.MkdirAll(filepath.Join(root, ".githooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e, out, _ := reviewEnv(t, root, "doctor")
+	Run(e)
+	if !strings.Contains(out.String(), "outside this repository") {
+		t.Errorf("doctor does not say the wiring is not this repository's own:\n%s", out.String())
+	}
+}
+
+func TestDoctorNamesTheLocalHooksThatCoreHooksPathSilences(t *testing.T) {
+	// Setting core.hooksPath replaces .git/hooks rather than adding to it, so a
+	// hook already installed there stops firing. Nothing mentioned that anywhere.
+	root := gitRepo(t, "version = 1\n")
+	if err := os.MkdirAll(filepath.Join(root, ".githooks"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".git", "hooks", "pre-commit"), []byte("#!/bin/sh\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	e, _, errOut := reviewEnv(t, root, "hooks", "install")
+	if code := Run(e); code != 0 {
+		t.Fatalf("hooks install exit %d: %s", code, errOut.String())
+	}
+	e2, out2, _ := reviewEnv(t, root, "doctor")
+	Run(e2)
+	if !strings.Contains(out2.String(), "pre-commit") {
+		t.Errorf("doctor does not name the hook that stopped firing:\n%s", out2.String())
+	}
+}
+
+func TestDoctorComparesTheAdoptedVersionAgainstTheBuildRunning(t *testing.T) {
+	// The two were printed side by side and never compared, which left the
+	// reader to notice they disagree — the only question the pair answers.
+	root := gitRepo(t, "version = 1\n")
+	lock := "version = 1\nframework_version = \"v9.9.9\"\n"
+	if err := os.WriteFile(filepath.Join(root, ".framework.lock"), []byte(lock), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e, out, _ := reviewEnv(t, root, "doctor")
+	Run(e)
+	got := out.String()
+	if !strings.Contains(got, "v9.9.9") {
+		t.Fatalf("doctor does not report the adopted version:\n%s", got)
+	}
+	if !strings.Contains(got, "not the build running") {
+		t.Errorf("doctor prints both versions without comparing them:\n%s", got)
+	}
+}
+
+func TestInitScaffoldsAnAdoptableRepository(t *testing.T) {
+	// The whole of E5: `mf init` reported success while leaving an adopter with
+	// no standards, no instruction source and no generated vendor files, so
+	// every gate afterwards read an empty tree.
+	root := gitRepo(t, "")
+	e, out, errOut := reviewEnv(t, root, "init")
+	if code := Run(e); code != 0 {
+		t.Fatalf("init exit %d: %s", code, errOut.String())
+	}
+	for _, rel := range []string{
+		".framework.toml", ".framework.lock",
+		"docs/standards/INDEX.md", "docs/agents/instructions.md", ".githooks/pre-push",
+		"CLAUDE.md", "AGENTS.md",
+	} {
+		if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(rel))); err != nil {
+			t.Errorf("init left %s missing:\n%s", rel, out.String())
+		}
+	}
+	// And what it wrote has to satisfy the gate that compares them.
+	e2, out2, _ := reviewEnv(t, root, "check", "agents")
+	if code := Run(e2); code != 0 {
+		t.Errorf("`mf check agents` fails on a freshly scaffolded repository:\n%s", out2.String())
+	}
+	if strings.Contains(out2.String(), "no [agents.*] declared") {
+		t.Errorf("the agents gate is permanently green on a fresh adoption:\n%s", out2.String())
+	}
+}
+
+func TestInitLeavesAVendorFileSomeoneWrote(t *testing.T) {
+	root := gitRepo(t, "")
+	mine := "# our own instructions\n"
+	if err := os.WriteFile(filepath.Join(root, "CLAUDE.md"), []byte(mine), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e, out, _ := reviewEnv(t, root, "init")
+	if code := Run(e); code != 0 {
+		t.Fatalf("init exit %d: %s", code, out.String())
+	}
+	got, err := os.ReadFile(filepath.Join(root, "CLAUDE.md"))
+	if err != nil || string(got) != mine {
+		t.Errorf("init generated over a file someone wrote: %q", got)
+	}
+	if !strings.Contains(out.String(), "mf agents sync") {
+		t.Errorf("init does not say how to generate the file it left alone:\n%s", out.String())
+	}
+}
+
 func TestDoctorReportsNoPinsAsSomethingToDo(t *testing.T) {
 	root := gitRepo(t, "version = 1\n")
 	e, out, _ := reviewEnv(t, root, "doctor")

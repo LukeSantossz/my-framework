@@ -103,6 +103,41 @@ func TestConfigValidateReportsEveryProblem(t *testing.T) {
 	}
 }
 
+func TestConfigValidateReportsAProblemOnlyTheCascadeCanSee(t *testing.T) {
+	// The command's usage says it reports every problem, and this is the class
+	// it could not see: the file is correct on its own terms, so the loader
+	// accepts it — deliberately, so a fresh clone still runs — and only the
+	// finished cascade can say the chain has no route to its reviewer.
+	project := "version = 1\n\n[roles.r2]\nbackends = [\"local\"]\n\n[backends.local]\nkind = \"api\"\nprovider = \"nowhere\"\n"
+	e, _, errOut := env(t, project, "config", "validate")
+	if code := Run(e); code == 0 {
+		t.Error("exit 0 for a chain whose only backend has no endpoint to reach")
+	}
+	got := errOut.String()
+	for _, want := range []string{"local", "nowhere", "endpoint"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stderr %q does not report %q", got, want)
+		}
+	}
+}
+
+func TestConfigListRendersADeliberatelyEmptyValueAsEmpty(t *testing.T) {
+	// An erased chain is a real answer, and the one a reader is most likely to
+	// be tracing. Printing nothing at all would read as a broken line.
+	project := "version = 1\n\n[roles.r2]\nbackends = []\n"
+	e, out, _ := env(t, project, "config", "get", "roles.r2.backends")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d", code)
+	}
+	got := out.String()
+	if !strings.Contains(got, "(empty)") {
+		t.Errorf("output %q does not render the empty value", got)
+	}
+	if !strings.Contains(got, "project") {
+		t.Errorf("output %q does not name the layer that emptied it", got)
+	}
+}
+
 func TestConfigMigrateReportsWhatItTookOverAndHowToRemoveTheOriginals(t *testing.T) {
 	e, out, _ := env(t, "", "config", "migrate")
 	e.GitConfig = func(key string) (string, bool) {
@@ -130,6 +165,77 @@ func TestConfigMigrateSaysSoWhenThereIsNothingToDo(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "no deprecated") {
 		t.Errorf("output %q does not say there was nothing to migrate", out.String())
+	}
+}
+
+// outsideARepository builds the environment a command sees when
+// `git rev-parse --show-toplevel` finds nothing: an empty repository root.
+func outsideARepository(t *testing.T, args ...string) (Env, *bytes.Buffer, *bytes.Buffer) {
+	t.Helper()
+	var out, errOut bytes.Buffer
+	return Env{
+		Args:             args,
+		Stdout:           &out,
+		Stderr:           &errOut,
+		MachinePath:      filepath.Join(t.TempDir(), "config.toml"),
+		Getenv:           func(string) string { return "" },
+		GitConfig:        func(string) (string, bool) { return "", false },
+		DiscoverRepoRoot: func() string { return "" },
+	}, &out, &errOut
+}
+
+func TestInitOutsideAGitRepositoryRefusesRatherThanScaffoldingIntoTheWorkingDirectory(t *testing.T) {
+	// An empty repository root joins to a relative path, which resolves against
+	// whatever directory the process happens to be in. `mf init` scaffolded a
+	// policy file and a lock there and reported success.
+	e, out, errOut := outsideARepository(t, "init")
+	if code := Run(e); code == 0 {
+		t.Fatalf("exit 0 outside a repository; stdout:\n%s", out.String())
+	}
+	if out.Len() != 0 {
+		t.Errorf("a refused command still reported work:\n%s", out.String())
+	}
+	got := errOut.String()
+	for _, want := range []string{"mf init", "git repository"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("stderr %q does not contain %q", got, want)
+		}
+	}
+}
+
+func TestEveryCommandThatReadsTheRepositoryRefusesOutsideOne(t *testing.T) {
+	// The rule is stated once, in requiresRepository, and this is what holds it
+	// to the whole command table: a command added later that reads the
+	// repository has to be listed or it silently resolves against the process
+	// working directory.
+	for _, args := range [][]string{
+		{"init"}, {"doctor"}, {"check"}, {"hooks", "status"}, {"upgrade"},
+		{"agents", "check"}, {"models", "list"}, {"config", "list"},
+		{"author", "declare", "--provider", "x"},
+	} {
+		e, _, errOut := outsideARepository(t, args...)
+		if code := Run(e); code == 0 {
+			t.Errorf("`mf %s` exited 0 outside a repository", strings.Join(args, " "))
+		}
+		if !strings.Contains(errOut.String(), "git repository") {
+			t.Errorf("`mf %s` stderr %q does not say what is missing", strings.Join(args, " "), errOut.String())
+		}
+	}
+}
+
+func TestTheCommandsWhoseSubjectIsThisMachineRunOutsideARepository(t *testing.T) {
+	// Refusing these would be the opposite mistake: setting up a machine before
+	// cloning anything is the case the machine layer exists for.
+	e, out, errOut := outsideARepository(t, "config", "set", "review.effort", "medium", "--machine")
+	if code := Run(e); code != 0 {
+		t.Errorf("machine write refused outside a repository: %s", errOut.String())
+	}
+	if !strings.Contains(out.String(), "machine") {
+		t.Errorf("output %q does not name the layer written", out.String())
+	}
+	e2, _, errOut2 := outsideARepository(t, "usage")
+	if code := Run(e2); code != 0 {
+		t.Errorf("`mf usage` refused outside a repository: %s", errOut2.String())
 	}
 }
 

@@ -11,12 +11,10 @@
 # It fails closed for the same reason pre-push does: a hook that cannot find its
 # runner has not passed. `git commit --no-verify` is the bypass.
 #
-# Known limit: `mf check commit` reads the commits already on this branch, not
-# the message being written into "$1" — the binary has no message-file mode yet.
-# So the message under the editor's cursor is checked one commit later, and this
-# hook's job today is to stop a branch from growing on top of a subject the
-# vocabulary rejects. Give `mf check commit` a `--message <file>` mode and this
-# hook gates the message it is handed.
+# git hands the message being written as "$1", and that is what is checked: the
+# subject under the author's cursor, in the commit they can still amend. Reading
+# the commits already on the branch instead would report the right violation
+# against the wrong commit, one commit too late to be the answer to it.
 set -u
 
 say() { printf 'mf commit-msg: %s\n' "$1" >&2; }
@@ -52,9 +50,9 @@ if [ -z "$runner" ]; then
   exit 1
 fi
 
-if ! "$runner" check commit; then
+if ! "$runner" check commit --message "$1"; then
   say ""
-  say "the commit vocabulary in github.md rejects a commit on this branch, so the commit is stopped."
-  say "Rewrite the offending message (\`git rebase -i\`), or commit with \`git commit --no-verify\`."
+  say "the commit vocabulary in github.md rejects this message, so the commit is stopped."
+  say "Rewrite the subject, or commit with \`git commit --no-verify\`."
   exit 1
 fi

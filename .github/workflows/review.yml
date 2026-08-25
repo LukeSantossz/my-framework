@@ -8,31 +8,90 @@ name: r3-review
 # It never fails on findings. Every review layer is advisory, and a blocking R3
 # would make the reviewer with the least context the strictest gate in the
 # pipeline. The job fails only when it is misconfigured.
+#
+# ---------------------------------------------------------------------------
+# What a maintainer has to set for R3 to review, and what happens if they do
+# not. The same list is in .github/workflows/README.md, which is where someone
+# looking for it will look; it is repeated here because this is the file that
+# reads the values.
+#
+#   Repository variable  MF_R3_ENDPOINT       base URL of an OpenAI-, Anthropic-
+#                                             or Google-shaped API, with no
+#                                             /chat/completions suffix. Its
+#                                             presence is what decides whether
+#                                             this workflow reviews at all.
+#   Repository variable  MF_R3_MODEL          the model id to ask for.
+#   Repository variable  MF_R3_PROVIDER_KIND  openai-compatible (the default),
+#                                             anthropic, or google.
+#   Repository secret    MF_R3_API_KEY        the credential. Never a variable:
+#                                             variables are readable by anyone
+#                                             who can read the settings page.
+#
+# With MF_R3_ENDPOINT unset, the r3-not-configured job below says so on the
+# pull request and nothing else runs. That is deliberate: until this session
+# neither the workflow nor the configuration could name a reviewer a runner
+# could reach, so every pull request spent a runner to report "R3 did not run".
+#
+# These four are read here and nowhere else, and they are all this workflow
+# needs. It used to pass DEEPSEEK_API_KEY, ANTHROPIC_API_KEY and OPENAI_API_KEY
+# through to a chain that was empty, under names no document in the repository
+# mentioned — so a maintainer could not have discovered what to set even if
+# setting it would have helped.
+# ---------------------------------------------------------------------------
 
 on:
   pull_request:
     branches: [main]
 
+# Two pushes to one pull request would otherwise review it twice at once, and
+# both runs would race on the same comment: each lists the thread before the
+# other has posted, neither finds the marker, and the pull request collects a
+# duplicate — the outcome Marker exists to prevent. Only the newer head is
+# worth a review, so the older run is cancelled rather than queued behind it.
+concurrency:
+  group: r3-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+# Read by default; only the job that posts the comment asks for more.
 permissions:
   contents: read
-  pull-requests: write
 
 jobs:
   review:
     runs-on: ubuntu-latest
-    # A fork's workflow has no access to secrets by design, so the review cannot
-    # run there. The step below says so out loud rather than passing quietly,
-    # but the job is skipped here to avoid spending a runner on it.
-    if: github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      # The R3 comment is posted through the API, not written to the tree.
+      pull-requests: write
+    # Two conditions, and the two jobs below are their exact complements, so
+    # every pull request gets exactly one of the three.
+    #
+    # A fork's workflow is given no secrets and a read-only token by design, so
+    # this job cannot run there. And a repository that has named no reachable
+    # reviewer has nothing for this job to do: the chain would fall through to
+    # coderabbit, which is an `external` backend this tool never executes, and
+    # the run would end where it began.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && vars.MF_R3_ENDPOINT != ''
+    env:
+      # The machine layer, materialised on the runner. docs/adr/0006 splits
+      # policy from reachability: .framework.toml names the reviewers this
+      # repository wants and never how any of them is reached, so CI supplies
+      # the second half here rather than by committing an endpoint. Pointing
+      # MF_CONFIG_HOME at the runner's own temp directory keeps it to this job.
+      MF_CONFIG_HOME: ${{ runner.temp }}/mf-config
     steps:
-      - uses: actions/checkout@v4
+      # Actions are pinned to commit SHAs: a tag is mutable by whoever owns the
+      # action, and this workflow is handed a reviewer credential.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
           persist-credentials: false
           # Both sides of the comparison must exist locally: the runner builds
           # the diff with git rather than downloading it.
           fetch-depth: 0
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
         with:
           go-version-file: go.mod
           cache: true
@@ -40,23 +99,138 @@ jobs:
       - name: Build mf
         run: go build -o mf ./cmd/mf
 
+      - name: Define the reviewer this runner can reach
+        env:
+          # Read through the environment rather than interpolated into a `run:`
+          # block, which is shell source: a repository variable is set by a
+          # human and may contain anything.
+          R3_ENDPOINT: ${{ vars.MF_R3_ENDPOINT }}
+          R3_MODEL: ${{ vars.MF_R3_MODEL }}
+          R3_PROVIDER_KIND: ${{ vars.MF_R3_PROVIDER_KIND }}
+        run: |
+          # The four-command recipe from the header of .framework.toml, run by
+          # a machine instead of by a person. `ci` is the name of both the
+          # provider and the backend, because on a runner there is only ever
+          # one of each and a vendor's name in this file would have to be
+          # edited to change vendors.
+          if [ -z "$R3_MODEL" ]; then
+            echo "MF_R3_ENDPOINT is set but MF_R3_MODEL is not; an api backend"
+            echo "with no model reports itself unavailable, which would read on"
+            echo "the pull request as a reviewer that was down rather than as a"
+            echo "repository setting that is half filled in."
+            exit 1
+          fi
+          ./mf config set providers.ci.endpoint "$R3_ENDPOINT" --machine
+          ./mf config set providers.ci.kind "${R3_PROVIDER_KIND:-openai-compatible}" --machine
+          # The NAME of the variable holding the key, never the key: the loader
+          # refuses a value that is not an environment variable name, and this
+          # file's own output ends up in build logs.
+          ./mf config set providers.ci.api_key_env MF_R3_API_KEY --machine
+          ./mf config set backends.ci.kind api --machine
+          ./mf config set backends.ci.provider ci --machine
+          ./mf config set backends.ci.model "$R3_MODEL" --machine
+
       - name: R3 review
         env:
-          # The token the comment is posted with. Every other credential is
-          # named by the machine configuration rather than hard-coded here, so
-          # adding a provider is a repository-secret change and not a workflow
-          # edit.
+          # The token the comment is posted with.
           GITHUB_TOKEN: ${{ github.token }}
           GITHUB_REPOSITORY: ${{ github.repository }}
-          # Supply the reviewer's key under whatever variable name the machine
-          # configuration points at. An unset one makes that backend report
-          # itself unavailable and the chain advances.
-          DEEPSEEK_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          # The reviewer's credential, under the name the provider definition
+          # above points at. One secret rather than one per vendor: which
+          # vendor it belongs to is a repository variable, so changing vendors
+          # is a settings change and not a workflow edit.
+          MF_R3_API_KEY: ${{ secrets.MF_R3_API_KEY }}
+          # The chain for this run only. .framework.toml declares R3 as
+          # coderabbit, and a project chain outranks a machine one — a machine
+          # may not review a repository with a chain that repository did not
+          # choose — so the runner's own reviewer is prepended through the
+          # environment layer, which is the one layer above the project file.
+          # coderabbit stays behind it: it is an `external` backend nothing
+          # here executes, and dropping it would drop it from the record too.
+          MF_ROLES_R3_BACKENDS: ci,coderabbit
+          # Read through the environment rather than interpolated into the
+          # script. A branch name may legally contain a backtick or a dollar
+          # sign, and an expression pasted into a `run:` block is shell source.
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
         run: |
           ./mf review \
             --role r3 \
-            --pr "${{ github.event.pull_request.number }}" \
-            --base "${{ github.event.pull_request.base.ref }}" \
+            --pr "$PR_NUMBER" \
+            --base "$BASE_REF" \
             --post
+
+  not-configured:
+    # The complement of the second half of the review job's condition: the pull
+    # request is in this repository, so R3 could have run, and no reviewer this
+    # runner can reach has been named.
+    #
+    # It is a job rather than a silent absence for the reason the fork notice
+    # gives: a check that simply does not appear reads as approval to whoever
+    # scans the list. It is also the whole of the run — no checkout, no Go
+    # toolchain, no diff — because there is nothing to review and a runner spent
+    # discovering that is what this workflow used to do on every pull request.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository
+      && vars.MF_R3_ENDPOINT == ''
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Say what R3 needs
+        run: |
+          {
+            echo "## R3 did not run: no reviewer is configured"
+            echo
+            echo "\`.framework.toml\` declares R3 as CodeRabbit, which runs as a GitHub"
+            echo "app rather than as anything this workflow starts. Nothing else in the"
+            echo "chain is reachable from a runner, so there is no review to perform and"
+            echo "this job did not spend one building the diff."
+            echo
+            echo "To have R3 review here, set these in **Settings → Secrets and variables"
+            echo "→ Actions**:"
+            echo
+            echo "| Kind | Name | Value |"
+            echo "| --- | --- | --- |"
+            echo "| Variable | \`MF_R3_ENDPOINT\` | base URL of the API, without \`/chat/completions\` |"
+            echo "| Variable | \`MF_R3_MODEL\` | the model id to ask for |"
+            echo "| Variable | \`MF_R3_PROVIDER_KIND\` | \`openai-compatible\` (default), \`anthropic\`, or \`google\` |"
+            echo "| Secret | \`MF_R3_API_KEY\` | the credential |"
+            echo
+            echo "\`MF_R3_ENDPOINT\` is the switch: with it set, the next pull request runs"
+            echo "R3 and posts its findings as a comment. See \`.github/workflows/README.md\`."
+            echo
+            echo "R1 and R2 are unaffected. Record in the pull request that R3 did not run,"
+            echo "as the checklist in \`docs/standards/github.md\` requires."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  fork-notice:
+    # The exact complement of the condition above. Leaving a fork's pull request
+    # with a skipped job and nothing else reads as a pass: the check that was
+    # supposed to run is simply absent, and absence is indistinguishable from
+    # approval to whoever is looking at the list. This states what happened.
+    #
+    # It needs no token — the run summary is written to a file — so the job asks
+    # for no permissions at all, which is also what makes it safe to run on code
+    # from a fork: it never checks that code out.
+    if: github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    permissions: {}
+    steps:
+      - name: Say that R3 did not run
+        env:
+          # Read through the environment rather than interpolated into the
+          # script: a value from the event payload is never shell source.
+          HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        run: |
+          {
+            echo "## R3 did not run on this pull request"
+            echo
+            echo "The head branch lives in \`$HEAD_REPO\`, not in this repository."
+            echo "A fork's workflow is given no repository secrets and a read-only"
+            echo "token, so R3 has no reviewer credential to call and no permission"
+            echo "to post its comment. This is by design and not a misconfiguration."
+            echo
+            echo "R1 and R2 still apply. A maintainer who wants an R3 record can push"
+            echo "the change to a branch in this repository, where the workflow has"
+            echo "what it needs."
+          } >> "$GITHUB_STEP_SUMMARY"

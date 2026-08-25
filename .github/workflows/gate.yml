@@ -1,0 +1,148 @@
+name: gate
+
+# The single definition of "does this tree pass". Both ci.yml, on every commit
+# and pull request, and release.yml, on every version tag, call this workflow
+# and nothing else, so a tag cannot publish what main would have been rejected
+# for. Two hand-maintained lists drift; one cannot.
+#
+# Actions are pinned to commit SHAs rather than to floating tags. A tag is
+# mutable by whoever owns the action, and this workflow decides what gets
+# published, so the code it runs has to be a fixed thing.
+
+on:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    # The release publishes linux/{amd64,arm64}, darwin/{amd64,arm64} and
+    # windows/amd64, and the tree carries real per-platform behaviour behind
+    # those targets: os.UserConfigDir resolves %AppData% against ~/.config,
+    # activate calls filepath.ToSlash, design and upgrade normalise CRLF, and
+    # the status line passes windowsHide. Gating on one runner left every one
+    # of those unproven, Windows most of all, which is the primary development
+    # machine here and had no automated signal at all.
+    name: go (${{ matrix.os }})
+    strategy:
+      # One platform failing is a fact about that platform. Cancelling the
+      # others would hide whether the failure is specific or general, which is
+      # the only question worth asking when a matrix goes red.
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        # Windows runners default to PowerShell, whose wrapper checks only the
+        # last command's exit code: a failing `go build` followed by a passing
+        # `go test` would report success. bash runs with -e and stops at the
+        # first failure, so a multi-command step means what it looks like.
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          # Shallow on purpose. No Go test reads this repository's history;
+          # the two that reach outside their temp directories read files
+          # (the design standard, the eval corpus). The guard that does need
+          # full history lives in the shell job below.
+
+      # The Go toolchain reads the version from go.mod, so the pin lives in one
+      # place rather than being restated here and drifting.
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Go build and tests
+        run: |
+          go build ./...
+          go vet ./...
+          go test ./...
+
+      - name: Go formatting
+        # `gofmt -l` prints the files it would rewrite and exits 0 either way,
+        # so the step has to read its output to be a gate at all. It runs on
+        # every platform because a CRLF working tree makes gofmt list every
+        # file, which is precisely the failure `* text=auto eol=lf` in
+        # .gitattributes exists to stop; this is where a regression shows up.
+        run: |
+          unformatted="$(gofmt -l .)"
+          if [ -n "$unformatted" ]; then
+            echo "gofmt would change:"; echo "$unformatted"; exit 1
+          fi
+
+  gates:
+    # The repository held to its own standards.
+    #
+    # This job is why the gate exists at all. `mf check` was invoked by no
+    # workflow and no hook, so the Spec Gate, the commit and branch
+    # vocabularies, the documentation invariants of docs/adr/0009, the durable
+    # record numbering, the generated instruction files and the design gate of
+    # docs/adr/0011 — every rule this repository calls binding — were enforced
+    # by nothing but goodwill. It also replaces the documentation gate that left
+    # with scripts/: `docs-consistency.sh` checked deprecated wording, orphan
+    # standards and unresolvable .md references, and `mf check docs` is a strict
+    # superset of all three (it additionally matches filenames case-exactly,
+    # which is how a DESIGN.md reference reached a release tag).
+    #
+    # Single-platform on purpose. These gates read the tree and the history,
+    # neither of which differs per OS; the per-platform behaviour that does
+    # exist is what the matrix above is for.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          persist-credentials: false
+          # Full history: the spec, commit and branch gates all read the range
+          # between the base branch and this one, and a shallow clone has
+          # neither end of it.
+          fetch-depth: 0
+
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5.6.0
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      - name: Build mf
+        # The gates run from the binary built out of the tree under test, never
+        # from a released one: a change that breaks a gate must be able to fail
+        # its own pull request.
+        run: go build -o mf ./cmd/mf
+
+      - name: Gates (pull request)
+        if: github.event_name == 'pull_request'
+        env:
+          # Read through the environment rather than interpolated into the
+          # script: a branch name may legally contain a backtick or a dollar
+          # sign, and an expression pasted into a `run:` block is shell source.
+          HEAD_REF: ${{ github.event.pull_request.head.ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          BASE_REF: ${{ github.event.pull_request.base.ref }}
+        run: |
+          # actions/checkout leaves a pull request on a detached HEAD at the
+          # merge commit GitHub built. Three of these gates ask git what branch
+          # this is and what it adds over its base, and in that state the
+          # answers are "HEAD" and a base branch that exists only as a
+          # remote-tracking ref. The branch gate then fails every pull request
+          # over a name nobody chose, and the other two error on an unresolvable
+          # base. Restoring the two refs the gates are about is what makes the
+          # job report on the change rather than on the checkout.
+          git switch --force-create "$HEAD_REF" "$HEAD_SHA"
+          git branch --force "$BASE_REF" "origin/$BASE_REF"
+          ./mf check
+
+      - name: Gates (no branch under review)
+        if: github.event_name != 'pull_request'
+        run: |
+          # A push to main and a version tag are both checkouts with no branch
+          # under review: main is its own base, and a tag is not a branch at
+          # all. The spec, commit and branch gates are properties of a change
+          # proposed against a base — they ran on the pull request, and here
+          # they would either skip themselves or police the detached HEAD.
+          # What is still worth asking is whether the tree is in the state its
+          # standards describe, which is the other four gates, and a tag is the
+          # last moment to ask it before the answer is published.
+          ./mf check docs records agents design

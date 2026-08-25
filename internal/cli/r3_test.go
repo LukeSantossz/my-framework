@@ -5,12 +5,16 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/LukeSantossz/my-framework/internal/forge"
 	"github.com/LukeSantossz/my-framework/internal/report"
 	"github.com/LukeSantossz/my-framework/internal/role"
+	"github.com/LukeSantossz/my-framework/internal/vcs"
 )
 
 // fakeForge answers the pull request and records what was posted.
@@ -217,5 +221,59 @@ func TestCommentMarksATruncatedOrIncompleteReviewAsPartial(t *testing.T) {
 	}})
 	if !strings.Contains(body, "truncated") || !strings.Contains(body, "incomplete") {
 		t.Errorf("a partial review must read as partial:\n%s", body)
+	}
+}
+
+// --- linked specs -----------------------------------------------------------
+
+// specBranch commits a spec at rel on a new branch, and returns the branch name.
+func specBranch(t *testing.T, root, rel string) string {
+	t.Helper()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	run("checkout", "-b", "feat/x")
+	if err := os.MkdirAll(filepath.Dir(filepath.Join(root, filepath.FromSlash(rel))), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	write(t, filepath.Join(root, filepath.FromSlash(rel)), "# SPEC: feat: a thing\n\n## Scope\nthe scope R3 judges creep against.\n")
+	write(t, filepath.Join(root, "a.txt"), "hello\n")
+	run("add", ".")
+	run("commit", "-m", "feat: a")
+	return "feat/x"
+}
+
+func TestTheLinkedSpecIsReadWhereTheRepositoryKeepsIts(t *testing.T) {
+	// Scope creep is one of the five categories, and it cannot be judged without
+	// the scope. A reader pinned to `docs/specs` sends R3 into a repository that
+	// files its specs elsewhere with no scope at all — and reports nothing about
+	// having lost it.
+	root := gitRepo(t, "version = 1\n\n[paths]\nspecs = \"docs/decisions\"\n")
+	head := specBranch(t, root, "docs/decisions/0001-a-thing.md")
+
+	if got := repoSpecsDir(root); got != "docs/decisions" {
+		t.Fatalf("repoSpecsDir = %q, want the configured directory", got)
+	}
+	specs := linkedSpecs(vcs.Open(root), "main", head, repoSpecsDir(root))
+	if len(specs) != 1 {
+		t.Fatalf("read %d specs, want the one this branch adds: %+v", len(specs), specs)
+	}
+	if !strings.Contains(specs[0].body, "the scope R3 judges creep against") {
+		t.Errorf("the spec was located but not read: %q", specs[0].body)
+	}
+}
+
+func TestTheLinkedSpecIsReadFromTheDefaultDirectoryWhenNoneIsConfigured(t *testing.T) {
+	root := gitRepo(t, "version = 1\n")
+	head := specBranch(t, root, "docs/specs/0001-a-thing.md")
+
+	specs := linkedSpecs(vcs.Open(root), "main", head, repoSpecsDir(root))
+	if len(specs) != 1 {
+		t.Fatalf("read %d specs, want the one this branch adds: %+v", len(specs), specs)
 	}
 }

@@ -26,15 +26,17 @@ func runEval(env Env, args []string) int {
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case "--role":
-			if i+1 < len(args) {
-				i++
-				roleName = args[i]
+			value, ok := optionValue(env, "mf eval", args, &i)
+			if !ok {
+				return 2
 			}
+			roleName = value
 		case "--backend":
-			if i+1 < len(args) {
-				i++
-				only = args[i]
+			value, ok := optionValue(env, "mf eval", args, &i)
+			if !ok {
+				return 2
 			}
+			only = value
 		default:
 			fmt.Fprintf(env.Stderr, "mf eval: unknown option %q\n", args[i])
 			return 2
@@ -127,7 +129,7 @@ func evalBackend(env Env, cfg *config.Config, name, roleName string, cases []eva
 		req := backend.Request{
 			Role: roleName, Base: "main", Head: "eval/" + c.Dir,
 			Diff:         c.Diff,
-			Instructions: readInstructions(env.RepoRoot),
+			Instructions: readInstructions(env.RepoRoot, agentsFile(cfg)),
 			Model:        model,
 			Effort:       stringValue(cfg, "review.effort", config.DefaultEffort),
 		}

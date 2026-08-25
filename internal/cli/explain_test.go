@@ -141,3 +141,23 @@ func TestExplainRejectsAnUnknownDifficulty(t *testing.T) {
 		t.Errorf("stderr %q does not name the rejected value", errOut.String())
 	}
 }
+
+func TestExplainRejectsAnOptionWhoseValueIsMissing(t *testing.T) {
+	// `mf explain --dir "$OUT"` with an unset $OUT would write the explainer
+	// somewhere the caller never named, and a mistyped command line is the
+	// caller's error rather than a degraded explainer.
+	root := gitRepo(t, explainProject)
+	for _, args := range [][]string{
+		{"explain", "--base"},
+		{"explain", "--difficulty"},
+		{"explain", "--dir"},
+	} {
+		e, _, errOut := explainEnv(t, root, t.TempDir(), args...)
+		if code := Run(e); code != 2 {
+			t.Errorf("%v: exit %d, want 2", args, code)
+		}
+		if !strings.Contains(errOut.String(), "expects a value") {
+			t.Errorf("%v: stderr %q does not say the value is missing", args, errOut.String())
+		}
+	}
+}

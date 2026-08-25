@@ -35,20 +35,23 @@ func runExplain(env Env, args []string) int {
 		case "--dry-run":
 			dryRun = true
 		case "--base":
-			if i+1 < len(args) {
-				i++
-				base = args[i]
+			value, ok := optionValue(env, "mf explain", args, &i)
+			if !ok {
+				return 2
 			}
+			base = value
 		case "--difficulty":
-			if i+1 < len(args) {
-				i++
-				difficultyFlag = args[i]
+			value, ok := optionValue(env, "mf explain", args, &i)
+			if !ok {
+				return 2
 			}
+			difficultyFlag = value
 		case "--dir":
-			if i+1 < len(args) {
-				i++
-				dir = args[i]
+			value, ok := optionValue(env, "mf explain", args, &i)
+			if !ok {
+				return 2
 			}
+			dir = value
 		default:
 			fmt.Fprintf(env.Stderr, "mf explain: unknown option %q\n", args[i])
 			return 2
