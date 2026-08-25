@@ -74,14 +74,20 @@ jobs:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository
       && vars.MF_R3_ENDPOINT != ''
-    env:
+    steps:
       # The machine layer, materialised on the runner. docs/adr/0006 splits
       # policy from reachability: .framework.toml names the reviewers this
       # repository wants and never how any of them is reached, so CI supplies
       # the second half here rather than by committing an endpoint. Pointing
       # MF_CONFIG_HOME at the runner's own temp directory keeps it to this job.
-      MF_CONFIG_HOME: ${{ runner.temp }}/mf-config
-    steps:
+      #
+      # It is exported from a step rather than declared in the job's env block
+      # because the runner context does not exist there — GitHub rejects the
+      # whole file for it, with a run that has no jobs and names no reason.
+      # RUNNER_TEMP is the same directory and is always set inside a run.
+      - name: Point the machine layer at this job's temp directory
+        run: echo "MF_CONFIG_HOME=$RUNNER_TEMP/mf-config" >> "$GITHUB_ENV"
+
       # Actions are pinned to commit SHAs: a tag is mutable by whoever owns the
       # action, and this workflow is handed a reviewer credential.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0

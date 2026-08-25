@@ -220,7 +220,15 @@ func TestStatuslineWithNoActionRenders(t *testing.T) {
 	// redraw of the agent's prompt. Reaching for the arguments after an action
 	// that was never typed panicked, which for the caller is a crash in the one
 	// command that is supposed to degrade rather than fail.
-	e, out, errOut := statuslineEnv(t, "", map[string]string{"CLAUDE_HOME": t.TempDir()}, "statusline")
+	// The refresh is suppressed for the reason every other render test
+	// suppresses it: render spawns the quota fetch as a detached copy of
+	// os.Executable(), which under `go test` is the test binary itself. The
+	// orphan outlives the run and Windows then refuses to unlink the binary,
+	// failing the whole package after every test in it has passed.
+	e, out, errOut := statuslineEnv(t, "", map[string]string{
+		"CLAUDE_HOME":                t.TempDir(),
+		"MYFW_STATUSLINE_NO_REFRESH": "1",
+	}, "statusline")
 	if code := Run(e); code != 0 {
 		t.Fatalf("exit %d: %s%s", code, out.String(), errOut.String())
 	}
