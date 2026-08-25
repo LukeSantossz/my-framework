@@ -104,7 +104,7 @@ Concrete deliverables that define the issue as complete.
 
 Canonical section order, do not reorder: What It Does, What It Is, Tech Stack, Architecture, Engineering Decisions, Results, Getting Started, API Reference, Project Structure, Project Status, Known Issues & Limitations, Contributing, License.
 
-Remove all HTML comments and `{...}` placeholders before publishing. Sections marked OPTIONAL are included only if they add real signal; remove if empty.
+Remove all HTML comments and `{...}` placeholders before publishing. Sections marked OPTIONAL are included only if they add real signal; remove if empty. A section marked CONDITIONAL is mandatory whenever its condition holds and removed when it does not — the judgment is about the condition, not about whether the section is worth writing.
 
 ### Badges
 
@@ -134,7 +134,9 @@ Include a Mermaid diagram only if the flow is non-trivial. Remove for simple scr
 
 ### Engineering Decisions
 
-A curated index of the project's most significant decisions for an outside reader. Each row links the ADR in `docs/adr/` that holds the full rationale (decision made, alternative considered, why this approach) rather than restating it. Minimum 3 rows once the project has that many recorded ADRs. Proves trade-off reasoning. See `docs/adr/0001-decision-records-flow.md`.
+A curated index of the project's most significant decisions for an outside reader. Each row links the ADR in the project's ADR directory (`paths.adr`, `docs/adr/` by default) that holds the full rationale (decision made, alternative considered, why this approach) rather than restating it. Minimum 3 rows once the project has that many recorded ADRs. Proves trade-off reasoning.
+
+This section indexes; it never restates. A decision is promoted to an ADR at the Spec Gate, per `spec_method.md`, and the rationale lives there in one place. A README that reproduces the reasoning creates a second copy that drifts, and a reader then has no way to tell which one the project actually holds.
 
 ### Results (OPTIONAL)
 
@@ -144,9 +146,11 @@ Include only with defensible numbers (benchmarks, model metrics, measured speedu
 
 Prerequisites, Installation, Running, Tests, each with concrete commands.
 
-### API Reference (OPTIONAL)
+### API Reference (CONDITIONAL)
 
-For projects exposing an interface (REST, CLI). Endpoint or flag table plus one minimal runnable example. Becomes Usage for libraries.
+Optional only in the sense that a project exposing no interface has nothing to put here and removes the section. A project that does expose one — REST, CLI, or a library's public surface — **must** carry it: an interface whose complete surface exists only in the program's own `--help` is undocumented, because nobody reads a help screen they do not already know to ask for.
+
+Every command or endpoint the project exposes appears, not the ones its author finds interesting: a table of commands or endpoints with what each does, plus one minimal runnable example. Becomes Usage for libraries. Where the surface is large enough that the table would swamp the README, the table stays and the detail moves to a linked reference — but the enumeration itself is not delegated, because a partial list reads as a complete one.
 
 ### Project Structure
 

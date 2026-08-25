@@ -46,6 +46,25 @@ You write the change under the Developer's direction.
   mf author declare --provider <name> --model <id>
   ```
 
+- R1 runs inside this session, so nothing can start it as a subprocess. When you
+  have performed the internal review of the change, record the attestation for
+  the exact commit you reviewed — without it the chain reports R1 as not run:
+
+  ```sh
+  git config --local mf.attestation.r1 "$(git rev-parse HEAD)"
+  ```
+
+  Re-record it after any further commit. The attestation names a commit, not a
+  branch, precisely so it cannot cover work it never saw.
+
+- Run the gates before handing the change over. They are what the commit-msg and
+  pre-push hooks run, and both fail closed, so a gate that would stop the push is
+  cheaper to find now:
+
+  ```sh
+  mf check
+  ```
+
 ### Agent skills
 
 - **Issue tracker**: issues live in this repository's GitHub Issues, managed via

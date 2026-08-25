@@ -31,10 +31,12 @@ _Avoid_: session detection, fingerprint (the corroborating signal, not the recor
 
 **Reviewer**:
 The model that performs the R2 Cross-Provider Review, drawn from a different Provider
-than the Author. Which one it is varies per run: the R2 Gate walks a chain of reviewer
-backends and takes the first available, so the Reviewer is whichever backend actually ran
-and is named as such in the PR. Reports findings; never rewrites the code.
-_Avoid_: checker, validator, critic.
+than the Author. Which one it is varies per run: the R2 Gate walks a chain of Backends
+and takes the first available, so the Reviewer is the model reached through whichever
+Backend actually ran. Both are named in the PR, and they are not the same fact — the
+Backend is the route, the Reviewer is what answered. Reports findings; never rewrites
+the code.
+_Avoid_: checker, validator, critic; naming the Backend as the Reviewer.
 
 **Provider**:
 The vendor behind a model (e.g. Anthropic, OpenAI). R2 is satisfied only when the
@@ -43,15 +45,51 @@ _Avoid_: vendor, platform, model.
 
 **Backend**:
 A named way of performing a Role — an agentic CLI, an HTTP endpoint, an in-session
-skill, or a deterministic in-process check. A Backend declares its own Provider and
-classifies its own tool's failures, which is what lets a chain tell "unavailable" from
-"reviewed with findings".
+skill, an external forge app, or a deterministic in-process check. A Backend declares its
+own Provider and classifies its own tool's failures, which is what lets a chain tell
+"unavailable" from "reviewed with findings". Either configuration layer may define one,
+and a name the Project Layer defines shadows a Machine Layer definition of that name
+whole rather than field by field: a machine adds reviewers and never substitutes one the
+repository chose, and merging the two would produce a definition nobody wrote.
 _Avoid_: adapter (the script implementing one), reviewer (the role it may fill), plugin.
 
 **Role**:
-A job the framework needs performed — Author, R1, R2, R3 — bound to an ordered chain of
-Backends. The Role is the unit of configuration; the Backend is the unit of execution.
+A job the framework needs performed — Author, R1, R2, R3, and the CRUX explainer — bound
+to an ordered chain of Backends. The Role is the unit of configuration; the Backend is
+the unit of execution. The Author is the one Role with no chain: it is fixed by the
+Author Declaration rather than executed.
 _Avoid_: layer (R1–R3 as review stages), phase, agent.
+
+### Configuration
+
+**Project Layer**:
+The committed configuration a repository carries, holding policy: which Roles exist,
+which Backends fill their chains, where the documents live, what counts as trivial. It
+travels with the repository, so it may never carry an endpoint, a credential, or the name
+of the variable holding one. A Backend's command it may carry, but only as a bare program
+name: a command in a cloned file is a command every contributor runs, so the committed
+form may select a tool they already have and never describe how to invoke one. Outranks
+the Machine Layer, because policy is not a machine's to change.
+_Avoid_: config file (ambiguous), repo settings, defaults.
+
+**Machine Layer**:
+The per-user configuration holding machine state: how a Provider is reached, which
+Backend uses it, what this machine costs and has spent. It is where a Role chain the
+Project Layer names gets completed, and where a runner's own reviewer is defined without
+committing an endpoint. It may add a Backend and never substitute one the Project Layer
+already defined, and it may supply a chain only for a Role the Project Layer leaves
+undeclared: a machine may not review a repository with a chain that repository did not
+choose.
+_Avoid_: local config (ambiguous with git's `--local` scope), user settings, overrides.
+
+**Paths**:
+The configured locations of the document trees every gate reads — the Standards, the
+durable spec archive, the durable decision archive, and the instruction file an agentic
+Backend finds on disk. They exist so that a repository vendoring the Standards as a
+submodule can be gated at all, and they have no Machine Layer: where a repository keeps
+its documents is the same fact on every clone, so a machine able to redirect a gate could
+make one commit pass locally and fail in CI.
+_Avoid_: paths (lowercase, as filesystem paths generally), directories, layout.
 
 ### Review
 
@@ -67,11 +105,25 @@ the change it sees, not whom it shares a Provider with. Stands in for the Author
 Self-Review. Superpowers is one Backend of this chain, never the layer itself.
 _Avoid_: self-review, internal QA, same-provider review, the Superpowers pass.
 
+**Attestation**:
+The record that an in-session Backend reviewed one exact change, written by the session
+that performed it. It exists because such a Backend is already running when the Role is
+asked for and cannot be started as a subprocess, so its participation can only be
+asserted, never executed. It names the commit rather than the branch: an attestation for
+an earlier tip has not seen what is being pushed now. Absent, the Backend is unavailable
+and the chain advances.
+_Avoid_: approval, sign-off, Author Declaration (a different record by a different actor).
+
 **R2 / Cross-Provider Review**:
 The automated review by the Reviewer, whose Provider differs from the Author's
-(operationally the pre-push backend chain). Only valid across Providers, and only as
-strongly as the Cross-Provider State reports.
-_Avoid_: external review, second opinion.
+(operationally the pre-push backend chain). Valid only across Providers — but the
+requirement is checked by comparing two declared Provider names, and both are
+configuration labels nothing verifies against the endpoint actually reached. A chain may
+select a local endpoint whose Provider is a name rather than a vendor. So the layer is
+only as strong as the Cross-Provider State reports, and no stronger than the labels it
+compares.
+_Avoid_: external review, second opinion; reading the Provider comparison as proof of
+independence.
 
 **Cross-Provider State**:
 How strongly R2's Provider requirement is established for a change: `verified` when an
@@ -83,10 +135,22 @@ from an asserted one.
 _Avoid_: verified/unverified as a binary, cross-provider flag.
 
 **R2 Gate**:
-The automated push-time hook that runs the Reviewer against the base branch — the
-operational form of R2; a.k.a. the pre-push gate. Advisory by default (findings are
-surfaced, the push is not blocked unless blocking mode is on).
+The automated push-time hook that runs the deterministic gates and then the Reviewer
+against the base branch — the operational form of R2; a.k.a. the pre-push gate. The
+review half is advisory by default (findings are surfaced, the push is not blocked
+unless Blocking is on); the deterministic half is not. It fails closed: a gate that
+cannot find its runner has not passed, it has not run, and the two are the same thing
+only to a hook that lies.
 _Avoid_: gate (unqualified), the hook (alone), pre-commit gate.
+
+**Blocking**:
+The per-Role switch deciding whether a finding the Reviewer classed as blocking stops
+the R2 Gate. Off for every Role until a layer says otherwise, because every review layer
+is advisory by default. A Role left undeclared in committed policy is one a machine or a
+single run can raise the bar for; a Role declared advisory there forbids that.
+Unavailability is never blocking — a reviewer that never ran is not a finding, and an
+expired quota must not be able to lock a repository.
+_Avoid_: strict mode, enforcing, failing the build.
 
 **R3 / Automated PR Review**:
 An automated reviewer that runs on the Pull Request (e.g. CodeRabbit). Additional
@@ -233,8 +297,11 @@ order — model with reasoning effort, context used, tokens spent, quota, locati
 across Claude Code and Codex. It binds the facts and their order, never the colors,
 glyphs, or widths, because the two tools render through mechanisms that are not
 interchangeable: Codex reads a declarative segment list, Claude Code runs a command —
-`mf statusline render`. Applying it is machine state and therefore a command of its own,
-`mf statusline apply`, rather than part of activation.
+`mf statusline render`. Applying it edits a configuration file the Developer keeps for
+themselves, and Codex's section for it has no per-project form, so applying it governs
+every project on the machine. That is why it is a command of its own rather than a step
+of activation: it is the one write this framework performs that a person has to consent
+to separately, and it is reversible for the same reason.
 _Avoid_: status bar, statusline (as the Standard rather than the rendered line), theme.
 
 **Design Standard**:
@@ -286,9 +353,11 @@ Token Economy's context-file compression has no capability behind it today.
 _Avoid_: compressor, minifier.
 
 **Superpowers**:
-External orchestrator that runs the Brainstorm, Plan, and TDD phases and the two-stage
-subagent review that is R1.
-_Avoid_: the orchestrator (alone).
+External orchestrator that runs the Brainstorm, Plan, and TDD phases, and supplies a
+two-stage subagent review offered as one Backend of R1's chain — never R1 itself, per
+`docs/adr/0010`. It runs inside a session, so what it contributes to a run is an
+Attestation rather than an execution.
+_Avoid_: the orchestrator (alone); Superpowers as a synonym for R1.
 
 ### Cross-cutting
 

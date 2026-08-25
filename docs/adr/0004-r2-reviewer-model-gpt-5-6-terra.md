@@ -45,6 +45,15 @@ Accepted.
   the prior default: the archived specs `0001`, `0004`, and `0005` cite `gpt-5.5` as the
   default of their moment, and this ADR is the record of the current one. A reader who
   finds `gpt-5.5` in the archive is reading history, not the live default.
+- _Amended by `docs/specs/0027-close-the-audit-pendings.md`_: the decision stands —
+  `gpt-5.6-terra` is still the default — but every mechanism the first and third bullets
+  above name is gone. `scripts/r2-review.sh`, `scripts/setup.sh` and the parity guard that pinned
+  their literals equal were deleted with the shell path, and `CODEX_REVIEW_MODEL` and
+  `git config codexreview.model` resolve nowhere. The default now lives in exactly one
+  place, as `model` on `[backends.codex]` in `.framework.toml`, where it is per-backend
+  so a fallback never inherits it; the per-run override is `MF_BACKENDS_CODEX_MODEL` and
+  the per-repository one is that key. Two literals held equal by a guard became one
+  literal, which is the shape this ADR's incident argued for.
 
 ## Numbering history
 
@@ -59,3 +68,22 @@ ADR now at `0003` is already referenced by the README and by the test suite, and
 would break those references to buy nothing. Durable numbers are not reused: once a number
 identifies a record, it identifies that record permanently, and a retired record is marked
 Retired in place rather than deleted.
+
+## Durable archive
+
+The two records PR #10 removed are listed below so the deletion stays accounted for
+rather than merely explained. The prose above is the reason; this block is the form
+`mf check records` reads, and each entry has to name a record still in the tree that
+carries the decision — which is what stops the list from becoming a way to wave any
+later deletion through by appending a line to it.
+
+These facts are true of this repository and of no other. A repository that vendors
+these standards inherits the rule and none of the exceptions.
+
+<!-- mf:records archive -->
+
+```toml
+[deleted]
+"docs/adr/0003-r2-reviewer-model-gpt-5-6-terra.md" = "docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md"
+"docs/specs/0009-switch-r2-reviewer-to-gpt-5-6-terra.md" = "docs/adr/0004-r2-reviewer-model-gpt-5-6-terra.md"
+```

@@ -28,6 +28,16 @@ a change too small for a full spec but not skippable uses the Spec-lite tier
 below instead. When in doubt, write the spec; it is cheaper than the rework
 it prevents.
 
+`docs/specs/` is the default location, not a constant: a repository that keeps
+its documents elsewhere sets `paths.specs` (and `paths.adr` for the decision
+records), and every gate reads them from there. The layout is what is fixed, not
+the prefix.
+
+The title line must be the first line of the file. It is what identifies the
+document as a spec, and `mf check records` fails a file in the archive that does
+not open with it. There is no Status field while a spec stands; one is added
+only when it is retired, per Durable Numbers Are Never Reused below.
+
 ```markdown
 # SPEC: <title in Conventional Commits format>
 
@@ -60,32 +70,76 @@ and what would invalidate this spec.
 
 ## Durable Numbers Are Never Reused
 
-A number, once assigned to a spec under `docs/specs/` or to an ADR under
-`docs/adr/`, is never reused. The number is part of every reference to that
-record — in a README row, in another spec, in a commit message, in a review
+A number, once assigned to a spec under the specs directory or to an ADR under
+the ADR directory, is never reused. The number is part of every reference to
+that record — in a README row, in another spec, in a commit message, in a review
 thread — so handing it to a different record silently rewrites what all of those
-references mean. A record that is superseded or withdrawn is marked Retired in
-place: it keeps its number and its file, and its text says what superseded it.
-It is not deleted. Deleting a durable record and reusing its number makes every
+references mean. A record that is superseded or withdrawn is marked in place: it
+keeps its number and its file, and gains a line saying what became of it. It is
+not deleted. Deleting a durable record and reusing its number makes every
 existing reference to that number ambiguous, because the same citation resolves
 to a different decision depending on when it was written, and nothing in the
 text tells the reader which one was meant.
 
-In this repository the rule is enforced rather than trusted, by two checks in
-the docs-consistency self-test. The first reads git history: every spec and ADR
-ever committed must still be present, unless it is listed in the guard as
-deliberately retired with a stated reason, which makes retiring a record a
-conscious act that leaves a trace. The second requires the numbers to run from
-`0001` with no gap and no duplicate. The history check is the load-bearing one:
-contiguity alone cannot see the deletion of the highest-numbered record, which
-leaves the rest contiguous and is the shape the incident behind this rule
-actually had.
+### How a retired record is marked
 
-An adopting repository copies this standard but runs only `docs-consistency.sh`
-and drops the self-test suite (see the README), so it inherits the rule without
-those checks and carries it on discipline until it wires an equivalent. The
-rule is the never-overwritten rule of `docs/adr/0002-durable-spec-archive.md`
-made explicit for the case of deleting a record and reusing its number.
+An ADR carries a `## Status` section from the day it is written, so retiring one
+is editing a section that already exists: its `Accepted.` becomes the retirement
+line below. A spec carries no such section, and deliberately does not gain one:
+a spec that is in force says so by existing, and a field that every spec must
+carry saying `Active` is a field that rots into a lie the first time someone
+forgets it. So for a spec the marking is **added at retirement and absent before
+it**:
+
+- **Heading**: `## Status`.
+- **Location**: immediately below the `# SPEC:` title, before `## Problem`. The
+  title line stays first — it is what identifies the file as a spec, and
+  `mf check records` reads it there — and the status is the next thing a reader
+  meets, because a retired record read as a live one is the failure this marking
+  exists to prevent.
+- **Content**: one line, in one of two forms.
+
+  ```markdown
+  ## Status
+
+  Retired — superseded by spec NNNN (<title>). <One sentence on what changed.>
+  ```
+
+  ```markdown
+  ## Status
+
+  Withdrawn — <one sentence on why it was never implemented>.
+  ```
+
+Nothing else in the file is edited. Its Problem, Design Decision, Alternatives
+Considered and Acceptance Criteria stay exactly as they were approved: the
+archive's value is that it holds what was decided at the time, and rewriting a
+retired spec to agree with its successor destroys the only evidence of the
+change of mind. The successor is what carries the new intent.
+
+A record that supersedes another says so too, in its own Design Decision, so the
+link is readable from both ends. One-way marking leaves a reader who arrives at
+the successor unable to tell that anything was replaced.
+
+### The rule is checked, not trusted
+
+`mf check records` enforces it, in three ways, because no one of them sees what
+the others do:
+
+- **Contiguity.** The numbers in each archive must run from `0001` with no gap
+  and no duplicate.
+- **History.** Every spec and ADR ever committed must still be present. This is
+  the load-bearing one: contiguity alone cannot see the deletion of the
+  highest-numbered record, which leaves the rest contiguous and is the shape the
+  incident behind this rule actually had. A repository may account for records
+  removed before the rule existed, in a recorded list that makes each removal a
+  conscious act leaving a trace; a repository that records nothing gets the
+  strict reading, where every deletion fails.
+- **Headers.** Each file in the specs archive must open with `# SPEC:`. A
+  directory of files is not an archive unless each file says what it is.
+
+An adopting repository inherits the rule and the gate together, because both
+travel in the binary rather than in a script the adopter has to copy.
 
 ## Spec-lite
 
@@ -128,14 +182,19 @@ The Developer approves the spec at the Gate before implementation starts.
 
 At the Gate the Developer also promotes any Design Decision that is hard to reverse,
 surprising without context, and the result of a real trade-off into an Architecture
-Decision Record under `docs/adr/`. The SPEC's Alternatives Considered is durable —
-it is archived under `docs/specs/` alongside the rest of the approved spec — but the
+Decision Record in the ADR directory. The SPEC's Alternatives Considered is durable —
+it is archived in the specs directory alongside the rest of the approved spec — but the
 ADR stays the curated home for decision rationale: an ADR records one decision for an
 outside reader, while the spec archive preserves each change's gate-approved intent,
 scope, and acceptance criteria as a whole. The README Engineering Decisions later
 links the ADR rather than restating it. Later promotion is allowed when a decision's
-significance only emerges during implementation. See
-`docs/adr/0001-decision-records-flow.md` and `docs/adr/0002-durable-spec-archive.md`.
+significance only emerges during implementation.
+
+Three tests decide the promotion, and all three must hold: the decision is hard to
+reverse, it is surprising to a reader without the context, and a real alternative was
+rejected for a stated reason. A decision failing any of them stays in the spec, where
+it is still archived and still readable; promoting everything would make the ADR
+directory a second changelog and leave the curated index worth nothing.
 
 ## Where It Sits in the Pipeline
 

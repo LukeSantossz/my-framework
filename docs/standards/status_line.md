@@ -69,24 +69,46 @@ session payload on standard input and prints the five facts. The renderer is the
 same binary that carries every other part of the framework, so applying the
 contract installs nothing and adds no runtime.
 
-`scripts/statusline/claude-statusline.js` is the Node renderer this replaced. It
-is still versioned here, and still produces the same line, because an adopter
-consuming this repository as a submodule may still be pointing at it. It is
-retained for that migration and is not the renderer this standard describes.
+A Node renderer under `scripts/statusline/` preceded this one. It is still
+versioned in the framework's own repository — not written into an adopting one —
+because a repository that consumed the framework as a submodule may still be
+pointing `settings.json` at that path, and deleting it would break the line
+rather than migrate it. It is retained for that migration and is not the
+renderer this standard describes; `mf statusline apply` repoints the setting.
 
 ## Applying It
 
 ```sh
 mf statusline apply
+mf statusline revert
 ```
 
-This is the only command that writes outside the repository. It is a command of
-its own for exactly that reason: `mf init` changes this repository's local state
-and nothing else, and a Developer running the documented one-command activation
-in a fresh clone has not consented to having the configuration that governs
-every other project on the machine rewritten.
+Several commands write outside the repository — `mf config set --machine` and
+`mf config migrate` write the per-user configuration file, `mf review` and
+`mf usage reset` write the usage total beside it, `mf statusline refresh`
+updates the cached quota — so what makes `apply` a command of its own is not
+that it leaves the repository. It is **what** it rewrites and **whose** it is.
+Every one of those others writes a file this framework owns, created for this
+framework's purpose. `apply` edits the coding agent's own configuration: a file
+the Developer set up, that governs every project on the machine, and that no
+part of this framework created.
 
-What it does, in both configuration files:
+That is why it is not a step of `mf init`. `mf init` changes this repository's
+local state and nothing else, and a Developer running the documented
+one-command activation in a fresh clone has consented to adopting a framework in
+one repository — not to having the settings that follow them into every other
+one rewritten. Consent to the second has to be asked for separately, which is
+what a separate command is.
+
+`mf statusline revert` is the other half of that consent: it restores the newest
+backup `apply` took, per configuration file, so a Developer who tries the
+contract and does not want it is not left reassembling their own settings by
+hand. Apply pushes a backup and revert pops it, so a machine can be walked back
+through as many applies as it took. With no backup left it reports that and
+changes nothing, which is the right answer for a file `apply` created rather
+than replaced.
+
+What `apply` does, in both configuration files:
 
 - Writes the contract, creating the file and its directory when absent.
 - Backs up first, to a timestamped copy beside the original, whenever it is
@@ -97,10 +119,13 @@ What it does, in both configuration files:
   activation does not bury the original under generated copies.
 - Leaves every unrelated key, section, and subsection intact.
 
-Nothing is copied into the agent's configuration directory. A hand-written
+No renderer is copied into the agent's configuration directory. A hand-written
 status line script already there is left on disk; only the setting that points
 at one is changed, and it is pointed at this binary by absolute path so it does
-not depend on the PATH of whatever process the agent spawns it from.
+not depend on the PATH of whatever process the agent spawns it from. The one
+file this framework does put there is the quota cache `mf statusline refresh`
+writes — its own file, under its own name, holding the last reading so a render
+never waits on the network.
 
 ## Declared Degradation
 
@@ -125,15 +150,19 @@ error message, which is worse than losing one.
 This is machine state, not repository state. Codex's `[tui]` section has no
 per-project form, so a repo-local status line would bind one tool and not the
 other — two standards wearing one name. Applying the contract therefore governs
-every project on the machine, which is what makes the separate command
-load-bearing.
+every project on the machine, and rewrites a file the Developer owns. That is
+what a separate command, and a `revert` beside it, are for.
 
 The framework does not install Codex or Claude Code. Absence is reported and the
-activation continues, as it already does for `codex` and `gh` in `r2_gate.md`.
-Nothing else is required: the renderer is the framework's own binary, so a
-machine that can run `mf` can render the line.
+activation continues, as it already does for a missing reviewer backend in
+`r2_gate.md`. Nothing else is required: the renderer is the framework's own
+binary, so a machine that can run `mf` can render the line.
 
-The Codex segment names are read from the installed build rather than from a
-published schema. An upgrade that renames one would leave the written
-configuration silently ignored by Codex; the recorded vocabulary and this risk
-are in `docs/specs/0012-standardize-agent-status-line.md`.
+The Codex segment names in the block above are read from the installed build
+rather than from a published schema, because Codex publishes none. That is a
+standing risk this standard carries rather than solves: an upgrade that renames
+a segment leaves the written configuration silently ignored, with no error and
+no visible difference except the missing fact. The mitigation is to read the
+line after upgrading Codex, and to treat a fact that stopped appearing as a
+renamed segment rather than as a broken tool. Claude Code has no equivalent
+exposure — its side is a command this framework owns.

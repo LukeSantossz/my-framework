@@ -37,6 +37,12 @@ Accepted.
   `docs/specs/0014-rebuild-the-framework-as-a-harness.md`. Their suites stay green until
   each subject is ported, and `scripts/r2-review.sh` becomes a shim that delegates to the
   binary when it is present and runs the previous path when it is not.
+  _Amended by `docs/specs/0027-close-the-audit-pendings.md`_: the shim is gone, and with
+  it `scripts/reviewers/`, `scripts/setup.sh` and the four shell suites. Keeping both
+  paths is what let the documentation describe one implementation while the binary ran
+  another, and a guard comparing them would have had to encode every backend field a
+  third time. The binary is the only way any gate runs; an adopter without a Go toolchain
+  installs a release binary rather than falling back to shell.
 - The repository gains a Go toolchain, a `go.mod` and a per-platform release pipeline it
   did not have. No Go exists in its history, so the idiom and the pipeline are both new
   at once; the slicing is what keeps that from landing in one step.

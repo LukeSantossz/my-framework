@@ -54,3 +54,15 @@ Accepted.
 - R1 can run with a cheap model from any provider, on every commit.
 - The Review Composition hierarchy keeps its shape: three layers meeting at the Pull
   Request, composing rather than replacing one another.
+- _Amended by `docs/specs/0027-close-the-audit-pendings.md`_: R1's half of the separation
+  stated above is decided and not implemented. R2 runs from `.githooks/pre-push` and R3
+  from `.github/workflows/review.yml`, but there is no pre-commit hook anywhere: the
+  versioned directory carries `pre-push` and `commit-msg` and nothing else, and
+  `mf hooks install` only points `core.hooksPath` at that directory, so git has no R1
+  hook to discover. `docs/specs/0019` deferred "a commit-msg or pre-commit hook" to
+  `0020`, and `0020` scoped its wiring to pre-push and commit-msg; the pre-commit trigger
+  fell out there and was never picked up. Until it is, R1 runs when a person runs
+  `mf review --role r1`, and "over the staged diff" is wrong in both halves — nothing
+  invokes it at commit time, and the runner diffs the branch against its base rather than
+  the index. The sentence above is the record of what was decided, not a description of
+  what the harness does.

@@ -23,8 +23,9 @@ versioned project file, because the requirement had not yet appeared.
 
 ## Status
 
-Accepted. Supersedes the configuration decision recorded in
-`docs/specs/0013-detach-r2-from-codex.md`.
+Accepted, and amended below — see "Amendment: how a named object resolves across the two
+layers". Supersedes the configuration decision recorded in
+`docs/specs/0013-detach-r2-from-codex.md`, which is marked Retired in place.
 
 ## Considered Options
 
@@ -60,3 +61,33 @@ Accepted. Supersedes the configuration decision recorded in
   keys, then the built-in default. Credentials and endpoints have no project layer at
   all, so precedence does not apply to them — a project that names one is refused, not
   overridden.
+
+## Amendment: how a named object resolves across the two layers
+
+_Recorded by `docs/specs/0027-close-the-audit-pendings.md`._ The machine layer holds
+backends, which is what this decision said from the start and the loader did not
+implement. Until it did, naming a reviewer at all meant committing it, so a machine with
+a locally reachable model and a CI runner with a secret had no way to supply one — which
+is why R3 spent a runner on every pull request to report that it did not run.
+
+Wiring it forced a question the decision above left open, because `roles.*` and
+`backends.*` are named objects rather than scalars and "the higher layer wins" does not
+say what a layer wins. Three rules answer it, and they are part of the decision rather
+than of its implementation:
+
+- **A project definition of a backend name shadows a machine definition of that name
+  whole, not field by field.** Policy outranks machine state everywhere else here, and a
+  machine that could redefine one field of a name a committed chain already uses could
+  substitute the reviewer that repository chose — point a `provider = "openai"` label at
+  another vendor's endpoint, say, which nothing downstream can detect. Merging would also
+  produce a backend that is half of each: a definition nobody wrote and nobody can
+  predict. A machine backend therefore completes a chain by *adding* a name, never by
+  replacing one.
+- **A machine may supply a role's chain only for a role the project leaves undeclared.**
+  The same rule applied to `[roles.*]`: a machine may not review a repository with a
+  chain that repository did not choose. The environment layer is what remains for one
+  run and one person — `MF_ROLES_R2_BACKENDS=... mf review`.
+- **The refusal of a `command` in a project backend does not extend to a machine one.**
+  That rule's subject is code arriving with a repository and running on whoever clones
+  it. A machine file is its owner's own, and refusing them a reviewer they wrote
+  themselves protects nobody from anything.
