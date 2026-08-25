@@ -244,3 +244,76 @@ func TestAMachineChainAppliesWhenTheProjectDeclaresNone(t *testing.T) {
 	assertValue(t, mustLoad(t, fixture(t, "version = 1\n", machine)),
 		"roles.r3.backends", "coderabbit", LayerMachine)
 }
+
+// --- the write guard and the load guard answer the same question --------------
+
+func TestEveryKeyTheLoaderRefusesInALayerIsRefusedBeforeItIsWrittenThere(t *testing.T) {
+	// The failure this covers: a write that succeeds into the wrong file leaves
+	// a repository nobody can load until someone hand-edits it, which turns what
+	// should have been one clean error into a broken clone for everybody.
+	cases := []struct {
+		key, value string
+		target     Target
+	}{
+		{"backends.foo.api_key_env", "GITHUB_TOKEN", TargetProject},
+		{"backends.foo.endpoint", "http://localhost:11434/v1", TargetProject},
+		{"providers.foo.endpoint", "http://localhost:11434/v1", TargetProject},
+		{"explain.dir", "/tmp/explain", TargetProject},
+		{"fingerprints.CLAUDECODE", "anthropic", TargetProject},
+		{"paths.standards", "docs/standards", TargetMachine},
+		{"checks.exempt_paths", "README.md", TargetMachine},
+		{"agents.claude.file", "CLAUDE.md", TargetMachine},
+	}
+	for _, c := range cases {
+		opts := fixture(t, "version = 1\n", "version = 1\n")
+		err := Set(opts, c.key, c.value, c.target)
+		if err == nil {
+			t.Errorf("Set(%s) into the %s layer succeeded; the loader refuses it there", c.key, c.target)
+			continue
+		}
+		if !strings.Contains(err.Error(), c.key) {
+			t.Errorf("Set(%s) error %q does not name the key", c.key, err)
+		}
+		// And the refusal must have written nothing.
+		if _, loadErr := Load(opts); loadErr != nil {
+			t.Errorf("Set(%s) left a configuration that no longer loads: %v", c.key, loadErr)
+		}
+	}
+}
+
+func TestConfigSetWritesABackendIntoTheMachineLayer(t *testing.T) {
+	// The four-command recipe in the header of .framework.toml, which used to
+	// exit zero four times and change nothing.
+	opts := fixture(t, "version = 1\n", "version = 1\n")
+	for _, kv := range [][2]string{
+		{"providers.deepseek.endpoint", "https://api.deepseek.com/v1"},
+		{"providers.deepseek.api_key_env", "DEEPSEEK_API_KEY"},
+		{"providers.deepseek.kind", "openai-compatible"},
+		{"backends.deepseek.kind", "api"},
+		{"backends.deepseek.provider", "deepseek"},
+		{"backends.deepseek.model", "deepseek-v4"},
+		{"roles.r2.backends", "deepseek"},
+	} {
+		if err := Set(opts, kv[0], kv[1], TargetMachine); err != nil {
+			t.Fatalf("Set(%s): %v", kv[0], err)
+		}
+	}
+	cfg := mustLoad(t, opts)
+	assertValue(t, cfg, "roles.r2.backends", "deepseek", LayerMachine)
+	spec, layer, ok := cfg.Backend("deepseek")
+	if !ok || layer != LayerMachine || spec.Kind != "api" || spec.Provider != "deepseek" {
+		t.Fatalf("Backend(deepseek) = %+v, %s, %v; want the machine's api backend", spec, layer, ok)
+	}
+	if problems := cfg.Validate(); len(problems) > 0 {
+		t.Errorf("the recipe produced a configuration validate rejects: %v", problems)
+	}
+}
+
+func TestConfigSetRefusesAPathThatLeavesTheRepository(t *testing.T) {
+	// Caught at write time for the same reason as the layer guards: the loader
+	// would refuse the file afterwards, and a refused file is everyone's problem
+	// rather than this command's.
+	opts := fixture(t, "version = 1\n", "version = 1\n")
+	err := Set(opts, "paths.standards", "../shared/standards", TargetProject)
+	assertRefused(t, err, "repository")
+}

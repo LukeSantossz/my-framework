@@ -1,6 +1,7 @@
 package design
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -53,7 +54,7 @@ func parsed(t *testing.T) Palette {
 
 func TestParsesEveryDeclaredTokenOutOfTheStandard(t *testing.T) {
 	// The vocabulary lives in the document that owns it, per
-	// docs/adr/0009-deterministic-checks-derive-from-standards.md. A second copy
+	// docs/adr/0009-checks-derive-vocabularies-from-standards.md. A second copy
 	// in Go would drift from the standard and agree with itself while doing it.
 	p := parsed(t)
 	if len(p.Colors) != 3 {
@@ -215,7 +216,7 @@ func TestTheShippedStandardLoadsAndGovernsTheExplainer(t *testing.T) {
 	// The standard is content, and content rots. This guards that what ships
 	// parses, is neutral, does not reuse the source, and actually matches the
 	// one surface it binds.
-	p, err := Load(filepath.Join("..", ".."))
+	p, err := Load(filepath.Join("..", ".."), "")
 	if err != nil {
 		t.Fatalf("the shipped standard does not load: %v", err)
 	}
@@ -247,5 +248,45 @@ func TestParsesAStandardCheckedOutWithWindowsLineEndings(t *testing.T) {
 	}
 	if len(p.Colors) != 3 || p.Colors["canvas"].Light != "#faf8f4" {
 		t.Errorf("the CRLF parse lost content: %+v", p.Colors)
+	}
+}
+
+// --- where the standard lives -----------------------------------------------
+
+func TestTheStandardIsReadWhereTheRepositoryKeepsIt(t *testing.T) {
+	// A repository that vendors this framework as a `.standards` submodule
+	// keeps design.md under it. Reading only `docs/standards` fails that
+	// repository on a document it has.
+	root := t.TempDir()
+	vendored := ".standards/docs/standards"
+	dir := filepath.Join(root, filepath.FromSlash(vendored))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, StandardFileName), []byte(standard), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	p, err := Load(root, vendored)
+	if err != nil {
+		t.Fatalf("the vendored standard did not load: %v", err)
+	}
+	if len(p.Colors) != 3 {
+		t.Errorf("got %d colours, want the 3 the document declares", len(p.Colors))
+	}
+
+	// A violation has to point at the document that has to change, which is the
+	// one that was read rather than the one at the default location.
+	v := p.CheckSurface("x.css", ".a { color: #2f5d9e; }")
+	if len(v) != 1 {
+		t.Fatalf("got %d violations, want 1: %+v", len(v), v)
+	}
+	if !strings.Contains(v[0].Reason, vendored+"/"+StandardFileName) {
+		t.Errorf("the violation names %q rather than the document it was read from", v[0].Reason)
+	}
+
+	// And the directory is what did it.
+	if _, err := Load(root, ""); err == nil {
+		t.Error("the default location loaded a standard that is not there")
 	}
 }

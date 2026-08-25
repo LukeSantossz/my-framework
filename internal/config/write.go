@@ -32,12 +32,47 @@ func (t Target) String() string {
 // holding it, and configuration output ends up in bug reports and screenshots.
 var envVarName = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
 
-// machineOnlyPrefixes are the key spaces that exist only on a machine.
-var machineOnlyPrefixes = []string{"providers."}
+// The two key spaces, as the loader sees them.
+//
+// This list has to say exactly what config.go's decoders and validateStatic
+// say, and for a sharper reason than tidiness: a write that lands in the wrong
+// file is not refused by the loader afterwards, it makes the whole file
+// unreadable. `mf config set backends.x.api_key_env ... --project` used to
+// succeed, and from then on nobody could load the repository — including the
+// person who ran it — until someone hand-edited the file. A write-time refusal
+// costs one command; the alternative costs everybody who clones.
+var (
+	// Machine-only: reachability, credential references and local preferences.
+	// A committed file naming any of them is refused by the loader.
+	machineOnlyPrefixes = []string{"providers.", "explain.", "fingerprints.", "prices."}
+
+	// The same rule where it is a leaf rather than a section: a backend may be
+	// declared in either layer, but the two fields that carry a route may not
+	// be committed.
+	machineOnlySuffixes = []string{".endpoint", ".api_key_env"}
+
+	// Project-only: the repository's own layout, the gates' inputs and the
+	// vendor instruction files. The machine file has no place to decode them,
+	// so a write there produces an unknown key and a machine that can run no
+	// command at all.
+	projectOnlyPrefixes = []string{"paths.", "checks.", "agents."}
+)
+
+func hasAnyPrefix(key string, prefixes []string) bool {
+	for _, p := range prefixes {
+		if strings.HasPrefix(key, p) {
+			return true
+		}
+	}
+	return false
+}
 
 func isMachineOnly(key string) bool {
-	for _, p := range machineOnlyPrefixes {
-		if strings.HasPrefix(key, p) {
+	if hasAnyPrefix(key, machineOnlyPrefixes) {
+		return true
+	}
+	for _, s := range machineOnlySuffixes {
+		if strings.HasSuffix(key, s) {
 			return true
 		}
 	}
@@ -55,7 +90,15 @@ func Set(opts Options, key, value string, target Target) error {
 		return fmt.Errorf("refusing to write %s: %q is not an environment variable name; give the NAME of the variable holding the key (for example DEEPSEEK_API_KEY), never the key itself", key, value)
 	}
 	if isMachineOnly(key) && target == TargetProject {
-		return fmt.Errorf("refusing to write %s into the project file: endpoints and credential references are machine state and may not be committed", key)
+		return fmt.Errorf("refusing to write %s into the project file: endpoints, credential references and local preferences are machine state and may not be committed", key)
+	}
+	if hasAnyPrefix(key, projectOnlyPrefixes) && target == TargetMachine {
+		return fmt.Errorf("refusing to write %s into the machine file: where this repository keeps its documents and which paths its gates read are policy, identical on every clone, so they belong in %s", key, ProjectFileName)
+	}
+	if strings.HasPrefix(key, "paths.") {
+		if msg := pathProblem(value); msg != "" {
+			return fmt.Errorf("refusing to write %s: %s", key, msg)
+		}
 	}
 
 	path := opts.MachinePath

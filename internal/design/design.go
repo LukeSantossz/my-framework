@@ -1,8 +1,9 @@
-// Package design reads the visual identity out of docs/standards/design.md and
-// checks the surfaces this framework renders against it.
+// Package design reads the visual identity out of the design.md a repository
+// keeps with its standards, and checks the surfaces this framework renders
+// against it.
 //
 // The vocabulary is parsed from the standard rather than restated in Go, for the
-// reason recorded in docs/adr/0009-deterministic-checks-derive-from-standards.md:
+// reason recorded in docs/adr/0009-checks-derive-vocabularies-from-standards.md:
 // a second copy drifts from the document that owns it and agrees with itself
 // while doing so. A standard this package cannot parse is a hard error, never an
 // empty palette — an empty palette makes every surface pass, which is a gate
@@ -23,8 +24,21 @@ import (
 	"github.com/BurntSushi/toml"
 )
 
-// StandardFile is where the identity lives.
-const StandardFile = "docs/standards/design.md"
+// StandardFileName is the document inside a standards directory that carries
+// the identity.
+const StandardFileName = "design.md"
+
+// DefaultStandardsDir is where a repository following this framework keeps its
+// standards. It is a default rather than the only answer because a repository
+// that vendors this framework as a `.standards` submodule keeps the same
+// documents under it, and a gate that can only read `docs/standards` is a gate
+// that adopter cannot run.
+const DefaultStandardsDir = "docs/standards"
+
+// StandardFile is where the identity lives in a repository laid out the default
+// way. It names the document in a violation raised against a palette that was
+// parsed rather than loaded, so a message always says which file it is about.
+const StandardFile = DefaultStandardsDir + "/" + StandardFileName
 
 // Marker precedes the fenced block carrying the tokens. It is an HTML comment
 // for the same reason the instruction source uses one: it is invisible in a
@@ -61,6 +75,21 @@ type Palette struct {
 	Typefaces map[string]string
 	Scale     map[string]string
 	Source    Source
+
+	// File is the document this palette was read from, as the caller named it.
+	// A violation has to point at the file that has to change, and where that
+	// file is came from configuration.
+	File string
+}
+
+// file is what a violation names. A palette built by Parse has no path — the
+// caller had the bytes, not a location — so the default one stands in rather
+// than a message with a blank where a filename belongs.
+func (p Palette) file() string {
+	if p.File == "" {
+		return StandardFile
+	}
+	return p.File
 }
 
 // Violation is one thing the standard forbids, and where it is.
@@ -86,17 +115,29 @@ type document struct {
 	SourceRef Source            `toml:"source"`
 }
 
-// Load reads the standard from a repository.
-func Load(repoRoot string) (Palette, error) {
-	path := filepath.Join(repoRoot, filepath.FromSlash(StandardFile))
+// Load reads the standard from a repository. standardsDir is where that
+// repository keeps its standards, absolute or relative to repoRoot; empty means
+// DefaultStandardsDir. Violations name the document by the path as configured,
+// so the message points at the file the reader has to open.
+func Load(repoRoot, standardsDir string) (Palette, error) {
+	if standardsDir == "" {
+		standardsDir = DefaultStandardsDir
+	}
+	rel := filepath.Join(filepath.FromSlash(standardsDir), StandardFileName)
+	path := rel
+	if !filepath.IsAbs(path) {
+		path = filepath.Join(repoRoot, rel)
+	}
+	name := filepath.ToSlash(rel)
 	body, err := os.ReadFile(path)
 	if err != nil {
-		return Palette{}, fmt.Errorf("cannot read %s: %w", StandardFile, err)
+		return Palette{}, fmt.Errorf("cannot read %s: %w", name, err)
 	}
 	p, err := Parse(string(body))
 	if err != nil {
-		return Palette{}, fmt.Errorf("%s: %w", StandardFile, err)
+		return Palette{}, fmt.Errorf("%s: %w", name, err)
 	}
+	p.File = name
 	return p, nil
 }
 
@@ -215,7 +256,7 @@ func (p Palette) CheckNeutrality() []Violation {
 		for polarity, value := range map[string]string{"light": token.Light, "dark": token.Dark} {
 			if c := Chroma(value); c > NeutralLimit {
 				out = append(out, Violation{
-					File:  StandardFile,
+					File:  p.file(),
 					Value: fmt.Sprintf("color.%s.%s = %s", name, polarity, value),
 					Reason: fmt.Sprintf("chroma %d exceeds the neutral limit of %d and is not declared semantic; this palette has no accent colour",
 						c, NeutralLimit),
@@ -246,7 +287,7 @@ func Fingerprint(value string) string {
 func (p Palette) CheckDerivation() []Violation {
 	if len(p.Source.Fingerprints) == 0 {
 		return []Violation{{
-			File:   StandardFile,
+			File:   p.file(),
 			Value:  "source.fingerprints",
 			Reason: "no fingerprints recorded, so a derived identity cannot be distinguished from a copied one",
 		}}
@@ -263,7 +304,7 @@ func (p Palette) CheckDerivation() []Violation {
 		}
 		if recorded[Fingerprint(value)] {
 			out = append(out, Violation{
-				File:   StandardFile,
+				File:   p.file(),
 				Value:  fmt.Sprintf("%s = %s", label, value),
 				Reason: "matches a recorded fingerprint of the source entry; the identity is derived, never copied",
 			})
@@ -309,7 +350,7 @@ func (p Palette) CheckSurface(file, body string) []Violation {
 			}
 			out = append(out, Violation{
 				File: file, Line: i + 1, Value: match,
-				Reason: "not declared in " + StandardFile,
+				Reason: "not declared in " + p.file(),
 			})
 		}
 	}

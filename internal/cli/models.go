@@ -13,13 +13,19 @@ import (
 
 // resolvedModels maps each declared backend to the model id the configuration
 // currently resolves for it.
+//
+// It walks every layer rather than the project file alone. A pin the comparison
+// cannot resolve is reported as a pin nothing checks any more, so enumerating
+// one layer would report a machine-defined backend as unconfigured — an alarm
+// about the reader rather than about the configuration.
 func resolvedModels(cfg *config.Config) map[string]string {
 	resolved := map[string]string{}
-	if cfg.Project == nil {
-		return resolved
-	}
 	chainWide, _, _ := cfg.Get("review.model")
-	for name, b := range cfg.Project.Backends {
+	for _, name := range cfg.BackendNames() {
+		b, _, ok := cfg.Backend(name)
+		if !ok {
+			continue
+		}
 		model := b.Model
 		if model == "" {
 			model = chainWide

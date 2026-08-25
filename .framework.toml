@@ -6,15 +6,36 @@
 # See docs/adr/0006-configuration-split-policy-and-machine.md.
 #
 # A project names providers; only a machine defines how to reach them. To add a
-# locally reachable reviewer, define the provider on your machine and extend the
-# chain there:
+# locally reachable reviewer, define the provider and the backend on your
+# machine:
 #
 #   mf config set providers.deepseek.endpoint https://api.deepseek.com/v1 --machine
 #   mf config set providers.deepseek.api_key_env DEEPSEEK_API_KEY --machine
 #   mf config set providers.deepseek.kind openai-compatible --machine
-#   mf config set roles.r2.backends codex,gemini,deepseek --machine
+#   mf config set backends.deepseek.kind api --machine
+#   mf config set backends.deepseek.provider deepseek --machine
+#   mf config set backends.deepseek.model deepseek-v4 --machine
+#
+# Then decide who puts it in the chain. This file does, for everyone who clones
+# the repository — add the name to `[roles.r2]` below and commit it. A machine
+# chain (`mf config set roles.r2.backends ... --machine`) applies only to a role
+# this file leaves undeclared, because a machine may not review a repository
+# with a chain that repository did not choose; for one run, and only for the
+# person running it, `MF_ROLES_R2_BACKENDS=codex,gemini,deepseek mf review`.
 
 version = 1
+
+# --- paths --------------------------------------------------------------------
+
+# Where the gates look. These are the built-in defaults, restated because an
+# adopter who keeps these standards elsewhere — as a submodule, say — changes
+# them here and nowhere else. Every value is resolved against the repository
+# root and may not leave it, and there is no machine layer for them: where a
+# repository keeps its documents is the same fact on every clone.
+[paths]
+standards = "docs/standards"
+specs = "docs/specs"
+agents_file = "AGENTS.md"
 
 [review]
 base = "main"
@@ -29,12 +50,35 @@ effort = "high"
 backends = ["superpowers"]
 
 # R2 is the only role that carries the cross-provider requirement.
+#
+# `blocking` is deliberately left undeclared. Every review layer is advisory per
+# ai_guidelines.md, so the built-in answer is already the one this repository
+# wants for everybody; leaving the key out is also what lets a machine or a
+# single run raise the bar without editing committed policy, which a declared
+# `blocking = false` here would forbid. Three ways to turn it on, in the
+# cascade's own order:
+#
+#   mf config set roles.r2.blocking true --machine   # this machine, always
+#   MF_ROLES_R2_BLOCKING=1 git push                  # this push only
+#   blocking = true                                  # every clone, once committed
+#
+# With it on, a finding a reviewer classed as blocking stops the pre-push hook.
+# A finding it classed as advisory does not, and neither does a chain where no
+# backend was available — a reviewer that never ran is not a finding, and an
+# expired quota must not be able to lock the repository.
 [roles.r2]
 backends = ["codex", "gemini"]
 require_cross_provider = true
 
+# R3 runs in CI on the pull request, where the intent is written down. On this
+# repository it is CodeRabbit, wired through its GitHub app: declared here so
+# the review-layers line can name it, executed elsewhere, and never claimed as
+# observed (docs/specs/0022-r3-in-ci-with-pull-request-posting.md). Append a
+# reachable reviewer ahead of it on a machine or in CI to have the chain
+# actually run one; until one is there, R3 reports that it did not run rather
+# than passing quietly.
 [roles.r3]
-backends = []
+backends = ["coderabbit"]
 
 # The CRUX explainer is a role like every other, so which model explains a
 # change is configuration rather than a second setting nobody remembers exists.
@@ -44,6 +88,11 @@ backends = []
 backends = ["gemini"]
 
 # --- backends ----------------------------------------------------------------
+
+# A machine may define backends of its own, under the same key space. A name
+# defined here wins over a machine definition of that name, whole rather than
+# field by field, so a machine adds reviewers and never substitutes one this
+# file already chose.
 
 # Runs inside a coding-agent session, so it cannot be started as a subprocess.
 # It contributes an attestation; an absent session counts as unavailable.
@@ -84,6 +133,14 @@ unavailable_patterns = [
   "network error", "connection (refused|reset)",
 ]
 
+# Runs as a forge app rather than as anything this tool starts, so it is
+# declared and recorded but never executed here. That is a weaker claim than any
+# other backend makes — configuration says a reviewer is wired, nothing observed
+# a review — and the chain treats it as unavailable so it reads as such.
+[backends.coderabbit]
+kind = "external"
+provider = "coderabbit"
+
 # --- checks ------------------------------------------------------------------
 
 # What counts as trivial, as an explicit path list rather than a heuristic or a
@@ -117,10 +174,3 @@ roles = ["shared", "author"]
 [agents.codex]
 file = "AGENTS.md"
 roles = ["shared", "reviewer"]
-
-# R3 runs in CI on the pull request, where the intent is written down. The chain
-# is empty by default: a machine or a CI secret supplies a reachable reviewer,
-# and until one does, R3 reports that it did not run rather than passing quietly.
-[backends.coderabbit]
-kind = "external"
-provider = "coderabbit"

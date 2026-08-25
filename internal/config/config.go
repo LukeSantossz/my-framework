@@ -12,8 +12,10 @@ package config
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 
 	"github.com/BurntSushi/toml"
@@ -38,6 +40,16 @@ const (
 	// The chain r2_gate.md documents as shipped, so a repository that
 	// configures nothing behaves exactly as it did before the seam existed.
 	DefaultR2Backends = "codex"
+
+	// Where the documents each gate reads live, as this repository arranges
+	// them. They are defaults rather than constants because an adopter that
+	// consumes these standards as a submodule keeps them somewhere else, and a
+	// gate that can only read one hardcoded directory is a gate that adopter
+	// cannot run at all.
+	DefaultStandardsDir = "docs/standards"
+	DefaultSpecsDir     = "docs/specs"
+	DefaultADRDir       = "docs/adr"
+	DefaultAgentsFile   = "AGENTS.md"
 )
 
 // Layer identifies where a resolved value came from. Ordered by precedence,
@@ -116,6 +128,19 @@ type Provider struct {
 type Role struct {
 	Backends             []string `toml:"backends"`
 	RequireCrossProvider bool     `toml:"require_cross_provider"`
+
+	// Blocking says a finding this role classes as blocking may stop whatever
+	// invoked the review — in practice the pre-push hook. It is per role
+	// because the roles do not carry the same weight: R3 reviews with the least
+	// context and posts to a pull request, so a repository can hold its own
+	// pushes to a blocking R2 without making CI's advisory layer fail a build.
+	//
+	// It replaces `R2_BLOCKING`, which lived only in the deleted shell runner.
+	// A setting reached through the cascade is one `mf config get` can explain
+	// and any layer can answer, and it needs no second name: the cascade
+	// already resolves `MF_ROLES_R2_BLOCKING` for it, which is the per-run form
+	// the environment variable used to provide.
+	Blocking bool `toml:"blocking"`
 }
 
 type Review struct {
@@ -124,6 +149,20 @@ type Review struct {
 	Effort         string `toml:"effort"`
 	MaxDiffBytes   string `toml:"max_diff_bytes"`
 	TimeoutSeconds string `toml:"timeout_seconds"`
+}
+
+// Paths tells the gates where this repository keeps the documents they read.
+//
+// It has no machine layer. Where a repository keeps its standards is a fact
+// about the repository, identical on every clone, so a machine able to redirect
+// it could make the same commit pass a gate on one machine and fail it on
+// another — which is the drift these gates exist to catch. Every value is
+// resolved against the repository root and may not leave it.
+type Paths struct {
+	Standards  string `toml:"standards"`
+	Specs      string `toml:"specs"`
+	ADR        string `toml:"adr"`
+	AgentsFile string `toml:"agents_file"`
 }
 
 // ProjectFile is the committed policy file. It carries Providers only so that a
@@ -136,6 +175,7 @@ type ProjectFile struct {
 	Providers map[string]Provider `toml:"providers"`
 	Checks    Checks              `toml:"checks"`
 	Agents    map[string]Agent    `toml:"agents"`
+	Paths     Paths               `toml:"paths"`
 }
 
 // Agent is one vendor instruction file to generate. Roles are declared rather
@@ -185,6 +225,20 @@ type MachineFile struct {
 	// that repository did not choose.
 	Roles map[string]Role `toml:"roles"`
 
+	// Backends are how a chain gets completed without editing committed policy,
+	// which is what docs/adr/0006 decided and this loader did not implement: a
+	// project names providers, and only a machine defines how to reach them.
+	// Without this, naming a reviewer at all meant committing it, so a machine
+	// with a local model and CI with a secret had no way to supply one — R3
+	// spent a runner on every pull request to report that it did not run.
+	//
+	// A project definition of the same name wins, whole: see Config.Backend.
+	// The committed-command rule does not apply here. Its subject is code that
+	// arrives with a repository and runs on whoever clones it; a machine file is
+	// its owner's own, and refusing them a reviewer they wrote themselves would
+	// protect nobody from anything.
+	Backends map[string]Backend `toml:"backends"`
+
 	// Fingerprints maps an environment variable name to the provider whose
 	// agent sets it, and is how a session can corroborate an Author
 	// Declaration. It is machine state because which agent runs here is a
@@ -231,6 +285,71 @@ var validKinds = map[string]bool{
 type entry struct {
 	value string
 	prov  Provenance
+}
+
+// writer applies one decoded file into the resolved table.
+//
+// It carries that file's metadata because the value alone cannot tell which of
+// two different statements a layer made: `backends = []` and no `backends` key
+// at all both decode to an empty slice, and only the first may override a lower
+// layer. A project that declares an empty chain has erased it deliberately; a
+// project that never mentions the role has said nothing about it. Presence
+// therefore travels beside the value instead of being inferred from it — which
+// is what an empty string used as the sentinel for "unset" made impossible, and
+// why `mf init`'s scaffold could not switch off the built-in chain.
+type writer struct {
+	cfg    *Config
+	md     toml.MetaData
+	layer  Layer
+	source string
+}
+
+// set records a value the file actually contained, empty or not. The flat key
+// and the TOML path are passed separately because the first is what a human
+// reads and the second is how the document is addressed — a section name may
+// itself contain a dot, and only the parts survive that.
+func (w writer) set(key, value string, tomlPath ...string) {
+	if !w.md.IsDefined(tomlPath...) {
+		return
+	}
+	w.cfg.entries[key] = entry{value: value, prov: Provenance{Layer: w.layer, Source: w.source}}
+}
+
+func (w writer) review(r Review) {
+	w.set("review.base", r.Base, "review", "base")
+	w.set("review.model", r.Model, "review", "model")
+	w.set("review.effort", r.Effort, "review", "effort")
+	w.set("review.max_diff_bytes", r.MaxDiffBytes, "review", "max_diff_bytes")
+	w.set("review.timeout_seconds", r.TimeoutSeconds, "review", "timeout_seconds")
+}
+
+func (w writer) roles(roles map[string]Role) {
+	for name, role := range roles {
+		prefix := "roles." + name + "."
+		w.set(prefix+"backends", strings.Join(role.Backends, ","), "roles", name, "backends")
+		w.set(prefix+"require_cross_provider", strconv.FormatBool(role.RequireCrossProvider),
+			"roles", name, "require_cross_provider")
+		w.set(prefix+"blocking", strconv.FormatBool(role.Blocking), "roles", name, "blocking")
+	}
+}
+
+func (w writer) backends(backends map[string]Backend) {
+	for name, b := range backends {
+		prefix := "backends." + name + "."
+		// A backend resolves as a whole definition, so the layer that defines a
+		// name takes all of it and the entries a lower layer wrote for that name
+		// go. Leaving them to show through the gaps would report a backend that
+		// is half one file and half another, which is one nobody wrote.
+		w.cfg.forget(prefix)
+		w.set(prefix+"kind", b.Kind, "backends", name, "kind")
+		w.set(prefix+"provider", b.Provider, "backends", name, "provider")
+		w.set(prefix+"command", b.Command, "backends", name, "command")
+		w.set(prefix+"args", strings.Join(b.Args, ","), "backends", name, "args")
+		w.set(prefix+"unavailable_patterns", strings.Join(b.UnavailablePatterns, ","),
+			"backends", name, "unavailable_patterns")
+		w.set(prefix+"model", b.Model, "backends", name, "model")
+		w.set(prefix+"effort", b.Effort, "backends", name, "effort")
+	}
 }
 
 // Config is the resolved configuration: a flat key space for humans, plus the
@@ -295,27 +414,28 @@ func Load(opts Options) (*Config, error) {
 	var problems []Problem
 
 	projectPath := filepath.Join(opts.RepoRoot, ProjectFileName)
-	project, projectProblems := decodeProject(projectPath)
+	project, projectMeta, projectProblems := decodeProject(projectPath)
 	problems = append(problems, projectProblems...)
 	cfg.Project = project
 
-	machine, machineProblems := decodeMachine(opts.MachinePath)
+	machine, machineMeta, machineProblems := decodeMachine(opts.MachinePath)
 	problems = append(problems, machineProblems...)
 	cfg.Machine = machine
 
-	problems = append(problems, validateStatic(project, machine)...)
+	problems = append(problems, validateStatic(project, projectMeta, machine)...)
 	if len(problems) > 0 {
 		return nil, &ValidationError{Problems: problems}
 	}
 
-	// Lowest precedence first; set overwrites, so the last writer wins.
+	// Lowest precedence first; a later layer overwrites what an earlier one
+	// resolved, including with an empty value it declared on purpose.
 	cfg.applyDefaults()
 	cfg.applyLegacy(opts.GitConfig)
 	if machine != nil {
-		cfg.applyMachine(machine, opts.MachinePath)
+		cfg.applyMachine(machine, machineMeta, opts.MachinePath)
 	}
 	if project != nil {
-		cfg.applyProject(project, projectPath)
+		cfg.applyProject(project, projectMeta, projectPath)
 	}
 	cfg.applyEnv(opts.Env)
 
@@ -331,14 +451,32 @@ func Load(opts Options) (*Config, error) {
 	// The graceful path already exists and is the one this framework chose
 	// everywhere else: an api backend with no endpoint reports itself
 	// unavailable, the chain advances, and the run names what it skipped.
+	//
+	// Config.Validate reports it instead, which is what `mf config validate` is
+	// for: saying that a route is missing is a different act from refusing to
+	// let the tool start.
 	return cfg, nil
 }
 
+// set records a value from a layer that has no notion of presence — a built-in
+// default, or a git-config key that is absent exactly when it is empty. An
+// empty value is dropped here for that reason and no other; a layer that can
+// distinguish "declared empty" from "silent" writes through a writer instead.
 func (c *Config) set(key, value string, layer Layer, source string) {
 	if value == "" {
 		return
 	}
 	c.entries[key] = entry{value: value, prov: Provenance{Layer: layer, Source: source}}
+}
+
+// forget drops every resolved key under a prefix, so a layer can replace a
+// whole named object rather than merging into what a lower layer left behind.
+func (c *Config) forget(prefix string) {
+	for key := range c.entries {
+		if strings.HasPrefix(key, prefix) {
+			delete(c.entries, key)
+		}
+	}
 }
 
 func (c *Config) applyDefaults() {
@@ -348,8 +486,27 @@ func (c *Config) applyDefaults() {
 		"review.timeout_seconds": DefaultTimeoutSeconds,
 		"review.effort":          DefaultEffort,
 		"roles.r2.backends":      DefaultR2Backends,
+		"paths.standards":        DefaultStandardsDir,
+		"paths.specs":            DefaultSpecsDir,
+		"paths.adr":              DefaultADRDir,
+		"paths.agents_file":      DefaultAgentsFile,
 	} {
 		c.set(key, value, LayerDefault, "built-in default")
+	}
+	// R2 is the only role that carries the cross-provider rule, and it is the
+	// default rather than a hardcoded test on the role's name so that a project
+	// can move or drop the requirement. Every role gets a resolvable key,
+	// because a role whose flag no layer wrote is one no override can reach.
+	for _, name := range []string{"r1", "r2", "r3", "explain"} {
+		c.set("roles."+name+".require_cross_provider", strconv.FormatBool(name == "r2"),
+			LayerDefault, "built-in default (only R2 carries the rule)")
+		// Advisory for every role until a layer says otherwise, which is what
+		// ai_guidelines.md states. The key is written for roles no file
+		// mentions for the same reason the flag above is: a key no layer wrote
+		// is one no environment override can land on, and a switch that cannot
+		// be reached is how `R2_BLOCKING` came to be documented and dead.
+		c.set("roles."+name+".blocking", "false",
+			LayerDefault, "built-in default (every review layer is advisory)")
 	}
 	// Roles with no shipped chain still need a resolvable key, so that an
 	// environment override lands on them and so that the resolved table shows
@@ -372,28 +529,20 @@ func (c *Config) applyLegacy(gitConfig func(string) (string, bool)) {
 	}
 }
 
-func (c *Config) applyReview(r Review, layer Layer, source string) {
-	c.set("review.base", r.Base, layer, source)
-	c.set("review.model", r.Model, layer, source)
-	c.set("review.effort", r.Effort, layer, source)
-	c.set("review.max_diff_bytes", r.MaxDiffBytes, layer, source)
-	c.set("review.timeout_seconds", r.TimeoutSeconds, layer, source)
-}
-
-func (c *Config) applyMachine(m *MachineFile, source string) {
-	c.applyReview(m.Review, LayerMachine, source)
+func (c *Config) applyMachine(m *MachineFile, md toml.MetaData, source string) {
+	w := writer{cfg: c, md: md, layer: LayerMachine, source: source}
+	w.review(m.Review)
+	w.roles(m.Roles)
+	w.backends(m.Backends)
 	for name, p := range m.Providers {
 		prefix := "providers." + name + "."
-		c.set(prefix+"kind", p.Kind, LayerMachine, source)
-		c.set(prefix+"endpoint", p.Endpoint, LayerMachine, source)
-		c.set(prefix+"api_key_env", p.APIKeyEnv, LayerMachine, source)
+		w.set(prefix+"kind", p.Kind, "providers", name, "kind")
+		w.set(prefix+"endpoint", p.Endpoint, "providers", name, "endpoint")
+		w.set(prefix+"api_key_env", p.APIKeyEnv, "providers", name, "api_key_env")
 	}
-	for name, role := range m.Roles {
-		c.set("roles."+name+".backends", strings.Join(role.Backends, ","), LayerMachine, source)
-	}
-	c.set("explain.dir", m.Explain.Dir, LayerMachine, source)
+	w.set("explain.dir", m.Explain.Dir, "explain", "dir")
 	for envVar, provider := range m.Fingerprints {
-		c.set("fingerprints."+envVar, provider, LayerMachine, source)
+		w.set("fingerprints."+envVar, provider, "fingerprints", envVar)
 	}
 }
 
@@ -406,25 +555,147 @@ func (c *Config) Fingerprints() map[string]string {
 	return c.Machine.Fingerprints
 }
 
-func (c *Config) applyProject(p *ProjectFile, source string) {
-	c.applyReview(p.Review, LayerProject, source)
-	for name, role := range p.Roles {
-		prefix := "roles." + name + "."
-		c.set(prefix+"backends", strings.Join(role.Backends, ","), LayerProject, source)
-		if role.RequireCrossProvider {
-			c.set(prefix+"require_cross_provider", "true", LayerProject, source)
+func (c *Config) applyProject(p *ProjectFile, md toml.MetaData, source string) {
+	w := writer{cfg: c, md: md, layer: LayerProject, source: source}
+	w.review(p.Review)
+	w.roles(p.Roles)
+	w.backends(p.Backends)
+	w.set("paths.standards", p.Paths.Standards, "paths", "standards")
+	w.set("paths.specs", p.Paths.Specs, "paths", "specs")
+	w.set("paths.adr", p.Paths.ADR, "paths", "adr")
+	w.set("paths.agents_file", p.Paths.AgentsFile, "paths", "agents_file")
+}
+
+// Backend returns one named backend's whole definition and the layer it came
+// from.
+//
+// A project definition shadows a machine one of the same name entirely, rather
+// than field by field. Two reasons, and both point the same way: policy
+// outranks machine state throughout docs/adr/0006, and a machine that could
+// redefine a name a committed chain already uses could substitute the reviewer
+// that repository chose. Merging the two instead would produce a backend that
+// is half of each — a definition nobody wrote and nobody can predict.
+//
+// A machine backend therefore completes a chain by *adding* a name, which is
+// exactly what the split intends: the project says which reviewers it wants,
+// the machine says how any of them is reached from here.
+// BackendNames lists every backend any layer defines, in a stable order. It is
+// the enumerating counterpart to Backend: a caller that must visit all of them
+// — comparing pins, validating a chain — cannot reach a machine backend by
+// walking the project file, and walking one layer was how a machine-defined
+// backend came to be silently exempt from the pin comparison.
+func (c *Config) BackendNames() []string {
+	seen := map[string]bool{}
+	if c.Project != nil {
+		for name := range c.Project.Backends {
+			seen[name] = true
 		}
 	}
-	for name, b := range p.Backends {
-		prefix := "backends." + name + "."
-		c.set(prefix+"kind", b.Kind, LayerProject, source)
-		c.set(prefix+"provider", b.Provider, LayerProject, source)
-		c.set(prefix+"command", b.Command, LayerProject, source)
-		c.set(prefix+"args", strings.Join(b.Args, ","), LayerProject, source)
-		c.set(prefix+"unavailable_patterns", strings.Join(b.UnavailablePatterns, ","), LayerProject, source)
-		c.set(prefix+"model", b.Model, LayerProject, source)
-		c.set(prefix+"effort", b.Effort, LayerProject, source)
+	if c.Machine != nil {
+		for name := range c.Machine.Backends {
+			seen[name] = true
+		}
 	}
+	names := make([]string, 0, len(seen))
+	for name := range seen {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+	return names
+}
+
+func (c *Config) Backend(name string) (Backend, Layer, bool) {
+	if c.Project != nil {
+		if b, ok := c.Project.Backends[name]; ok {
+			return b, LayerProject, true
+		}
+	}
+	if c.Machine != nil {
+		if b, ok := c.Machine.Backends[name]; ok {
+			return b, LayerMachine, true
+		}
+	}
+	return Backend{}, LayerDefault, false
+}
+
+// Validate answers what only the finished cascade can answer, and is separate
+// from Load on purpose.
+//
+// Load refuses a file that is wrong on its own terms. What it must not refuse
+// is a configuration that is merely incomplete *here*: an unconfigured provider
+// and a misspelled one are indistinguishable from inside the file, and a fresh
+// clone has to be able to run `mf config list` before anyone has set up a
+// single endpoint. Reporting the gap is a different act from refusing to start,
+// and this is where `mf config validate` performs it.
+//
+// Only backends a role chain actually names are examined. A definition nothing
+// reaches for costs nobody anything, and may well be there for another machine.
+func (c *Config) Validate() []Problem {
+	var problems []Problem
+	for _, roleName := range c.roleNames() {
+		names, prov, _ := c.Get("roles." + roleName + ".backends")
+		for _, name := range splitList(names) {
+			spec, _, ok := c.Backend(name)
+			if !ok {
+				problems = append(problems, Problem{
+					File: prov.Source, Key: "roles." + roleName + ".backends",
+					Message: fmt.Sprintf("names backend %q, which no configuration layer defines", name),
+				})
+				continue
+			}
+			problems = append(problems, c.routeProblems(name, spec)...)
+		}
+	}
+	return problems
+}
+
+// routeProblems reports whether a backend can actually be reached from here.
+// Only an api backend needs a route at all: a cli backend's provider is an
+// identity used for the cross-provider check, an external one runs where this
+// tool cannot see it, and an in-session one is a claim about the session.
+func (c *Config) routeProblems(name string, spec Backend) []Problem {
+	if spec.Kind != "api" {
+		return nil
+	}
+	if spec.Provider == "" {
+		return []Problem{{
+			File: "backends." + name, Key: "backends." + name + ".provider",
+			Message: "an api backend must name the provider it reaches",
+		}}
+	}
+	endpoint, _, _ := c.Get("providers." + spec.Provider + ".endpoint")
+	if strings.TrimSpace(endpoint) != "" {
+		return nil
+	}
+	return []Problem{{
+		File: "machine config", Key: "providers." + spec.Provider + ".endpoint",
+		Message: fmt.Sprintf("backend %q reaches provider %q, which no machine configuration gives an endpoint; "+
+			"the chain will report it unavailable and move on", name, spec.Provider),
+	}}
+}
+
+// roleNames lists every role that has a resolved chain, sorted, so a report
+// over them reads the same way twice.
+func (c *Config) roleNames() []string {
+	var names []string
+	for key := range c.entries {
+		if strings.HasPrefix(key, "roles.") && strings.HasSuffix(key, ".backends") {
+			names = append(names, strings.TrimSuffix(strings.TrimPrefix(key, "roles."), ".backends"))
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// splitList reads a chain out of its flat, comma-joined form.
+func splitList(value string) []string {
+	var out []string
+	for _, part := range strings.Split(value, ",") {
+		if part = strings.TrimSpace(part); part != "" {
+			out = append(out, part)
+		}
+	}
+	return out
 }
 
 // applyEnv overrides any key already resolved. An empty variable is treated as
@@ -439,39 +710,45 @@ func (c *Config) applyEnv(env func(string) string) {
 	}
 }
 
-func decodeProject(path string) (*ProjectFile, []Problem) {
-	data, err := os.ReadFile(path)
+// decodeProject returns the decoded file and the metadata saying which keys it
+// actually contained. The metadata is not an implementation detail of decoding:
+// it is the only record of the difference between a key declared empty and a
+// key never written, and the cascade needs that difference.
+func decodeProject(file string) (*ProjectFile, toml.MetaData, []Problem) {
+	var md toml.MetaData
+	data, err := os.ReadFile(file)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, md, nil
 		}
-		return nil, []Problem{{File: path, Key: "", Message: err.Error()}}
+		return nil, md, []Problem{{File: file, Key: "", Message: err.Error()}}
 	}
 	var f ProjectFile
-	md, err := toml.Decode(string(data), &f)
+	md, err = toml.Decode(string(data), &f)
 	if err != nil {
-		return nil, []Problem{{File: ProjectFileName, Key: "", Message: err.Error()}}
+		return nil, md, []Problem{{File: ProjectFileName, Key: "", Message: err.Error()}}
 	}
-	return &f, undecodedProblems(ProjectFileName, md)
+	return &f, md, undecodedProblems(ProjectFileName, md)
 }
 
-func decodeMachine(path string) (*MachineFile, []Problem) {
-	if path == "" {
-		return nil, nil
+func decodeMachine(file string) (*MachineFile, toml.MetaData, []Problem) {
+	var md toml.MetaData
+	if file == "" {
+		return nil, md, nil
 	}
-	data, err := os.ReadFile(path)
+	data, err := os.ReadFile(file)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return nil, nil
+			return nil, md, nil
 		}
-		return nil, []Problem{{File: path, Key: "", Message: err.Error()}}
+		return nil, md, []Problem{{File: file, Key: "", Message: err.Error()}}
 	}
 	var f MachineFile
-	md, err := toml.Decode(string(data), &f)
+	md, err = toml.Decode(string(data), &f)
 	if err != nil {
-		return nil, []Problem{{File: path, Key: "", Message: err.Error()}}
+		return nil, md, []Problem{{File: file, Key: "", Message: err.Error()}}
 	}
-	return &f, undecodedProblems(filepath.Base(path), md)
+	return &f, md, undecodedProblems(filepath.Base(file), md)
 }
 
 // undecodedProblems turns unknown keys into errors. A misspelled key that is
@@ -489,8 +766,8 @@ func undecodedProblems(file string, md toml.MetaData) []Problem {
 }
 
 // validateStatic checks what a file says on its own. Anything that depends on
-// a resolved value belongs in validateResolved, which runs after the cascade.
-func validateStatic(project *ProjectFile, machine *MachineFile) []Problem {
+// a resolved value belongs in Config.Validate, which runs after the cascade.
+func validateStatic(project *ProjectFile, projectMeta toml.MetaData, machine *MachineFile) []Problem {
 	var problems []Problem
 
 	if project != nil {
@@ -529,17 +806,206 @@ func validateStatic(project *ProjectFile, machine *MachineFile) []Problem {
 				problems = append(problems, Problem{File: ProjectFileName, Key: key + ".kind",
 					Message: fmt.Sprintf("unknown backend kind %q", b.Kind)})
 			}
+			if msg := commandProblem(b.Command); msg != "" {
+				problems = append(problems, Problem{File: ProjectFileName, Key: key + ".command", Message: msg})
+			}
 			// Reachability is deliberately not checked here. Only an api backend
 			// needs a route at all — a cli backend's provider is an identity
 			// used for the cross-provider check — and whether that route exists
-			// depends on the whole cascade, so validateResolved answers it.
+			// depends on the whole cascade, so Config.Validate answers it.
 		}
+		problems = append(problems, pathProblems(project.Paths, projectMeta)...)
 	}
 
-	if machine != nil && machine.Version != 0 && machine.Version != SchemaVersion {
-		problems = append(problems, Problem{File: "machine config", Key: "version",
-			Message: fmt.Sprintf("unsupported schema version %d; this build understands %d", machine.Version, SchemaVersion)})
+	if machine != nil {
+		if machine.Version != 0 && machine.Version != SchemaVersion {
+			problems = append(problems, Problem{File: "machine config", Key: "version",
+				Message: fmt.Sprintf("unsupported schema version %d; this build understands %d", machine.Version, SchemaVersion)})
+		}
+		problems = append(problems, machineBackendProblems(machine.Backends)...)
 	}
 
 	return problems
+}
+
+// machineBackendProblems checks a machine's own backend definitions.
+//
+// Two rules from the project file do not carry over. A route may not be written
+// here either — not because it is a secret, but because a provider already owns
+// it, and a second home for the same fact is one nothing reads. And the
+// committed-command rule is absent by design: it exists to stop a repository
+// running its own code on whoever clones it, which is not a thing a user's own
+// file can do to them.
+func machineBackendProblems(backends map[string]Backend) []Problem {
+	names := make([]string, 0, len(backends))
+	for name := range backends {
+		names = append(names, name)
+	}
+	sort.Strings(names)
+
+	var problems []Problem
+	for _, name := range names {
+		b := backends[name]
+		key := "backends." + name
+		if b.Endpoint != "" {
+			problems = append(problems, Problem{File: "machine config", Key: key + ".endpoint",
+				Message: fmt.Sprintf("a backend selects a provider; the route belongs to providers.%s.endpoint", orName(b.Provider))})
+		}
+		if b.APIKeyEnv != "" {
+			problems = append(problems, Problem{File: "machine config", Key: key + ".api_key_env",
+				Message: fmt.Sprintf("a backend selects a provider; the credential reference belongs to providers.%s.api_key_env", orName(b.Provider))})
+		}
+		if b.APIKey != "" {
+			problems = append(problems, Problem{File: "machine config", Key: key + ".api_key",
+				Message: "a credential must never appear in configuration, committed or not"})
+		}
+		if b.Kind == "" {
+			problems = append(problems, Problem{File: "machine config", Key: key + ".kind",
+				Message: "a backend must declare a kind"})
+		} else if !validKinds[b.Kind] {
+			problems = append(problems, Problem{File: "machine config", Key: key + ".kind",
+				Message: fmt.Sprintf("unknown backend kind %q", b.Kind)})
+		}
+	}
+	return problems
+}
+
+func orName(provider string) string {
+	if provider == "" {
+		return "<provider>"
+	}
+	return provider
+}
+
+// pathProblems checks the configured document locations. Presence decides which
+// of them are checked at all: an absent key takes the built-in default, while a
+// key written empty is a statement, and the only one this table cannot honour.
+func pathProblems(p Paths, md toml.MetaData) []Problem {
+	var problems []Problem
+	for _, cfgPath := range []struct {
+		key, leaf, value string
+	}{
+		{"paths.standards", "standards", p.Standards},
+		{"paths.specs", "specs", p.Specs},
+		{"paths.adr", "adr", p.ADR},
+		{"paths.agents_file", "agents_file", p.AgentsFile},
+	} {
+		if !md.IsDefined("paths", cfgPath.leaf) {
+			continue
+		}
+		if msg := pathProblem(cfgPath.value); msg != "" {
+			problems = append(problems, Problem{File: ProjectFileName, Key: cfgPath.key, Message: msg})
+		}
+	}
+	return problems
+}
+
+// pathProblem refuses a configured location a gate could not safely resolve
+// against the repository root, and returns "" for one it can.
+//
+// Every consumer joins these onto the root, so an empty value silently means
+// the whole repository and an escaping one means somebody else's files. This
+// file is committed, which is what makes the second more than a footgun: the
+// path a gate reads would then be chosen by the repository, on every machine
+// that clones it.
+func pathProblem(value string) string {
+	if strings.TrimSpace(value) == "" {
+		return "a path may not be empty; remove the key to take the built-in default"
+	}
+	if absoluteAnywhere(value) {
+		return fmt.Sprintf("%q is absolute; a configured path is resolved against the repository root", value)
+	}
+	if cleaned := path.Clean(filepath.ToSlash(value)); cleaned == ".." || strings.HasPrefix(cleaned, "../") {
+		return fmt.Sprintf("%q leaves the repository root; a gate reads only what the repository itself ships", value)
+	}
+	return ""
+}
+
+// absoluteAnywhere reports whether a path is absolute on any platform. A drive
+// letter is absolute only on Windows and a leading slash only elsewhere, but
+// this file travels between them, so both are refused on both.
+func absoluteAnywhere(value string) bool {
+	if strings.HasPrefix(filepath.ToSlash(value), "/") {
+		return true
+	}
+	if len(value) >= 2 && value[1] == ':' {
+		return true
+	}
+	return filepath.IsAbs(value)
+}
+
+// interpreters are the programs whose arguments are a program. A project file
+// controls `args` as well as `command`, so naming one of these makes the
+// committed file the source of the code that runs.
+//
+// The list is curated, not exhaustive, and cannot be: enough programs can be
+// persuaded to run another that completing it is not a goal a denylist reaches.
+// It covers the shells, the general-purpose interpreters, the exec wrappers and
+// the package and build runners that execute a file the repository ships.
+var interpreters = map[string]bool{
+	// shells
+	"sh": true, "bash": true, "zsh": true, "dash": true, "ash": true, "ksh": true,
+	"csh": true, "tcsh": true, "fish": true, "busybox": true,
+	"cmd": true, "powershell": true, "pwsh": true, "wsl": true,
+	// exec wrappers: they run whatever they are handed
+	"env": true, "xargs": true, "nohup": true, "timeout": true, "nice": true,
+	"stdbuf": true, "sudo": true, "doas": true, "su": true, "ssh": true,
+	// general-purpose interpreters
+	"python": true, "python2": true, "python3": true, "py": true,
+	"ruby": true, "perl": true, "node": true, "deno": true, "bun": true,
+	"php": true, "lua": true, "tclsh": true, "rscript": true,
+	"awk": true, "gawk": true, "mawk": true,
+	"osascript": true, "wscript": true, "cscript": true, "mshta": true,
+	"rundll32": true, "regsvr32": true,
+	// package and build runners: they execute what the repository ships
+	"npm": true, "npx": true, "pnpm": true, "yarn": true, "bunx": true,
+	"uv": true, "uvx": true, "pipx": true, "poetry": true,
+	"make": true, "cmake": true, "rake": true, "gulp": true, "grunt": true,
+	"go": true, "cargo": true, "dotnet": true, "java": true,
+	"mvn": true, "gradle": true, "ant": true,
+	"docker": true, "podman": true, "nerdctl": true,
+}
+
+// commandProblem refuses a committed `command` that would let a repository run
+// its own code on a contributor's machine, and returns "" for one that would not.
+//
+// This is the trust boundary the project file asserts. A cli backend's command
+// and args go to exec.CommandContext verbatim, and `mf review` runs from the
+// pre-push hook, so a repository shipping the wrong two lines executes them on
+// anyone who clones it and pushes — before any human has read a diff.
+//
+// The rule is that a committed file may *select* a tool the contributor already
+// installed and may never *introduce* code. A path names a file the repository
+// itself ships; an interpreter turns `args`, which the same file controls, into
+// the program. What is left is a bare name resolved from PATH, which the
+// contributor chose to install.
+//
+// Argument splitting is already safe: args is a pre-tokenized TOML array
+// executed without a shell, so an expanded `{{.Prompt}}` cannot become extra
+// argv entries. And this narrows the hole rather than closing it — a committed
+// backend still runs a real program on a contributor's machine, so the honest
+// claim for the project file is reviewable policy, not a sandbox.
+func commandProblem(command string) string {
+	if command == "" {
+		// A cli backend with no command is unavailable at run time and says so
+		// there; every other kind has no command at all.
+		return ""
+	}
+	if strings.ContainsAny(command, `/\`) || command == ".." {
+		return fmt.Sprintf("%q names a path: a committed file may select a tool the contributor already installed, "+
+			"never point at a file this repository ships", command)
+	}
+	if strings.ContainsAny(command, " \t\r\n\"'`$;|&<>()*?") {
+		return fmt.Sprintf("%q is not a bare program name; a committed command is executed verbatim, "+
+			"so it may name only a program to resolve on PATH", command)
+	}
+	name := strings.ToLower(command)
+	for _, ext := range []string{".exe", ".bat", ".cmd", ".com", ".ps1"} {
+		name = strings.TrimSuffix(name, ext)
+	}
+	if interpreters[name] {
+		return fmt.Sprintf("%q runs whatever its arguments say, and this file controls those arguments: "+
+			"a committed backend may select an installed tool, never supply the code it executes", command)
+	}
+	return ""
 }
