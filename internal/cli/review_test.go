@@ -29,6 +29,12 @@ func gitRepo(t *testing.T, projectBody string) (root string) {
 	run("config", "user.email", "t@example.invalid")
 	run("config", "user.name", "T")
 	run("config", "commit.gpgsign", "false")
+	// git forks `gc --auto` after a commit, and it goes on writing into
+	// .git/objects after the test body has returned. t.TempDir() then fails its
+	// own cleanup with "directory not empty" — a flake that has nothing to do
+	// with what the test asserts, and that took down a release build.
+	run("config", "gc.auto", "0")
+	run("config", "maintenance.auto", "false")
 	write(t, filepath.Join(root, "seed.txt"), "seed\n")
 	if projectBody != "" {
 		write(t, filepath.Join(root, ".framework.toml"), projectBody)

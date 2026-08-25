@@ -198,7 +198,13 @@ func TestStoreDoesNotLoseARunToAConcurrentWriter(t *testing.T) {
 	// parses, still looks like a plausible total, and nothing anywhere says a
 	// number went missing. That is why this is asserted rather than trusted.
 	s := Store{Path: filepath.Join(t.TempDir(), "usage.json")}
-	const writers, each = 8, 25
+	// Sized to demonstrate the property rather than to stress the lock. Every
+	// acquisition waits out production's own lockWait, so 200 of them serialised
+	// ran close enough to that budget to fail under a loaded machine — which it
+	// did, on a release build, for reasons that had nothing to do with what is
+	// asserted here. Forty still loses runs reliably without the lock, because a
+	// read-modify-write race does not need volume to lose one.
+	const writers, each = 4, 10
 
 	var start, done sync.WaitGroup
 	start.Add(1)

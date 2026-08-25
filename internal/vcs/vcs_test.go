@@ -25,6 +25,12 @@ func newRepo(t *testing.T) *Repo {
 	run("config", "user.email", "test@example.invalid")
 	run("config", "user.name", "Test")
 	run("config", "commit.gpgsign", "false")
+	// git forks `gc --auto` after a commit and goes on writing into
+	// .git/objects after the test body returns, so t.TempDir() fails its own
+	// cleanup with "directory not empty" — a flake unrelated to what is
+	// asserted here, which took down a release build.
+	run("config", "gc.auto", "0")
+	run("config", "maintenance.auto", "false")
 
 	if err := os.WriteFile(filepath.Join(root, "seed.txt"), []byte("seed\n"), 0o644); err != nil {
 		t.Fatal(err)
