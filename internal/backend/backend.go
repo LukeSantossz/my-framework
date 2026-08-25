@@ -281,12 +281,33 @@ func matchesAny(text string, patterns []string) bool {
 func runCommand(ctx context.Context, dir, name string, args []string) (string, error) {
 	cmd := exec.CommandContext(ctx, name, args...)
 	cmd.Dir = dir
+	return runWith(ctx, cmd)
+}
+
+// runWith collects what a command printed, and gives up on it when the budget
+// does.
+//
+// The WaitDelay is what makes the deadline mean anything. Stdout is an
+// io.Writer rather than a file, so Go copies through an OS pipe, and Wait
+// blocks until every writer closes it. CommandContext kills the process it
+// started and nothing else, so an agentic reviewer that left a child behind
+// keeps that pipe open and Wait never returns — a 240-second budget held a
+// push for ten minutes that way, which is the failure the budget exists to
+// prevent. With the delay set, Wait closes the pipe itself and returns what
+// was collected up to that point.
+func runWith(ctx context.Context, cmd *exec.Cmd) (string, error) {
 	var buf bytes.Buffer
 	cmd.Stdout = &buf
 	cmd.Stderr = &buf
+	cmd.WaitDelay = waitDelay
 	err := cmd.Run()
 	return buf.String(), err
 }
+
+// waitDelay is how long a killed command may go on holding its output pipe
+// before the pipe is closed out from under it. Short, because by the time it
+// applies the command has already been killed and the answer is already late.
+const waitDelay = 2 * time.Second
 
 // --- api --------------------------------------------------------------------
 

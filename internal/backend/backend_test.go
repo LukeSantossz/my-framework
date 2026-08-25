@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -577,5 +579,32 @@ func TestDescribeNamesTheModelTheReviewWouldActuallyUse(t *testing.T) {
 	got := a.Describe(Request{Base: "main", Head: "HEAD"})
 	if !strings.Contains(got, `model="acme-2"`) {
 		t.Errorf("Describe does not name the model the review would use: %s", got)
+	}
+}
+
+// TestAKilledCommandCannotHoldItsOutputPipeOpenForever guards the WaitDelay
+// that makes the review budget mean anything.
+//
+// The failure it guards against was observed, not theorised: a push under a
+// 240-second budget was still running after ten minutes, and a review under a
+// deliberately short 15-second budget ran until an external timeout killed it
+// at 121 seconds. The cause is that Stdout is an io.Writer, so Go copies
+// through an OS pipe and Wait blocks until every writer closes it, while
+// CommandContext kills only the process it started. On Windows `codex` is an
+// npm shim: a batch file that spawns node, so the kill reaches the shim and
+// node goes on holding the pipe. With the delay set the same review returns in
+// 23 seconds and the chain advances.
+//
+// This asserts the delay is configured rather than reproducing the orphaned
+// grandchild, which needs a process tree this suite cannot build portably. It
+// is a regression guard for a one-line removal, and it is honest about being
+// only that: the behaviour itself was verified by hand, as recorded above.
+func TestAKilledCommandCannotHoldItsOutputPipeOpenForever(t *testing.T) {
+	cmd := exec.Command(os.Args[0], "-test.run=^$")
+	if _, err := runWith(context.Background(), cmd); err != nil {
+		t.Fatalf("running a trivial command: %v", err)
+	}
+	if cmd.WaitDelay <= 0 {
+		t.Error("no WaitDelay: a killed command can hold its output pipe open past the budget")
 	}
 }
