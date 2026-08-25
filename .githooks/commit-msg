@@ -1,0 +1,60 @@
+#!/usr/bin/env bash
+# Commit-msg gate: the commit vocabulary github.md defines.
+#
+# docs/specs/0020 scoped `mf hooks install` to pre-push AND commit-msg, and only
+# pre-push was ever written, so the commit rules were enforced by nothing until
+# a push — or, since the pre-push hook failed open in silence, by nothing at
+# all. No Go change is needed to install this file: `mf hooks install` sets
+# core.hooksPath to .githooks, and git then discovers every hook in that
+# directory by name.
+#
+# It fails closed for the same reason pre-push does: a hook that cannot find its
+# runner has not passed. `git commit --no-verify` is the bypass.
+#
+# Known limit: `mf check commit` reads the commits already on this branch, not
+# the message being written into "$1" — the binary has no message-file mode yet.
+# So the message under the editor's cursor is checked one commit later, and this
+# hook's job today is to stop a branch from growing on top of a subject the
+# vocabulary rejects. Give `mf check commit` a `--message <file>` mode and this
+# hook gates the message it is handed.
+set -u
+
+say() { printf 'mf commit-msg: %s\n' "$1" >&2; }
+
+repo_root="$(git rev-parse --show-toplevel 2>/dev/null)"
+if [ -z "$repo_root" ]; then
+  say "cannot determine the repository root, so there is nothing here to check."
+  say "Commit anyway with \`git commit --no-verify\`."
+  exit 1
+fi
+
+# Resolved exactly as the pre-push hook resolves it; the two must not be able to
+# disagree about which binary is the gate.
+runner=""
+if [ -n "${MF_BIN:-}" ]; then
+  if [ ! -x "$MF_BIN" ]; then
+    say "MF_BIN is set to \"$MF_BIN\", which is not an executable file."
+    exit 1
+  fi
+  runner="$MF_BIN"
+elif command -v mf >/dev/null 2>&1; then
+  runner="mf"
+elif [ -x "$repo_root/mf" ]; then
+  runner="$repo_root/mf"
+elif [ -x "$repo_root/mf.exe" ]; then
+  runner="$repo_root/mf.exe"
+fi
+
+if [ -z "$runner" ]; then
+  say "cannot find the \`mf\` binary, so the commit rules were not checked."
+  say "Install a release binary on PATH, build one with \`go build -o mf ./cmd/mf\`,"
+  say "or point MF_BIN at one. To commit without the gate: git commit --no-verify."
+  exit 1
+fi
+
+if ! "$runner" check commit; then
+  say ""
+  say "the commit vocabulary in github.md rejects a commit on this branch, so the commit is stopped."
+  say "Rewrite the offending message (\`git rebase -i\`), or commit with \`git commit --no-verify\`."
+  exit 1
+fi
