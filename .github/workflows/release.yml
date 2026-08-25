@@ -39,7 +39,12 @@ jobs:
       - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
         with:
           go-version-file: go.mod
-          cache: true
+          # Off for the release build alone. GitHub neither signs nor verifies
+          # cache contents, and a cache visible to a tag run is an input to the
+          # binaries this job publishes and people download. The gate that runs
+          # before this one caches freely: it proves the tree, and nothing it
+          # produces is shipped.
+          cache: false
 
       - name: Build
         env:

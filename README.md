@@ -152,6 +152,8 @@ mf check
 
 Every role chain ships empty. This framework will not name a reviewer you have not configured, so `mf doctor` will report four roles with no chain until you give them one — `.framework.toml` carries the recipe in its own header, and `docs/adr/0006` explains why naming a reviewer takes a step in the project file and a step on the machine.
 
+The built-in default for `roles.r2.backends` is `codex`, and the scaffold's explicit `backends = []` is what overrides it. That distinction is load-bearing rather than pedantic: an empty list has to be a statement a layer can make, or the default survives and `mf review` fails naming a backend you never configured. It is the defect `docs/specs/0027` was written to fix.
+
 Coming from an earlier version, `mf config migrate` takes over the deprecated `r2.*` git-config keys. It copies rather than moves and prints the commands to remove the originals, so the destructive half stays a human decision.
 
 ### Machine state and consent

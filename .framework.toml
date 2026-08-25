@@ -26,7 +26,7 @@
 # chain (`mf config set roles.r2.backends ... --machine`) applies only to a role
 # this file leaves undeclared, because a machine may not review a repository
 # with a chain that repository did not choose; for one run, and only for the
-# person running it, `MF_ROLES_R2_BACKENDS=codex,gemini,<name> mf review`.
+# person running it, `MF_ROLES_R2_BACKENDS=codex,gemini,<name> mf review --role r2`.
 
 version = 1
 
