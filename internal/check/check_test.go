@@ -359,3 +359,48 @@ func TestAllRunsEveryCheck(t *testing.T) {
 		}
 	}
 }
+
+func TestDocsResolvesReferencesCaseSensitivelyOnEveryPlatform(t *testing.T) {
+	// A reference whose case does not match the file resolves on a
+	// case-insensitive filesystem and fails on a case-sensitive one, so the gate
+	// passes for the developer and fails in CI. The check has to disagree with
+	// the local filesystem to agree with everybody else's.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "standards", "github.md"),
+		githubDoc+"\nSee `GITHUB.md` for the type table.\n")
+	res, err := Docs(opts(root))
+	if err != nil {
+		t.Fatalf("Docs: %v", err)
+	}
+	if res.OK() {
+		t.Fatal("a reference differing only in case was accepted")
+	}
+}
+
+func TestDocsAcceptsAReferenceWhoseCaseMatches(t *testing.T) {
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "standards", "github.md"),
+		githubDoc+"\nSee `docs/standards/github.md` for the type table.\n")
+	res, err := Docs(opts(root))
+	if err != nil {
+		t.Fatalf("Docs: %v", err)
+	}
+	if !res.OK() {
+		t.Fatalf("a correctly cased reference was rejected: %+v", res.Problems)
+	}
+}
+
+func TestDocsTreatsTheDesignFormatNameAsProse(t *testing.T) {
+	// `DESIGN.md` is the name of the format design.md adopts, not a file in this
+	// repository. It sits beside SPEC.md in the same list for the same reason.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "standards", "github.md"),
+		githubDoc+"\nThe identity is written in the `DESIGN.md` format.\n")
+	res, err := Docs(opts(root))
+	if err != nil {
+		t.Fatalf("Docs: %v", err)
+	}
+	if !res.OK() {
+		t.Fatalf("a format name in prose was read as a file reference: %+v", res.Problems)
+	}
+}

@@ -322,6 +322,10 @@ var hypothetical = map[string]bool{
 	"CONTRIBUTING.md": true, // named by the README template as optional
 	"CLAUDE.full.md":  true, // an example name in token_economy.md
 	"SPEC.md":         true, // the artifact's generic name in prose
+	// The name of the design-document format design.md adopts, not a file here.
+	// On a case-insensitive filesystem it resolves to design.md and looks fine,
+	// which is how it reached a release tag before anything noticed.
+	"DESIGN.md": true,
 }
 
 var mdRef = regexp.MustCompile(`[A-Za-z0-9_./-]+\.md`)
@@ -372,14 +376,52 @@ func Docs(o Options) (Result, error) {
 
 func refResolves(o Options, ref string) bool {
 	if strings.ContainsAny(ref, "/\\") {
-		_, err := os.Stat(filepath.Join(o.RepoRoot, filepath.FromSlash(ref)))
-		return err == nil
+		return existsExactly(o.RepoRoot, filepath.FromSlash(ref))
 	}
-	if _, err := os.Stat(filepath.Join(o.StandardsDir, ref)); err == nil {
-		return true
+	return existsExactly(o.StandardsDir, ref) || existsExactly(o.RepoRoot, ref)
+}
+
+// existsExactly reports whether rel exists under base with the case it was
+// written in.
+//
+// os.Stat alone answers a different question on Windows and macOS, where the
+// filesystem matches names case-insensitively: a reference to DESIGN.md
+// resolves to design.md, the gate passes for the developer, and the same commit
+// fails on the case-sensitive filesystem CI runs on. The check has to disagree
+// with the local filesystem in order to agree with everybody else's.
+func existsExactly(base, rel string) bool {
+	if base == "" {
+		return false
 	}
-	_, err := os.Stat(filepath.Join(o.RepoRoot, ref))
-	return err == nil
+	dir := base
+	parts := strings.Split(filepath.ToSlash(rel), "/")
+	for i, part := range parts {
+		if part == "" || part == "." {
+			continue
+		}
+		entries, err := os.ReadDir(dir)
+		if err != nil {
+			return false
+		}
+		found := false
+		for _, e := range entries {
+			if e.Name() != part {
+				continue
+			}
+			// Only the last component may be a file; every earlier one has to be
+			// a directory, or the path does not describe what it claims to.
+			if i < len(parts)-1 && !e.IsDir() {
+				return false
+			}
+			found = true
+			break
+		}
+		if !found {
+			return false
+		}
+		dir = filepath.Join(dir, part)
+	}
+	return true
 }
 
 // --- records ----------------------------------------------------------------

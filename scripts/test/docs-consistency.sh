@@ -53,9 +53,13 @@ done
 #   uncompressed copy; intentionally absent.
 # - SPEC.md: the artifact's generic name in prose; concrete specs live under
 #   docs/specs/, and the root working copy no longer exists.
+# - DESIGN.md: the name of the design-document format design.md adopts, not a
+#   file in this repository. On a case-insensitive filesystem it resolves to
+#   design.md and looks fine; on a case-sensitive one it does not, which is how
+#   this entry came to be needed.
 # This exemption applies to references found in any scanned standards file,
 # including INDEX.md itself.
-HYPOTHETICAL_REFS='CONTRIBUTING.md CLAUDE.full.md SPEC.md'
+HYPOTHETICAL_REFS='CONTRIBUTING.md CLAUDE.full.md SPEC.md DESIGN.md'
 for src in "$docs_dir"/*.md; do
   [ -f "$src" ] || continue
   src_name="$(basename "$src")"
