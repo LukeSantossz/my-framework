@@ -185,7 +185,7 @@ jobs:
       - name: Say what R3 needs
         run: |
           {
-            echo "## R3 did not run: no reviewer is configured"
+            echo "## R3 did not run from this workflow"
             echo
             echo "\`.framework.toml\` declares R3 as CodeRabbit, which runs as a GitHub"
             echo "app rather than as anything this workflow starts. Nothing else in the"
