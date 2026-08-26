@@ -654,3 +654,30 @@ func TestInitIgnoresASubmoduleThatCarriesSomethingElse(t *testing.T) {
 		t.Errorf("an unrelated submodule changed how the standards are written: %v", err)
 	}
 }
+
+func TestInitRefusesASubmoduleThatCarriesNoInstructionSource(t *testing.T) {
+	// A pin older than the instruction source has the corpus and not the
+	// source, which is the state every known consumer is pinned to. init wrote
+	// the policy file, the hooks and the lock and only then failed to generate,
+	// leaving a half-activated repository.
+	root := gitRepo(t, "")
+	vendorSubmodule(t, root, ".standards", true)
+	if err := os.Remove(filepath.Join(root, ".standards", "docs", "agents", "instructions.md")); err != nil {
+		t.Fatal(err)
+	}
+	e, _, errOut := initEnv(t, root, filepath.Join(t.TempDir(), "config.toml"), "init")
+	if code := Run(e); code == 0 {
+		t.Fatal("init adopted a submodule it cannot generate the instruction files from")
+	}
+	said := errOut.String()
+	for _, want := range []string{".standards", "instructions.md", "--remote"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("the refusal does not name %q: %q", want, said)
+		}
+	}
+	for _, path := range []string{".framework.toml", ".framework.lock"} {
+		if _, err := os.Stat(filepath.Join(root, path)); err == nil {
+			t.Errorf("a refusal wrote %s anyway", path)
+		}
+	}
+}

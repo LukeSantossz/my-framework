@@ -628,6 +628,21 @@ func resolveStandards(env Env, cfg *config.Config, named string) (dir, source, s
 			vendored.Dir, vendored.Dir)
 		return "", "", "", 1
 	}
+	if !vendored.AgentSource {
+		// The corpus is there and the source beside it is not, which is what a
+		// pin older than the source looks like. Materialising one here would
+		// put an untracked file in that submodule; materialising it outside
+		// would generate the instruction files from a copy the adopter never
+		// updates. Both are worse than saying so before anything is written.
+		fmt.Fprintf(env.Stderr,
+			"mf init: %s supplies the standards but carries no %s, so there is nothing to"+
+				" generate the instruction files from.\n"+
+				"  Update it:  git -C %s submodule update --remote %s\n"+
+				"  Or:         mf init --standards <dir> to keep the standards somewhere this repository owns\n"+
+				"Nothing was written.\n",
+			vendored.Dir, config.DefaultAgentsSource, env.RepoRoot, vendored.Dir)
+		return "", "", "", 1
+	}
 	return vendored.Dir + "/" + config.DefaultStandardsDir,
 		vendored.Dir + "/" + config.DefaultAgentsSource,
 		vendored.Dir, 0

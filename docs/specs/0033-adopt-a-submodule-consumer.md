@@ -62,6 +62,7 @@ for the adopter whose layout no rule can infer.
 - `scaffolds_an_uncommented_paths_block_naming_the_submodule`
 - `gives_every_generated_agent_target_a_matching_path_prefix`
 - `refuses_when_a_declared_submodule_is_not_checked_out`
+- `refuses_a_submodule_that_carries_no_instruction_source`
 - `writes_nothing_when_it_refuses`
 - `honours_an_explicit_standards_flag_over_detection`
 - `leaves_a_repository_with_an_unrelated_checked_out_submodule_unchanged`
@@ -89,6 +90,10 @@ Versions: Go 1.26.7, `mf` at the commit under review.
 - Assumption: a checkout containing `docs/standards/INDEX.md` is a standards
   corpus. Invalidated if the corpus layout inside the submodule ever moves,
   which would also break every path the README documents.
+- Assumption: a corpus and the instruction source travel together. They do in
+  every release that has the source at all, and a pin older than it — which is
+  what all four known consumers carry — is refused with the command that moves
+  it forward rather than adopted into a state nothing can generate from.
 - Assumption: refusing on an uninitialised submodule costs less than a duplicate
   corpus. Invalidated if adopters commonly carry unrelated uninitialised
   submodules; `--standards` is the escape hatch and the refusal names it.

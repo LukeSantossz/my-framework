@@ -520,6 +520,11 @@ type Vendored struct {
 	// evidence of anything: the directory of a corpus and the directory of an
 	// unrelated dependency look identical while both are empty.
 	Populated bool
+	// AgentSource says the checkout also carries the instruction source the
+	// vendor files are generated from. A corpus old enough to predate that
+	// source has one and not the other, which is the state every known
+	// consumer is pinned to.
+	AgentSource bool
 }
 
 // declaredSubmodules lists what .gitmodules declares, in file order.
@@ -553,9 +558,11 @@ func declaredSubmodules(root string) []string {
 func VendoredStandards(root string) (Vendored, bool) {
 	var empty []string
 	for _, sub := range declaredSubmodules(root) {
-		index := filepath.Join(root, filepath.FromSlash(sub), filepath.FromSlash(framework.StandardsPrefix), "INDEX.md")
+		here := filepath.Join(root, filepath.FromSlash(sub))
+		index := filepath.Join(here, filepath.FromSlash(framework.StandardsPrefix), "INDEX.md")
 		if _, err := os.Stat(index); err == nil {
-			return Vendored{Dir: sub, Populated: true}, true
+			_, srcErr := os.Stat(filepath.Join(here, filepath.FromSlash(AgentSourcePath)))
+			return Vendored{Dir: sub, Populated: true, AgentSource: srcErr == nil}, true
 		}
 		if entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(sub))); err != nil || len(entries) == 0 {
 			empty = append(empty, sub)
