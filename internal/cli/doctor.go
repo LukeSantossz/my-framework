@@ -271,12 +271,26 @@ func runInit(env Env, args []string) int {
 		return code
 	}
 
+	// init materialises the shipped source and then generates from the
+	// configured one, so the two have to name the same file. Only the directory
+	// is free: the basename is what this build carries, and writing one name
+	// while reading another is the defect this guard exists to stop, one level
+	// below the directory it was already fixed at.
+	source := filepath.ToSlash(agentsSource(cfg))
+	if base := path.Base(source); base != path.Base(agents.SourcePath) {
+		fmt.Fprintf(env.Stderr,
+			"mf init: paths.agents_source names %q, and this build carries %q; the directory is yours to choose, the filename is not\n",
+			base, path.Base(agents.SourcePath))
+		return 1
+	}
+	sourceDir := path.Dir(source)
+
 	steps, err := activate.Init(activate.InitOptions{
 		RepoRoot:         env.RepoRoot,
 		FrameworkVersion: version.Version,
 		StandardsDir:     standardsDir(cfg),
 		R2Backend:        chosen.Name,
-		AgentsSourceDir:  path.Dir(filepath.ToSlash(agentsSource(cfg))),
+		AgentsSourceDir:  sourceDir,
 	})
 	if chosen.named() && err == nil {
 		// After the scaffold, so a machine write cannot leave a repository

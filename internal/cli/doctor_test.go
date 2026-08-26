@@ -533,3 +533,18 @@ func TestInitMaterialisesTheAgentSourceWhereTheConfigurationNamesIt(t *testing.T
 		t.Error("the generated header does not name the source it came from")
 	}
 }
+
+func TestInitRefusesASourceFilenameItCannotMaterialise(t *testing.T) {
+	// The directory is the adopter's to choose; the filename is what this build
+	// carries. Accepting a different one made init write `instructions.md` and
+	// then generate from a name that was never written, one level below where
+	// the same defect had already been fixed.
+	root := gitRepo(t, "version = 1\n\n[paths]\nagents_source = \"docs/agents/rules.md\"\n\n[agents.claude]\nfile = \"CLAUDE.md\"\nroles = [\"shared\"]\n")
+	e, _, errOut := initEnv(t, root, filepath.Join(t.TempDir(), "config.toml"), "init")
+	if code := Run(e); code == 0 {
+		t.Fatal("init accepted a source filename it does not ship")
+	}
+	if !strings.Contains(errOut.String(), "rules.md") || !strings.Contains(errOut.String(), "instructions.md") {
+		t.Errorf("the refusal names neither the given nor the expected filename: %q", errOut.String())
+	}
+}
