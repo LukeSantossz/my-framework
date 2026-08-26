@@ -7,6 +7,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/LukeSantossz/my-framework/internal/tomlx"
 )
 
 // Target names the file a write lands in. The two are not interchangeable: the
@@ -158,20 +160,25 @@ func setInDocument(doc, key, value string) (string, error) {
 	sectionStart := -1
 	sectionEnd := len(lines)
 
+	// A header is read the way the decoder reads it, not as a line that starts
+	// and ends with a bracket: `[roles.r2]  # the reviewer chain` opens the
+	// same table, and missing it appended a second `[roles.r2]` — a file the
+	// decoder then refuses, for everyone who clones it, while the command that
+	// wrote it reported success.
 	for i, line := range lines {
 		trimmed := strings.TrimSpace(line)
-		if strings.HasPrefix(trimmed, "[") && strings.HasSuffix(trimmed, "]") {
+		if name, isHeader := tomlx.Table(trimmed); isHeader {
 			if inSection {
 				sectionEnd = i
 				break
 			}
-			if trimmed == header {
+			if name == section {
 				inSection = true
 				sectionStart = i
 			}
 			continue
 		}
-		if inSection && assignsKey(trimmed, leaf) {
+		if inSection && tomlx.Key(trimmed) == leaf {
 			lines[i] = assignment
 			return strings.Join(lines, "\n"), nil
 		}
@@ -221,14 +228,6 @@ func tomlArray(value string) string {
 		}
 	}
 	return "[" + strings.Join(items, ", ") + "]"
-}
-
-func assignsKey(line, leaf string) bool {
-	if !strings.HasPrefix(line, leaf) {
-		return false
-	}
-	rest := strings.TrimSpace(strings.TrimPrefix(line, leaf))
-	return strings.HasPrefix(rest, "=")
 }
 
 // Migrate takes over responsibility for the deprecated git-config keys by
