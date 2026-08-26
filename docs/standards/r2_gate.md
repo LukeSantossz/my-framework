@@ -21,9 +21,10 @@ document was rewritten to end.
   directly, so there is no single Author to detect at that moment. The declaration is
   recorded per branch and named per PR.
 - Reviewer: whichever backend in the chain actually ran. The requirement is the role,
-  not a name: the Reviewer must be a different provider than the Author. The shipped
-  default chain is `codex` alone, so a repository that configures nothing behaves as it
-  always has.
+  not a name: the Reviewer must be a different provider than the Author. The built-in
+  default chain is `codex` alone, but `mf init` scaffolds every chain empty, so an
+  adopted repository names its reviewer or has none — a role with no chain reports that
+  it did not run, which is the honest state for a reviewer nobody configured.
 
 The Reviewer reads the repository's agent instruction file — `AGENTS.md` by default,
 `paths.agents_file` where a repository keeps it elsewhere — for its role and the binding
@@ -165,6 +166,21 @@ inherits it. Requires `codex` on `PATH` and an authenticated session (`codex log
 verify the toolchain with `codex doctor`, and what this framework resolves with
 `mf doctor`.
 
+### `agy`
+
+Antigravity's CLI, prompt-driven like `gemini`: the Reviewer role, the instruction file
+and the diff are handed to it through `{{.Prompt}}`. It declares `structured = true`, so
+it is asked for the findings schema and its severities survive into the record rather
+than being kept as prose.
+
+It is a gateway rather than a vendor — the same command reaches several — so which
+vendor actually reviews depends entirely on the model pinned on the backend. That is why
+a chain that names it must pin a model from a provider the Author is not: the
+cross-provider rule compares labels, and a same-vendor model behind a differently
+labelled gateway satisfies it by name while defeating it in substance. Effort is baked
+into the model id (`-high`, `-low`), so `--effort` is not passed: two settings for one
+dial is a way to have them disagree.
+
 ### `gemini`
 
 Gemini CLI (Google), also agentic, but prompt-driven rather than repository-reading: the
@@ -287,9 +303,15 @@ The project layer outranks the machine layer: a machine may complete a chain a r
 left undeclared, never substitute one the repository chose. The environment outranks both,
 for one run and only for the person running it.
 
-Every key has an environment form, mechanically: uppercase the key and replace each dot
-with an underscore, prefixed `MF_`. `roles.r2.backends` is `MF_ROLES_R2_BACKENDS`;
+The environment form of a key is mechanical: uppercase the key and replace each dot with
+an underscore, prefixed `MF_`. `roles.r2.backends` is `MF_ROLES_R2_BACKENDS`;
 `review.base` is `MF_REVIEW_BASE`.
+
+It reaches a key the cascade already resolved. Every key in the table below is one of
+those, so each has a working environment form. A key under an entity no file defines —
+`backends.<name>.model` for a backend nothing declares — has nothing to override, and the
+variable is ignored rather than creating one: a backend defined by an environment
+variable would be a reviewer no repository chose and no clone can reproduce.
 
 | Key | Meaning | Default |
 |---|---|---|
@@ -305,6 +327,7 @@ with an underscore, prefixed `MF_`. `roles.r2.backends` is `MF_ROLES_R2_BACKENDS
 | `backends.<name>.command`, `.args` | For a `cli` backend | — |
 | `backends.<name>.unavailable_patterns` | What this tool's failures look like when it is unavailable | — |
 | `backends.<name>.model`, `.effort` | Pins one backend, outranking the chain-wide `review.*` | — |
+| `backends.<name>.structured` | This `cli` answers with the findings schema the role prompt asks for, so its severities survive and can block | `false` |
 | `providers.<name>.kind` | `openai-compatible`, `anthropic` or `google` | `openai-compatible` |
 | `providers.<name>.endpoint` | Base URL, without `/chat/completions` | — |
 | `providers.<name>.api_key_env` | **Name** of the environment variable holding the key | — |

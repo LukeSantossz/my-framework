@@ -79,7 +79,13 @@ func userHome(env Env) string {
 }
 
 func statuslineRender(env Env, args []string) int {
-	noRefresh := env.Getenv("MYFW_STATUSLINE_NO_REFRESH") != ""
+	// `MF_` is the prefix every other variable this binary reads carries, and
+	// the one r2_gate.md states. `MYFW_` predates that rule and is still read,
+	// because the Node renderer under scripts/statusline honours it and a
+	// Developer's agent configuration may already set it: dropping a name that
+	// silently turns a behaviour back on is worse than carrying two.
+	noRefresh := env.Getenv("MF_STATUSLINE_NO_REFRESH") != "" ||
+		env.Getenv("MYFW_STATUSLINE_NO_REFRESH") != ""
 	for _, a := range args {
 		switch a {
 		case "--no-refresh":

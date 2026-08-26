@@ -24,8 +24,12 @@ The explainer is a role in the same configuration as R1, R2 and R3
 (`roles.explain.backends`), so which model explains a change is chosen the same
 way as which model reviews one. Only a prompt-driven backend can serve it: an
 agentic reviewer answers with a review, and this asks for an explainer. The
-command exits zero on every path — including every path where no explainer was
-produced — because an aid that can fail a run is a gate wearing another name.
+command fails no path where the explainer itself could not be produced — an aid
+that can fail a run is a gate wearing another name. What it does refuse is the
+caller's own error: a mistyped flag, an invalid difficulty, a destination it
+will not write to, and a configuration that does not load. Refusing those is not
+the aid gating a change; it is the command saying it was asked for something it
+cannot do.
 
 ## The Artifact
 

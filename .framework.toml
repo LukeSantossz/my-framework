@@ -127,10 +127,8 @@ unavailable_patterns = [
   "network error", "connection (refused|reset)",
 ]
 
-# Also agentic, but prompt-driven rather than repository-reading, so the role
+# Antigravity's CLI. Prompt-driven rather than repository-reading, so the role
 # instructions and the diff are handed to it through {{.Prompt}}.
-# Antigravity's CLI. Prompt-driven like gemini, so the role instructions and the
-# diff are handed to it through {{.Prompt}}.
 #
 # It is a gateway rather than a vendor: the same command reaches Google,
 # Anthropic and open models, so which vendor actually reviews depends entirely
@@ -157,6 +155,9 @@ unavailable_patterns = [
   "network error", "connection (refused|reset)",
 ]
 
+# Gemini CLI. Also prompt-driven, and pinning no model of its own: it takes the
+# chain-wide `review.model` when one is set, and whatever the CLI defaults to
+# when none is. It declares no schema, so its answer is recorded as prose.
 [backends.gemini]
 kind = "cli"
 provider = "google"

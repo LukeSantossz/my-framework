@@ -6,6 +6,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+
+	"github.com/LukeSantossz/my-framework/internal/statusline"
 	"strings"
 	"testing"
 	"time"
@@ -234,5 +236,40 @@ func TestStatuslineWithNoActionRenders(t *testing.T) {
 	}
 	if out.String() == "" {
 		t.Error("the default action produced no line")
+	}
+}
+
+func TestStatuslineRenderHonoursThePrefixedNoRefreshName(t *testing.T) {
+	// R2 caught the older `MYFW_` name breaking the `MF_` prefix every other
+	// variable carries. Both are read: dropping a name that silently turns the
+	// background fetch back on is worse than carrying two.
+	//
+	// The claim is what the assertion watches, not the exit code: scheduleRefresh
+	// takes the lock before it spawns anything, so a lock file is the observable
+	// trace of a fetch having been scheduled. R3 caught the first version of
+	// this test asserting only that something rendered, which stayed true with
+	// the switch ignored.
+	//
+	// There is no positive counterpart here on purpose: asserting that a claim
+	// IS taken means letting scheduleRefresh spawn the detached child, and in a
+	// test binary `os.Executable()` is that binary — the orphaned process
+	// docs/specs/0029 exists to stop. The assertion below was verified by
+	// mutation instead: forcing noRefresh to false fails it.
+	for _, name := range []string{"MF_STATUSLINE_NO_REFRESH", "MYFW_STATUSLINE_NO_REFRESH"} {
+		t.Run(name, func(t *testing.T) {
+			home := t.TempDir()
+			e, out, _ := statuslineEnv(t, "{}", map[string]string{
+				name: "1", "NO_COLOR": "1", "CLAUDE_HOME": home,
+			}, "statusline", "render")
+			if code := Run(e); code != 0 {
+				t.Fatalf("exit %d", code)
+			}
+			if out.String() == "" {
+				t.Error("nothing rendered")
+			}
+			if _, err := os.Stat(filepath.Join(home, statusline.LockFileName)); err == nil {
+				t.Errorf("%s did not suppress the refresh: a claim was taken", name)
+			}
+		})
 	}
 }
