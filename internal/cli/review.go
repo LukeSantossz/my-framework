@@ -347,10 +347,7 @@ func buildBackend(env Env, cfg *config.Config, name string) (backend.Backend, er
 		}, nil
 
 	case "api":
-		var provider config.Provider
-		if cfg.Machine != nil {
-			provider = cfg.Machine.Providers[spec.Provider]
-		}
+		provider := cfg.Provider(spec.Provider)
 		key := ""
 		if provider.APIKeyEnv != "" {
 			key = env.Getenv(provider.APIKeyEnv)

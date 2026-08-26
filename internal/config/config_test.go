@@ -957,3 +957,80 @@ roles = ["shared"]
 		t.Fatalf("a path inside the repository was refused: %v", err)
 	}
 }
+
+func TestProviderResolvesItsRouteThroughTheCascade(t *testing.T) {
+	// `mf review` read the decoded machine file directly while `mf config get`
+	// answered from the resolved table, so an override that redirected a
+	// provider reported as taken and changed nothing: the diff went to the
+	// configured host anyway.
+	opts := fixture(t, "", `version = 1
+
+[providers.local]
+kind = "openai-compatible"
+endpoint = "http://from-file"
+api_key_env = "FROM_FILE"
+`)
+	opts.Env = func(name string) string {
+		switch name {
+		case "MF_PROVIDERS_LOCAL_ENDPOINT":
+			return "http://from-env"
+		case "MF_PROVIDERS_LOCAL_API_KEY_ENV":
+			return "FROM_ENV"
+		}
+		return ""
+	}
+	cfg, err := Load(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := cfg.Provider("local")
+	if got.Endpoint != "http://from-env" {
+		t.Errorf("endpoint resolved to %q, want the override", got.Endpoint)
+	}
+	if got.APIKeyEnv != "FROM_ENV" {
+		t.Errorf("api_key_env resolved to %q, want the override", got.APIKeyEnv)
+	}
+	if got.Kind != "openai-compatible" {
+		t.Errorf("kind resolved to %q, want the file's value", got.Kind)
+	}
+	// The question must have one answer, whichever way it is asked.
+	if v, _, _ := cfg.Get("providers.local.endpoint"); v != got.Endpoint {
+		t.Errorf("`config get` says %q and the resolver says %q", v, got.Endpoint)
+	}
+}
+
+func TestReviewModelIsResolvableSoItsEnvironmentFormLands(t *testing.T) {
+	// Documented as a one-run override and silently ignored: the environment
+	// layer only overrides keys some layer already wrote, and nothing wrote
+	// this one.
+	opts := fixture(t, "", "")
+	opts.Env = func(name string) string {
+		if name == "MF_REVIEW_MODEL" {
+			return "gpt-9"
+		}
+		return ""
+	}
+	cfg, err := Load(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, prov, ok := cfg.Get("review.model")
+	if !ok || v != "gpt-9" {
+		t.Fatalf("review.model resolved to %q (found=%v), want the override", v, ok)
+	}
+	if prov.Layer != LayerEnv {
+		t.Errorf("provenance says %v, want the environment layer", prov.Layer)
+	}
+}
+
+func TestReviewModelDefaultsToNoModelAtAll(t *testing.T) {
+	// Declaring the key must not impose a model: a default here would override
+	// every backend that names its own.
+	cfg, err := Load(fixture(t, "", ""))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v, _, _ := cfg.Get("review.model"); v != "" {
+		t.Errorf("review.model resolved to %q, want empty", v)
+	}
+}
