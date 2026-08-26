@@ -146,6 +146,10 @@ provider = "google"
 command = "agy"
 model = "gemini-3.1-pro-high"
 args = ["--print", "{{.Prompt}}", "--model", "{{.Model}}"]
+# It answers with the findings schema the role prompt asks for, so its
+# severities survive and `mf eval` can score it against the corpus. A backend
+# that stops answering that way has its prose recorded, not read as clean.
+structured = true
 unavailable_patterns = [
   "quota", "rate limit", "resource[_ ]exhausted",
   "not authenticated", "unauthorized", "401", "403",

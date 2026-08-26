@@ -111,6 +111,7 @@ type Backend struct {
 	UnavailablePatterns []string `toml:"unavailable_patterns"`
 	Model               string   `toml:"model"`
 	Effort              string   `toml:"effort"`
+	Structured          bool     `toml:"structured"`
 
 	Endpoint  string `toml:"endpoint"`
 	APIKeyEnv string `toml:"api_key_env"`
@@ -351,6 +352,9 @@ func (w writer) backends(backends map[string]Backend) {
 			"backends", name, "unavailable_patterns")
 		w.set(prefix+"model", b.Model, "backends", name, "model")
 		w.set(prefix+"effort", b.Effort, "backends", name, "effort")
+		if b.Structured {
+			w.set(prefix+"structured", "true", "backends", name, "structured")
+		}
 	}
 }
 

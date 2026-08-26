@@ -134,6 +134,18 @@ type CLI struct {
 	// treats it. Zero means no deadline, which is only ever right in a test.
 	Budget time.Duration
 
+	// Structured says this command answers with the findings schema the role
+	// prompt asks for.
+	//
+	// It is declared rather than detected. Guessing would make one backend
+	// behave two ways depending on whether a given answer happened to parse,
+	// and the severity of a finding decides whether a push is blocked. A
+	// backend that declares it and then answers prose has the prose recorded,
+	// exactly as the api kind does: a malformed answer is still an answer, and
+	// reading it as a clean review is the false negative this framework treats
+	// as the worst outcome.
+	Structured bool
+
 	// Model and Effort override the chain-wide values for this backend only.
 	Model  string
 	Effort string
@@ -238,9 +250,18 @@ func (c *CLI) Review(ctx context.Context, req Request) (report.Result, error) {
 		return report.Result{}, &Unavailable{Backend: c.BackendName,
 			Reason: c.Command + " exited successfully but produced no output, so nothing was reviewed"}
 	}
-	// An agentic CLI cannot be asked for a schema, so its output is recorded
-	// verbatim as one finding. Reporting nothing would be read as a clean
-	// review.
+	// A CLI that has not declared the schema has its output recorded verbatim
+	if c.Structured {
+		if findings, parseErr := report.ParseFindings(out); parseErr == nil {
+			return report.Result{
+				Backend:   c.BackendName,
+				Provider:  c.ProviderName,
+				Model:     req.Model,
+				Truncated: req.Truncated,
+				Findings:  findings,
+			}, nil
+		}
+	}
 	return report.Unstructured(c.BackendName, c.ProviderName, req.Model, out), nil
 }
 

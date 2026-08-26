@@ -608,3 +608,56 @@ func TestAKilledCommandCannotHoldItsOutputPipeOpenForever(t *testing.T) {
 		t.Error("no WaitDelay: a killed command can hold its output pipe open past the budget")
 	}
 }
+
+func TestACLIThatAnswersWithTheSchemaIsReadAsFindings(t *testing.T) {
+	// The kind's comment said an agentic CLI cannot be asked for a schema. Some
+	// can, and one that answers with the findings shape had it recorded as
+	// prose: its severities were discarded, so it could never block, and
+	// `mf eval` scored it zero because every finding carried the category
+	// `unstructured` rather than the one it reported.
+	answer := "```json\n" + `{"findings":[{"category":"correctness","severity":"blocking",` +
+		`"file":"x.go","line":2,"summary":"out of range","rationale":"len(s) is not an index"}]}` + "\n```"
+	c := &CLI{
+		BackendName: "agy", ProviderName: "google", Structured: true,
+		LookPath: func(string) (string, error) { return "agy", nil },
+		Run: func(context.Context, string, string, []string) (string, error) { return answer, nil },
+	}
+	res, err := c.Review(context.Background(), req())
+	if err != nil {
+		t.Fatalf("Review: %v", err)
+	}
+	if res.Unstructured {
+		t.Fatal("the answer was recorded as prose")
+	}
+	if len(res.Findings) != 1 {
+		t.Fatalf("findings = %d, want 1", len(res.Findings))
+	}
+	if got := string(res.Findings[0].Category); got != "correctness" {
+		t.Errorf("category %q, want correctness", got)
+	}
+	if !res.HasBlocking() {
+		t.Error("a blocking severity did not survive, so this review could never block a push")
+	}
+}
+
+func TestACLIThatPromisesTheSchemaAndAnswersProseIsStillRecorded(t *testing.T) {
+	// A backend that stops answering in the shape it declared must not be read
+	// as a clean review. The prose is kept, exactly as the api kind keeps it.
+	c := &CLI{
+		BackendName: "agy", ProviderName: "google", Structured: true,
+		LookPath: func(string) (string, error) { return "agy", nil },
+		Run: func(context.Context, string, string, []string) (string, error) {
+			return "I had a look and it seems fine.", nil
+		},
+	}
+	res, err := c.Review(context.Background(), req())
+	if err != nil {
+		t.Fatalf("Review: %v", err)
+	}
+	if !res.Unstructured {
+		t.Error("prose from a backend that promised the schema was not marked unstructured")
+	}
+	if len(res.Findings) != 1 || !strings.Contains(res.Findings[0].Summary, "seems fine") {
+		t.Errorf("the prose was lost: %+v", res.Findings)
+	}
+}
