@@ -401,7 +401,7 @@ func generateAgentFiles(env Env) ([]activate.Step, error) {
 
 	var steps []activate.Step
 	if len(pending) > 0 {
-		results, syncErr := agents.Sync(agents.Options{RepoRoot: env.RepoRoot, Targets: pending, SourcePath: agentsSource(cfg)})
+		results, syncErr := agents.Sync(agents.Options{RepoRoot: env.RepoRoot, Targets: pending, SourcePath: agentsSource(cfg), OverlayPath: agentsOverlay(cfg)})
 		if syncErr != nil {
 			msg := "not generated: " + syncErr.Error()
 			return append(steps, activate.Step{Name: "agent files", Message: msg}), errors.New(msg)

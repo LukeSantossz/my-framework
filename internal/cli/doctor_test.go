@@ -177,6 +177,42 @@ func TestAgentsSyncThenCheckPasses(t *testing.T) {
 	}
 }
 
+func TestAgentsSyncReadsTheConfiguredOverlay(t *testing.T) {
+	// The key has to reach the generator. Without this the package tests pass
+	// on an Options field nothing in the CLI ever sets.
+	project := "version = 1\n\n[paths]\nagents_overlay = \"docs/agents/project.md\"\n\n" +
+		"[agents.claude]\nfile = \"CLAUDE.md\"\nroles = [\"shared\"]\n"
+	root := gitRepo(t, project)
+	if err := os.MkdirAll(filepath.Join(root, "docs", "agents"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	src := "# Instructions\n\n<!-- mf:role shared -->\n## Binding\n\nRead the standards.\n"
+	if err := os.WriteFile(filepath.Join(root, "docs", "agents", "instructions.md"), []byte(src), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	overlay := "<!-- mf:role shared -->\n## This project\n\nThe toolchain is pinned.\n"
+	if err := os.WriteFile(filepath.Join(root, "docs", "agents", "project.md"), []byte(overlay), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	e, _, errOut := reviewEnv(t, root, "agents", "sync")
+	if code := Run(e); code != 0 {
+		t.Fatalf("sync exit %d: %s", code, errOut.String())
+	}
+	generated, err := os.ReadFile(filepath.Join(root, "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(generated), "The toolchain is pinned.") {
+		t.Errorf("the configured overlay did not reach the generated file:\n%s", generated)
+	}
+
+	e2, out2, _ := reviewEnv(t, root, "check", "agents")
+	if code := Run(e2); code != 0 {
+		t.Errorf("the agents gate failed right after sync:\n%s", out2.String())
+	}
+}
+
 func TestCheckFailsOnInstructionFileDrift(t *testing.T) {
 	// The generated files are only a single source if editing the output is
 	// caught; otherwise they are the old duplication with extra steps.

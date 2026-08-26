@@ -165,7 +165,10 @@ type Paths struct {
 	Specs        string `toml:"specs"`
 	ADR          string `toml:"adr"`
 	AgentsSource string `toml:"agents_source"`
-	AgentsFile   string `toml:"agents_file"`
+	// AgentsOverlay is this repository's own instruction sections, appended to
+	// the generated vendor files. Empty is a repository that declared none.
+	AgentsOverlay string `toml:"agents_overlay"`
+	AgentsFile    string `toml:"agents_file"`
 }
 
 // ProjectFile is the committed policy file. It carries Providers only so that a
@@ -496,7 +499,11 @@ func (c *Config) applyDefaults() {
 		"paths.specs":            DefaultSpecsDir,
 		"paths.adr":              DefaultADRDir,
 		"paths.agents_source":    DefaultAgentsSource,
-		"paths.agents_file":      DefaultAgentsFile,
+		// Declared empty so the key resolves and MF_PATHS_AGENTS_OVERLAY lands.
+		// There is no default overlay: a repository either has its own
+		// instructions or it does not.
+		"paths.agents_overlay": "",
+		"paths.agents_file":    DefaultAgentsFile,
 	} {
 		c.set(key, value, LayerDefault, "built-in default")
 	}
@@ -577,6 +584,7 @@ func (c *Config) applyProject(p *ProjectFile, md toml.MetaData, source string) {
 	w.set("paths.specs", p.Paths.Specs, "paths", "specs")
 	w.set("paths.adr", p.Paths.ADR, "paths", "adr")
 	w.set("paths.agents_source", p.Paths.AgentsSource, "paths", "agents_source")
+	w.set("paths.agents_overlay", p.Paths.AgentsOverlay, "paths", "agents_overlay")
 	w.set("paths.agents_file", p.Paths.AgentsFile, "paths", "agents_file")
 }
 
@@ -979,6 +987,7 @@ func pathProblems(p Paths, md toml.MetaData) []Problem {
 		{"paths.specs", "specs", p.Specs},
 		{"paths.adr", "adr", p.ADR},
 		{"paths.agents_source", "agents_source", p.AgentsSource},
+		{"paths.agents_overlay", "agents_overlay", p.AgentsOverlay},
 		{"paths.agents_file", "agents_file", p.AgentsFile},
 	} {
 		if !md.IsDefined("paths", cfgPath.leaf) {

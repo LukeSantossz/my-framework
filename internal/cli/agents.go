@@ -47,7 +47,7 @@ func runAgents(env Env, args []string) int {
 		fmt.Fprintln(env.Stdout, "no [agents.*] declared; nothing to generate")
 		return 0
 	}
-	opts := agents.Options{RepoRoot: env.RepoRoot, Targets: targets, SourcePath: agentsSource(cfg)}
+	opts := agents.Options{RepoRoot: env.RepoRoot, Targets: targets, SourcePath: agentsSource(cfg), OverlayPath: agentsOverlay(cfg)}
 
 	if action == "sync" {
 		results, err := agents.Sync(opts)
@@ -90,5 +90,5 @@ func runAgents(env Env, args []string) int {
 }
 
 func agentsCheck(env Env, cfg *config.Config, targets []agents.Target) ([]agents.Result, error) {
-	return agents.Check(agents.Options{RepoRoot: env.RepoRoot, Targets: targets, SourcePath: agentsSource(cfg)})
+	return agents.Check(agents.Options{RepoRoot: env.RepoRoot, Targets: targets, SourcePath: agentsSource(cfg), OverlayPath: agentsOverlay(cfg)})
 }

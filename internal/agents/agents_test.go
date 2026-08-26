@@ -460,3 +460,176 @@ func TestRenderDoesNotRewriteTheConsumerOwnedSpecAndADRPaths(t *testing.T) {
 		}
 	}
 }
+
+// --- overlay ----------------------------------------------------------------
+
+// overlaySource is the repository's own instructions. Its paths are this
+// repository's, not the submodule's, so nothing here may be rewritten.
+const overlaySource = "<!-- mf:role author -->\n" +
+	"## This project\n" +
+	"\n" +
+	"The toolchain is pinned in `docs/standards/toolchain.md`; another SDK rewrites the lockfile.\n" +
+	"\n" +
+	"<!-- mf:role reviewer -->\n" +
+	"## Reviewing here\n" +
+	"\n" +
+	"Classification collapses six causes into one null.\n"
+
+func mustParseOverlay(t *testing.T) Source {
+	t.Helper()
+	src := mustParse(t)
+	overlay, err := Parse(overlaySource)
+	if err != nil {
+		t.Fatalf("Parse overlay: %v", err)
+	}
+	src.Overlay = overlay.Sections
+	return src
+}
+
+func TestAnOverlaySectionReachesTheVendorFileForARoleItPlays(t *testing.T) {
+	// A repository that vendors the corpus has nowhere else to state an
+	// obligation no shipped document can guess: editing the generated file is
+	// what `mf check agents` reports as drift.
+	src := mustParseOverlay(t)
+	out, err := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"}}, SourcePath)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(out, "## This project") {
+		t.Errorf("the overlay's author section is missing:\n%s", out)
+	}
+	if strings.Index(out, "## This project") < strings.Index(out, "## Your role as Author") {
+		t.Errorf("the overlay reads before the framework section it refines:\n%s", out)
+	}
+}
+
+func TestAnOverlaySectionForARoleTheVendorDoesNotPlayIsLeftOut(t *testing.T) {
+	src := mustParseOverlay(t)
+	out, err := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"}}, SourcePath)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(out, "## Reviewing here") {
+		t.Errorf("the reviewer overlay reached a file that does not play the role:\n%s", out)
+	}
+}
+
+func TestOverlayTextIsNotPathRewritten(t *testing.T) {
+	// The overlay is the repository's text about its own layout. Its paths are
+	// already correct, so a rewrite could only damage them.
+	src := mustParseOverlay(t)
+	out, err := Render(src, Target{
+		Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"},
+		PathPrefix: ".standards/docs/standards",
+	}, vendoredPath)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(out, "`docs/standards/toolchain.md`") {
+		t.Errorf("the overlay's own path was rewritten:\n%s", out)
+	}
+}
+
+func TestTheOverlayMayDeclareARoleTheSourceDoesNot(t *testing.T) {
+	src := mustParse(t)
+	overlay, err := Parse("<!-- mf:role project -->\n## Project\n\nLocal only.\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src.Overlay = overlay.Sections
+	out, err := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "project"}}, SourcePath)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(out, "Local only.") {
+		t.Errorf("a role only the overlay declares was refused or dropped:\n%s", out)
+	}
+}
+
+// overlayFixture is the sync fixture with a repository-owned overlay beside the
+// source.
+func overlayFixture(t *testing.T) Options {
+	t.Helper()
+	o := fixture(t)
+	o.OverlayPath = "docs/agents/project.md"
+	if err := os.WriteFile(filepath.Join(o.RepoRoot, filepath.FromSlash(o.OverlayPath)), []byte(overlaySource), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	return o
+}
+
+func TestSyncWritesTheOverlayIntoEveryVendorFile(t *testing.T) {
+	o := overlayFixture(t)
+	if _, err := Sync(o); err != nil {
+		t.Fatalf("Sync: %v", err)
+	}
+	claude, err := os.ReadFile(filepath.Join(o.RepoRoot, "CLAUDE.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(claude), "## This project") {
+		t.Errorf("CLAUDE.md carries no overlay:\n%s", claude)
+	}
+	codex, err := os.ReadFile(filepath.Join(o.RepoRoot, "AGENTS.md"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(codex), "## Reviewing here") {
+		t.Errorf("AGENTS.md carries no overlay:\n%s", codex)
+	}
+}
+
+func TestAConfiguredOverlayThatCannotBeReadFailsSyncAndCheck(t *testing.T) {
+	// A silently dropped overlay is a file that looks complete and has lost
+	// exactly the obligations nothing else carries.
+	o := fixture(t)
+	o.OverlayPath = "docs/agents/project.md"
+	if _, err := Sync(o); err == nil {
+		t.Error("Sync accepted a configured overlay it could not read")
+	}
+	if _, err := Check(o); err == nil {
+		t.Error("Check accepted a configured overlay it could not read")
+	}
+}
+
+func TestCheckReportsDriftWhenTheOverlayChangedAndSyncWasNotRun(t *testing.T) {
+	o := overlayFixture(t)
+	if _, err := Sync(o); err != nil {
+		t.Fatal(err)
+	}
+	edited := overlaySource + "\nOne more obligation.\n"
+	if err := os.WriteFile(filepath.Join(o.RepoRoot, filepath.FromSlash(o.OverlayPath)), []byte(edited), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	results, err := Check(o)
+	if err != nil {
+		t.Fatalf("Check: %v", err)
+	}
+	drifted := false
+	for _, r := range results {
+		if r.Drifted {
+			drifted = true
+		}
+	}
+	if !drifted {
+		t.Error("an edited overlay was not reported as drift")
+	}
+}
+
+func TestNoOverlayConfiguredGeneratesTheSameFile(t *testing.T) {
+	// The key is opt-in: a repository that declares none must generate exactly
+	// what it generated before the key existed.
+	src := mustParse(t)
+	want, err := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"}}, SourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src.Overlay = nil
+	got, err := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"}}, SourcePath)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got != want {
+		t.Errorf("an empty overlay changed the output:\n%s", got)
+	}
+}

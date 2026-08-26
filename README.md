@@ -168,6 +168,17 @@ path_prefix = ".standards/docs/standards"
 
 There is no sync command, because the submodule *is* the corpus. Update it with `git submodule update --remote`, then `mf agents sync` regenerates the vendor instruction files.
 
+### Your own instructions in the generated files
+
+Everything above is the framework's text. What your repository must tell an agent — the toolchain pin, the isolate the work runs in, the decision a result surface may not offer retry until — no shipped document can guess, and editing the generated file is what the gate reports as drift. Declare a second, repository-owned source instead:
+
+```toml
+[paths]
+agents_overlay = "docs/agents/project.md"
+```
+
+Mark it up with the same `<!-- mf:role author -->` markers. Each vendor file receives the framework's sections for the roles it plays, then yours, in that order. Your sections are never path-rewritten: they are your text about your layout, so they already resolve. A configured overlay that cannot be read fails `mf agents sync` and `mf check agents` rather than being skipped.
+
 ## API Reference
 
 ### Activation and diagnosis
@@ -220,6 +231,7 @@ There is no sync command, because the submodule *is* the corpus. Update it with 
 | `paths.specs` / `paths.adr` | `docs/specs` / `docs/adr` | The durable archives the Spec and records gates read. |
 | `paths.agents_file` | `AGENTS.md` | The instruction file a repository-reading backend finds on disk. |
 | `paths.agents_source` | `docs/agents/instructions.md` | The single source the vendor files are generated from. |
+| `paths.agents_overlay` | *(none)* | This repository's own instruction sections, appended to the generated files. Same role markers; never path-rewritten. |
 | `review.base` | `main` | The ref a change is compared against. |
 | `review.effort` | `high` | Reasoning effort passed to a backend that takes one. |
 | `review.max_diff_bytes` | `30000` | The diff budget a backend is handed. |
