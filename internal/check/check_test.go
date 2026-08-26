@@ -1006,3 +1006,39 @@ func TestRecordsFailsLoudlyWhenTheArchiveBlockCannotBeRead(t *testing.T) {
 		t.Fatal("want a hard error when the archive block cannot be read")
 	}
 }
+
+func TestDocsIgnoresAMarkdownReferenceInsideAURL(t *testing.T) {
+	// The gate runs in the pre-push hook, so a standard that cites an upstream
+	// document by URL stopped the push, naming a path that was never a path.
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "INDEX.md"), "# Index\n\n- `code_conventions.md`: rules.\n")
+	writeFile(t, filepath.Join(dir, "code_conventions.md"),
+		"# Conventions\n\nSee https://github.com/conventional-commits/spec/blob/main/SPECIFICATION.md for the upstream text.\n")
+
+	res, err := Docs(Options{StandardsDir: dir})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, p := range res.Problems {
+		if strings.Contains(p.Message, "SPECIFICATION.md") {
+			t.Errorf("a URL was read as a repository path: %s", p.Message)
+		}
+	}
+}
+
+func TestCountCriteriaCountsAnOrderedList(t *testing.T) {
+	// The Gate rejected such a spec with "states no criterion", which is the
+	// one message that cannot tell the author what to change.
+	if n := countCriteria("1. returns_empty_list_when_no_matches\n2. refuses_an_absolute_path\n"); n != 2 {
+		t.Errorf("counted %d criteria in an ordered list, want 2", n)
+	}
+	if n := countCriteria("1) first\n2) second\n3) third\n"); n != 3 {
+		t.Errorf("counted %d criteria in a paren-numbered list, want 3", n)
+	}
+	if n := countCriteria("Prose about the change.\n"); n != 0 {
+		t.Errorf("counted %d criteria in prose, want 0", n)
+	}
+	if n := countCriteria("- a\n- b\n"); n != 2 {
+		t.Errorf("counted %d criteria in a bullet list, want 2", n)
+	}
+}
