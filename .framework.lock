@@ -3,7 +3,7 @@
 # A pinned model that no longer matches the configuration is reported, never
 # silently corrected: which side is right is a decision, not a default.
 version = 1
-framework_version = "v0.6.1"
+framework_version = "v0.6.2"
 
 [models]
   [models.codex]

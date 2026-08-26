@@ -102,6 +102,35 @@ func InstallHooks(root string) error {
 	return vcs.Open(root).ConfigSetLocal("core.hooksPath", HooksDir)
 }
 
+// NonExecutableHooks names the hooks the index records as non-executable.
+//
+// git will not run a hook a checkout leaves non-executable, so these are gates
+// that exist, are wired, and do not fire — for everyone except the machine that
+// wrote them, if that machine has core.fileMode false. Reading the index rather
+// than the filesystem is the whole point: the filesystem is what looks right
+// there and what nobody else receives.
+//
+// A repository with no index, or with the hooks not staged yet, reports nothing:
+// there is no answer to give until the hooks are tracked.
+func NonExecutableHooks(root string) []string {
+	entries, err := os.ReadDir(filepath.Join(root, HooksDir))
+	if err != nil {
+		return nil
+	}
+	repo := vcs.Open(root)
+	var off []string
+	for _, e := range entries {
+		if e.IsDir() {
+			continue
+		}
+		name := path.Join(HooksDir, e.Name())
+		if executable, tracked := repo.IndexIsExecutable(name); tracked && !executable {
+			off = append(off, name)
+		}
+	}
+	return off
+}
+
 // UninstallHooks removes the wiring this framework installed, leaving the
 // versioned directory alone. Idempotent, and it removes only what mf owns.
 //
@@ -596,6 +625,7 @@ func materialiseHooks(root string) (Step, error) {
 	if err != nil {
 		return step, err
 	}
+	repo := vcs.Open(root)
 	return step, fs.WalkDir(framework.Hooks, framework.HooksPrefix, func(p string, d fs.DirEntry, walkErr error) error {
 		if walkErr != nil || d.IsDir() {
 			return walkErr
@@ -605,7 +635,21 @@ func materialiseHooks(root string) (Step, error) {
 		if _, statErr := os.Stat(dest); statErr != nil {
 			return nil
 		}
-		return os.Chmod(dest, 0o755)
+		if chmodErr := os.Chmod(dest, 0o755); chmodErr != nil {
+			return chmodErr
+		}
+		// And in the index, which is what a clone gets. With core.fileMode
+		// false — the Windows default — the mode on disk is never read, so the
+		// hook above is staged 0644 and git refuses to run it on every platform
+		// that honours the bit. A repository adopted here shipped both gates
+		// switched off to everyone else, silently, which is the exact failure
+		// these hooks were rewritten to end.
+		//
+		// Failing to record it is not fatal: `mf init` outside a work tree, or
+		// with no index yet, still leaves a usable checkout. `mf doctor` reports
+		// what the index actually says.
+		_ = repo.MarkIndexExecutable(path.Join(HooksDir, rel))
+		return nil
 	})
 }
 

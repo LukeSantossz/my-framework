@@ -29,6 +29,36 @@ func (r *Repo) git(args ...string) (string, error) {
 	return stdout.String(), nil
 }
 
+// IndexIsExecutable reports whether the index records a path as executable.
+//
+// The index rather than the filesystem, because that is what a clone gets. On a
+// checkout with core.fileMode false — the Windows default — the mode on disk is
+// not read at all, so a file written 0755 is staged 0644 and every other
+// platform receives it non-executable.
+func (r *Repo) IndexIsExecutable(path string) (bool, bool) {
+	out, err := r.git("ls-files", "--stage", "--", path)
+	if err != nil {
+		return false, false
+	}
+	fields := strings.Fields(strings.TrimSpace(out))
+	if len(fields) == 0 {
+		return false, false
+	}
+	return fields[0] == "100755", true
+}
+
+// MarkIndexExecutable records a path as executable in the index, adding it if
+// the index does not carry it yet.
+//
+// git will not run a hook the checkout leaves non-executable, so a repository
+// adopted on Windows shipped both gates switched off to everyone else — the
+// "reports a wired gate and has none" failure these hooks exist to end, reached
+// through the one mechanism the hooks themselves cannot see.
+func (r *Repo) MarkIndexExecutable(path string) error {
+	_, err := r.git("update-index", "--add", "--chmod=+x", "--", path)
+	return err
+}
+
 // Resolves reports whether a ref exists in this repository.
 func (r *Repo) Resolves(ref string) bool {
 	_, err := r.git("rev-parse", "--verify", "--quiet", ref)

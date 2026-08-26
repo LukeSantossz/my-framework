@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	"github.com/LukeSantossz/my-framework/internal/config"
+	"github.com/LukeSantossz/my-framework/internal/vcs"
 	"github.com/LukeSantossz/my-framework/internal/version"
 )
 
@@ -865,5 +866,56 @@ func TestInitScaffoldForASubmoduleIsValidConfiguration(t *testing.T) {
 		if got, _, ok := cfg.Get(key); !ok || got != want {
 			t.Errorf("%s resolved to %q (found=%v), want %q", key, got, ok, want)
 		}
+	}
+}
+
+func TestInitRecordsTheHooksAsExecutableInTheIndex(t *testing.T) {
+	// git will not run a hook the checkout leaves non-executable. With
+	// core.fileMode false — the Windows default — the mode on disk is never
+	// read, so a hook written 0755 is staged 0644 and every clone receives both
+	// gates switched off. Two repositories were adopted that way before anyone
+	// looked at the index.
+	root := repo(t, false)
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	// The condition under test: git is told not to trust the filesystem.
+	run("config", "core.fileMode", "false")
+
+	if _, err := Init(InitOptions{RepoRoot: root, FrameworkVersion: "1.2.3"}); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"pre-push", "commit-msg"} {
+		executable, tracked := vcs.Open(root).IndexIsExecutable(HooksDir + "/" + name)
+		if !tracked {
+			t.Fatalf("%s is not in the index, so no clone gets it at all", name)
+		}
+		if !executable {
+			t.Errorf("the index records %s as non-executable; git skips it on every platform that honours the bit", name)
+		}
+	}
+	if off := NonExecutableHooks(root); len(off) > 0 {
+		t.Errorf("NonExecutableHooks reports %v right after init wrote them", off)
+	}
+}
+
+func TestNonExecutableHooksNamesAHookGitWillNotRun(t *testing.T) {
+	root := repo(t, false)
+	if _, err := Init(InitOptions{RepoRoot: root, FrameworkVersion: "1.2.3"}); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("git", "update-index", "--chmod=-x", "--", HooksDir+"/pre-push")
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Fatalf("staging a non-executable hook: %v\n%s", err, out)
+	}
+	off := NonExecutableHooks(root)
+	if len(off) != 1 || off[0] != HooksDir+"/pre-push" {
+		t.Errorf("got %v, want just the pre-push hook", off)
 	}
 }
