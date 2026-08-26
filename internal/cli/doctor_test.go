@@ -548,3 +548,109 @@ func TestInitRefusesASourceFilenameItCannotMaterialise(t *testing.T) {
 		t.Errorf("the refusal names neither the given nor the expected filename: %q", errOut.String())
 	}
 }
+
+// read is the counterpart to write, for an assertion that needs the file body.
+func read(t *testing.T, path string) string {
+	t.Helper()
+	body, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read %s: %v", path, err)
+	}
+	return string(body)
+}
+
+// vendorSubmodule declares a submodule and, when populated, gives it a corpus.
+func vendorSubmodule(t *testing.T, root, sub string, populated bool) {
+	t.Helper()
+	write(t, filepath.Join(root, ".gitmodules"),
+		"[submodule \""+sub+"\"]\n\tpath = "+sub+"\n\turl = https://example.invalid/mf.git\n")
+	dir := filepath.Join(root, filepath.FromSlash(sub))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !populated {
+		return
+	}
+	mk := func(path, text string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		write(t, path, text)
+	}
+	mk(filepath.Join(dir, "docs", "standards", "INDEX.md"), "# Development Standards Index\n")
+	mk(filepath.Join(dir, "docs", "agents", "instructions.md"),
+		"# Agent Instructions\n\nRead `docs/standards/INDEX.md`.\n\n<!-- mf:role shared -->\n## Binding\n\nRead `docs/standards/code_conventions.md`.\n\n<!-- mf:role author -->\n## Author\n\nWrite the change.\n\n<!-- mf:role reviewer -->\n## Reviewer\n\nReport findings.\n")
+}
+
+func TestInitAdoptsTheLayoutASubmoduleAlreadySupplies(t *testing.T) {
+	// It wrote a second corpus under docs/standards and generated instruction
+	// files pointing at it, so the repository ended up with two standards trees
+	// and every gate reading the one nothing maintains.
+	root := gitRepo(t, "")
+	vendorSubmodule(t, root, ".standards", true)
+	e, out, errOut := initEnv(t, root, filepath.Join(t.TempDir(), "config.toml"), "init")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, out.String(), errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, "docs", "standards", "INDEX.md")); err == nil {
+		t.Error("init wrote a second corpus beside the one the submodule supplies")
+	}
+	body := read(t, filepath.Join(root, ".framework.toml"))
+	if !strings.Contains(body, "standards = \".standards/docs/standards\"") {
+		t.Error("the policy file does not name the submodule the gates must read")
+	}
+	claude := read(t, filepath.Join(root, "CLAUDE.md"))
+	if !strings.Contains(claude, ".standards/docs/standards/INDEX.md") {
+		t.Error("the generated instruction file points at a directory that does not resolve here")
+	}
+}
+
+func TestInitRefusesADeclaredSubmoduleItCannotRead(t *testing.T) {
+	// The state every known consumer is in. Nothing here can tell whether that
+	// submodule supplies the corpus, and guessing writes the one thing a
+	// repository must never be given twice.
+	root := gitRepo(t, "")
+	vendorSubmodule(t, root, ".standards", false)
+	e, _, errOut := initEnv(t, root, filepath.Join(t.TempDir(), "config.toml"), "init")
+	if code := Run(e); code == 0 {
+		t.Fatal("init adopted a repository whose declared submodule it could not read")
+	}
+	said := errOut.String()
+	for _, want := range []string{".standards", "submodule update --init", "--standards"} {
+		if !strings.Contains(said, want) {
+			t.Errorf("the refusal does not name %q: %q", want, said)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(root, ".framework.toml")); err == nil {
+		t.Error("a refusal wrote the policy file anyway")
+	}
+}
+
+func TestInitHonoursAnExplicitStandardsDirectoryOverDetection(t *testing.T) {
+	root := gitRepo(t, "")
+	vendorSubmodule(t, root, ".standards", false)
+	e, out, errOut := initEnv(t, root, filepath.Join(t.TempDir(), "config.toml"),
+		"init", "--standards", "policy/std")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, out.String(), errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, "policy", "std", "INDEX.md")); err != nil {
+		t.Errorf("the named directory was not used: %v", err)
+	}
+}
+
+func TestInitIgnoresASubmoduleThatCarriesSomethingElse(t *testing.T) {
+	// A repository whose only submodule is a dependency adopts exactly as one
+	// with no submodule at all.
+	root := gitRepo(t, "")
+	vendorSubmodule(t, root, "vendor/lib", false)
+	write(t, filepath.Join(root, "vendor", "lib", "go.mod"), "module x\n")
+	e, out, errOut := initEnv(t, root, filepath.Join(t.TempDir(), "config.toml"), "init")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, out.String(), errOut.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, "docs", "standards", "INDEX.md")); err != nil {
+		t.Errorf("an unrelated submodule changed how the standards are written: %v", err)
+	}
+}

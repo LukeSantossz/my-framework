@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/LukeSantossz/my-framework/internal/config"
 	"github.com/LukeSantossz/my-framework/internal/version"
 )
 
@@ -710,6 +711,159 @@ func TestInitScaffoldTellsAnAdopterHowToReachAProvider(t *testing.T) {
 	for _, want := range []string{"--machine", "[paths]", "[agents.", "endpoint"} {
 		if !strings.Contains(string(body), want) {
 			t.Errorf("the scaffold never mentions %q:\n%s", want, body)
+		}
+	}
+}
+
+// --- vendored standards -------------------------------------------------------
+
+// vendor populates a declared submodule so it looks like a checked-out one.
+// Only INDEX.md matters: it is what makes the directory a standards corpus
+// rather than any other submodule a repository might carry.
+func vendor(t *testing.T, root, sub string, populated bool) {
+	t.Helper()
+	gitmodules := "[submodule \"" + sub + "\"]\n\tpath = " + sub + "\n\turl = https://example.invalid/mf.git\n"
+	if err := os.WriteFile(filepath.Join(root, ".gitmodules"), []byte(gitmodules), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	dir := filepath.Join(root, filepath.FromSlash(sub))
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !populated {
+		return
+	}
+	std := filepath.Join(dir, "docs", "standards")
+	if err := os.MkdirAll(std, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(std, "INDEX.md"), []byte("# Development Standards Index\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestVendoredStandardsFindsACheckedOutCorpus(t *testing.T) {
+	root := repo(t, true)
+	vendor(t, root, ".standards", true)
+	got, ok := VendoredStandards(root)
+	if !ok {
+		t.Fatal("a submodule carrying INDEX.md was not recognised as the corpus")
+	}
+	if got.Dir != ".standards" || !got.Populated {
+		t.Errorf("got %+v, want .standards populated", got)
+	}
+}
+
+func TestVendoredStandardsReportsASubmoduleThatIsNotCheckedOut(t *testing.T) {
+	// The state three of the four known consumers are in. Nothing here can tell
+	// whether that submodule supplies the corpus, and writing a second one is
+	// the drift this reporting exists to let the caller refuse.
+	root := repo(t, true)
+	vendor(t, root, ".standards", false)
+	got, ok := VendoredStandards(root)
+	if !ok {
+		t.Fatal("a declared submodule was not reported at all")
+	}
+	if got.Populated {
+		t.Errorf("got %+v, want an empty checkout", got)
+	}
+}
+
+func TestVendoredStandardsIgnoresASubmoduleThatCarriesSomethingElse(t *testing.T) {
+	// A repository whose only submodule is a dependency must adopt exactly as
+	// one with no submodule at all.
+	root := repo(t, true)
+	vendor(t, root, "vendor/lib", true)
+	if err := os.Remove(filepath.Join(root, "vendor", "lib", "docs", "standards", "INDEX.md")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "vendor", "lib", "go.mod"), []byte("module x\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if got, ok := VendoredStandards(root); ok {
+		t.Errorf("a populated non-corpus submodule was read as one: %+v", got)
+	}
+}
+
+func TestVendoredStandardsSaysNothingWithoutGitmodules(t *testing.T) {
+	if got, ok := VendoredStandards(repo(t, true)); ok {
+		t.Errorf("a repository declaring no submodule reported %+v", got)
+	}
+}
+
+func TestInitScaffoldsAPathsBlockNamingTheSubmodule(t *testing.T) {
+	// The commented block the scaffold ships changes nothing, and an adopter
+	// following it still has to hand-edit the one layout `mf init` can see for
+	// itself.
+	root := repo(t, true)
+	vendor(t, root, ".standards", true)
+	if _, err := Init(InitOptions{
+		RepoRoot: root, FrameworkVersion: "1.2.3",
+		StandardsDir: ".standards/docs/standards", AgentsSourceDir: ".standards/docs/agents",
+		StandardsSubmodule: ".standards",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, ".framework.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := string(body)
+	for _, want := range []string{
+		"\n[paths]\n",
+		`standards = ".standards/docs/standards"`,
+		`agents_source = ".standards/docs/agents/instructions.md"`,
+	} {
+		if !strings.Contains(got, want) {
+			t.Errorf("the scaffold does not carry %q", want)
+		}
+	}
+	if strings.Contains(got, "# [paths]") {
+		t.Error("the scaffold still carries the commented block as well")
+	}
+}
+
+func TestInitGivesEveryAgentTargetThePrefixTheSubmoduleNeeds(t *testing.T) {
+	// Without it the generated CLAUDE.md points at docs/standards/, which does
+	// not resolve in this layout.
+	root := repo(t, true)
+	vendor(t, root, ".standards", true)
+	if _, err := Init(InitOptions{
+		RepoRoot: root, FrameworkVersion: "1.2.3",
+		StandardsDir: ".standards/docs/standards", AgentsSourceDir: ".standards/docs/agents",
+		StandardsSubmodule: ".standards",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, ".framework.toml"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(body), `path_prefix = ".standards/docs/standards"`); n != 2 {
+		t.Errorf("got %d path_prefix declarations, want one per agent target", n)
+	}
+}
+
+func TestInitScaffoldForASubmoduleIsValidConfiguration(t *testing.T) {
+	root := repo(t, true)
+	vendor(t, root, ".standards", true)
+	if _, err := Init(InitOptions{
+		RepoRoot: root, FrameworkVersion: "1.2.3",
+		StandardsDir: ".standards/docs/standards", AgentsSourceDir: ".standards/docs/agents",
+		StandardsSubmodule: ".standards",
+	}); err != nil {
+		t.Fatal(err)
+	}
+	cfg, err := config.Load(config.Options{RepoRoot: root, Env: func(string) string { return "" }})
+	if err != nil {
+		t.Fatalf("the scaffold this build writes does not load: %v", err)
+	}
+	for key, want := range map[string]string{
+		"paths.standards":     ".standards/docs/standards",
+		"paths.agents_source": ".standards/docs/agents/instructions.md",
+	} {
+		if got, _, ok := cfg.Get(key); !ok || got != want {
+			t.Errorf("%s resolved to %q (found=%v), want %q", key, got, ok, want)
 		}
 	}
 }

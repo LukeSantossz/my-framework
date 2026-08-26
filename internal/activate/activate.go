@@ -311,6 +311,18 @@ type InitOptions struct {
 	// honest state for a repository that has not chosen one.
 	R2Backend string
 
+	// StandardsSubmodule is the submodule that supplies the corpus, when one
+	// does. Empty leaves the scaffold as shipped.
+	//
+	// It is separate from StandardsDir because the two answer different
+	// questions: StandardsDir says where to read, and this says that the
+	// layout has to be written down. The commented `[paths]` block the
+	// scaffold ships changes nothing until an adopter edits it, and a
+	// generated instruction file naming `docs/standards/` resolves to nothing
+	// in this layout — so a repository init can see is vendoring is one it
+	// must configure rather than describe.
+	StandardsSubmodule string
+
 	// AgentsSourceDir is the directory holding the document the vendor
 	// instruction files are generated from, as configured. Empty takes the
 	// layout this framework ships with. Materialising it anywhere else would
@@ -340,6 +352,9 @@ func Init(o InitOptions) ([]Step, error) {
 		steps = append(steps, Step{Name: "project file", Message: config.ProjectFileName + " already exists; left untouched"})
 	} else {
 		body := scaffold
+		if o.StandardsSubmodule != "" {
+			body = vendoredScaffold(body, o.StandardsSubmodule)
+		}
 		if o.R2Backend != "" {
 			body = strings.Replace(body, "[roles.r2]\nbackends = []",
 				fmt.Sprintf("[roles.r2]\nbackends = [%q]", o.R2Backend), 1)
@@ -367,7 +382,7 @@ func Init(o InitOptions) ([]Step, error) {
 	if agentsDir == "" {
 		agentsDir = framework.AgentDocsPrefix
 	}
-	sourceStep, err := materialise(o.RepoRoot, framework.AgentDocs, framework.AgentDocsPrefix, agentsDir, "agent source", "file", "")
+	sourceStep, err := writeAgentSource(o.RepoRoot, agentsDir)
 	if err != nil {
 		return steps, err
 	}
@@ -442,6 +457,21 @@ func Init(o InitOptions) ([]Step, error) {
 	return steps, nil
 }
 
+// writeAgentSource materialises the instruction source, unless the configured
+// location is inside a submodule.
+//
+// Same rule as the standards, for the same reason and one level down: a
+// submodule that supplies the corpus supplies the source beside it, so writing
+// here puts untracked files in somebody else's checkout — and it does it in a
+// directory `mf agents sync` then reads, so the generated instruction files
+// would be built from a copy the adopter never updates.
+func writeAgentSource(root, dir string) (Step, error) {
+	if sub, ok := insideSubmodule(root, dir); ok {
+		return Step{Name: "agent source", Message: dir + " is inside the " + sub + " submodule, which supplies it; nothing written"}, nil
+	}
+	return materialise(root, framework.AgentDocs, framework.AgentDocsPrefix, dir, "agent source", "file", "")
+}
+
 // writeStandards materialises the corpus this build carries, unless the
 // configured location is inside a submodule.
 //
@@ -478,6 +508,63 @@ func insideSubmodule(root, dir string) (string, bool) {
 		}
 	}
 	return "", false
+}
+
+// Vendored is a submodule this repository declares that may supply the corpus
+// instead of `mf init` writing one.
+type Vendored struct {
+	// Dir is the submodule's path, slash-separated and relative to the root.
+	Dir string
+	// Populated says the checkout is there and carries a standards corpus.
+	// False means the submodule is declared and not checked out, which is not
+	// evidence of anything: the directory of a corpus and the directory of an
+	// unrelated dependency look identical while both are empty.
+	Populated bool
+}
+
+// declaredSubmodules lists what .gitmodules declares, in file order.
+func declaredSubmodules(root string) []string {
+	body, err := os.ReadFile(filepath.Join(root, ".gitmodules"))
+	if err != nil {
+		return nil
+	}
+	var subs []string
+	for _, m := range submodulePath.FindAllStringSubmatch(string(body), -1) {
+		if sub := path.Clean(filepath.ToSlash(m[1])); sub != "" && sub != "." {
+			subs = append(subs, sub)
+		}
+	}
+	return subs
+}
+
+// VendoredStandards reports the submodule that already supplies this
+// repository's standards, so activation does not have to write a second copy.
+//
+// The evidence is the corpus itself — a checkout carrying its INDEX — rather
+// than the submodule's name or its remote. A name is a convention nothing
+// enforces, and matching the remote against this framework's own repository
+// would classify a fork, a mirror or an SSH clone as unrelated, which is
+// precisely the adopter this reads for.
+//
+// A declared submodule that is not checked out is reported with Populated
+// false rather than dropped. It cannot be classified, and the caller has to
+// know that it could not: writing the shipped layout there is how an adopter
+// ends up with two corpora, one of which nothing generates from.
+func VendoredStandards(root string) (Vendored, bool) {
+	var empty []string
+	for _, sub := range declaredSubmodules(root) {
+		index := filepath.Join(root, filepath.FromSlash(sub), filepath.FromSlash(framework.StandardsPrefix), "INDEX.md")
+		if _, err := os.Stat(index); err == nil {
+			return Vendored{Dir: sub, Populated: true}, true
+		}
+		if entries, err := os.ReadDir(filepath.Join(root, filepath.FromSlash(sub))); err != nil || len(entries) == 0 {
+			empty = append(empty, sub)
+		}
+	}
+	if len(empty) > 0 {
+		return Vendored{Dir: empty[0]}, true
+	}
+	return Vendored{}, false
 }
 
 // materialiseHooks writes the versioned hooks this build carries.
@@ -620,6 +707,7 @@ version = 1
 # standards = ".standards/docs/standards"
 # specs = "docs/specs"
 # adr = "docs/adr"
+# agents_source = ".standards/docs/agents/instructions.md"
 # agents_file = "AGENTS.md"
 
 [review]
@@ -674,3 +762,52 @@ roles = ["shared", "author"]
 file = "AGENTS.md"
 roles = ["shared", "reviewer"]
 `
+
+// vendoredVerb is the commented `[paths]` block the scaffold ships. It is
+// matched whole rather than line by line: a partial rewrite would leave half a
+// commented block above a live one, and the whole point of the substitution is
+// that an adopter reads one answer.
+const shippedPaths = `# [paths]
+# standards = ".standards/docs/standards"
+# specs = "docs/specs"
+# adr = "docs/adr"
+# agents_source = ".standards/docs/agents/instructions.md"
+# agents_file = "AGENTS.md"
+`
+
+// vendoredScaffold rewrites the shipped scaffold for a repository whose
+// standards come from a submodule.
+//
+// Two edits, both required together: the `[paths]` block stops being a comment
+// and names the submodule, and every `[agents.*]` target gains the matching
+// `path_prefix`. Without the first the gates read an empty `docs/standards`;
+// without the second the instruction files those gates compare against point
+// at that same empty directory. Writing one and not the other produces a
+// repository that passes `mf check agents` while telling every agent to read
+// documents that are not there.
+func vendoredScaffold(body, sub string) string {
+	standards := sub + "/" + framework.StandardsPrefix
+	source := sub + "/" + framework.AgentDocsPrefix + "/" + path.Base(AgentSourcePath)
+	live := fmt.Sprintf(`[paths]
+standards = %q
+specs = %q
+adr = %q
+agents_source = %q
+agents_file = %q
+`, standards, config.DefaultSpecsDir, config.DefaultADRDir, source, config.DefaultAgentsFile)
+	body = strings.Replace(body, shippedPaths, live, 1)
+
+	prefix := fmt.Sprintf(`path_prefix = %q
+`, standards)
+	for _, target := range []string{
+		`file = "CLAUDE.md"
+roles = ["shared", "author"]
+`,
+		`file = "AGENTS.md"
+roles = ["shared", "reviewer"]
+`,
+	} {
+		body = strings.Replace(body, target, target+prefix, 1)
+	}
+	return body
+}

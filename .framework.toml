@@ -41,6 +41,7 @@ version = 1
 standards = "docs/standards"
 specs = "docs/specs"
 adr = "docs/adr"
+agents_source = "docs/agents/instructions.md"
 agents_file = "AGENTS.md"
 
 [review]

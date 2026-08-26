@@ -308,7 +308,7 @@ with an underscore, prefixed `MF_`. `roles.r2.backends` is `MF_ROLES_R2_BACKENDS
 | `providers.<name>.kind` | `openai-compatible`, `anthropic` or `google` | `openai-compatible` |
 | `providers.<name>.endpoint` | Base URL, without `/chat/completions` | — |
 | `providers.<name>.api_key_env` | **Name** of the environment variable holding the key | — |
-| `paths.standards`, `paths.specs`, `paths.adr`, `paths.agents_file` | Where the gates look | `docs/standards`, `docs/specs`, `docs/adr`, `AGENTS.md` |
+| `paths.standards`, `paths.specs`, `paths.adr`, `paths.agents_source`, `paths.agents_file` | Where the gates look | `docs/standards`, `docs/specs`, `docs/adr`, `docs/agents/instructions.md`, `AGENTS.md` |
 
 A backend a machine defines is shadowed by a project backend of the same name **whole**,
 never field by field, so a machine adds backends and never quietly substitutes one the
