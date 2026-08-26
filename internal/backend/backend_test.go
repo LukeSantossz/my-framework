@@ -682,3 +682,33 @@ func TestTheResultNamesTheModelTheCommandWasGiven(t *testing.T) {
 		t.Error("a partial review lost its Truncated flag and reads as complete")
 	}
 }
+
+func TestRecordsAnEmptyAPIAnswerAsUnavailable(t *testing.T) {
+	// A content filter, a safety block, or a truncation at the first token all
+	// return HTTP 200 with nothing in it. Recording that as a review stopped
+	// the chain and put "Reviewed by <backend>" on a pull request nothing had
+	// read — the false negative the cli path already refuses one file over.
+	for name, body := range map[string]string{
+		"openai":     `{"choices":[{"message":{"content":""},"finish_reason":"content_filter"}]}`,
+		"whitespace": `{"choices":[{"message":{"content":"   \n  "},"finish_reason":"stop"}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			srv := openAIServer(t, 200, body)
+			b := &API{BackendName: "deepseek", ProviderName: "deepseek", Shape: WireOpenAI, Endpoint: srv.URL}
+			res, err := b.Review(context.Background(), req())
+			var un *Unavailable
+			if !errors.As(err, &un) {
+				t.Fatalf("an empty answer was recorded as a review: %+v (err %v)", res, err)
+			}
+		})
+	}
+}
+
+func TestRecordsAnEmptyGoogleAnswerAsUnavailable(t *testing.T) {
+	// A Gemini safety block returns a candidate whose content carries no parts.
+	srv := openAIServer(t, 200, `{"candidates":[{"content":{"parts":[]},"finishReason":"SAFETY"}]}`)
+	b := &API{BackendName: "gemini", ProviderName: "google", Shape: WireGoogle, Endpoint: srv.URL}
+	if _, err := b.Review(context.Background(), req()); err == nil {
+		t.Fatal("a blocked answer was recorded as a review")
+	}
+}

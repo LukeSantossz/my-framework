@@ -441,6 +441,15 @@ func (a *API) Review(ctx context.Context, req Request) (report.Result, error) {
 	if err != nil {
 		return report.Result{}, &Unavailable{Backend: a.BackendName, Reason: err.Error()}
 	}
+	if strings.TrimSpace(content) == "" {
+		// HTTP 200 with nothing in it: a content filter, a safety block, or a
+		// truncation before the first token. Indistinguishable from a review
+		// that found nothing, so it is reported as the weaker claim — the same
+		// rule the cli kind keeps, for the same reason. Recording it stopped
+		// the chain and put a reviewer's name on a change nothing had read.
+		return report.Result{}, &Unavailable{Backend: a.BackendName,
+			Reason: "the endpoint answered with no content, so nothing was reviewed"}
+	}
 
 	// Accounting never fails a review: if the figure cannot be determined the
 	// review still stands and the accounting says it does not know.
