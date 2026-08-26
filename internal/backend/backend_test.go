@@ -620,7 +620,7 @@ func TestACLIThatAnswersWithTheSchemaIsReadAsFindings(t *testing.T) {
 	c := &CLI{
 		BackendName: "agy", ProviderName: "google", Structured: true,
 		LookPath: func(string) (string, error) { return "agy", nil },
-		Run: func(context.Context, string, string, []string) (string, error) { return answer, nil },
+		Run:      func(context.Context, string, string, []string) (string, error) { return answer, nil },
 	}
 	res, err := c.Review(context.Background(), req())
 	if err != nil {
