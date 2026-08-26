@@ -499,11 +499,7 @@ func (c *Config) applyDefaults() {
 		"paths.specs":            DefaultSpecsDir,
 		"paths.adr":              DefaultADRDir,
 		"paths.agents_source":    DefaultAgentsSource,
-		// Declared empty so the key resolves and MF_PATHS_AGENTS_OVERLAY lands.
-		// There is no default overlay: a repository either has its own
-		// instructions or it does not.
-		"paths.agents_overlay": "",
-		"paths.agents_file":    DefaultAgentsFile,
+		"paths.agents_file":      DefaultAgentsFile,
 	} {
 		c.set(key, value, LayerDefault, "built-in default")
 	}
@@ -539,6 +535,11 @@ func (c *Config) applyDefaults() {
 	// layer wrote is one no environment override can land on, and
 	// `MF_REVIEW_MODEL` was documented and dead for exactly that reason.
 	c.entries["review.model"] = entry{value: "", prov: Provenance{Layer: LayerDefault, Source: "built-in default (each backend names its own)"}}
+	// There is no default overlay: a repository either has its own instruction
+	// sections or it does not. The key is declared here rather than in the table
+	// above because `set` drops an empty value, and a key no layer wrote is a key
+	// `MF_PATHS_AGENTS_OVERLAY` cannot land on.
+	c.entries["paths.agents_overlay"] = entry{value: "", prov: Provenance{Layer: LayerDefault, Source: "built-in default (no overlay)"}}
 }
 
 func (c *Config) applyLegacy(gitConfig func(string) (string, bool)) {

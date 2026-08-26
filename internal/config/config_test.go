@@ -1023,6 +1023,40 @@ func TestReviewModelIsResolvableSoItsEnvironmentFormLands(t *testing.T) {
 	}
 }
 
+func TestTheAgentsOverlayIsResolvableSoItsEnvironmentFormLands(t *testing.T) {
+	// The key has no default value, and a key no layer wrote is one the
+	// environment layer cannot override: it walks the keys already resolved.
+	// Declaring it in the defaults table would not have been enough, because
+	// `set` drops an empty value.
+	opts := fixture(t, "", "")
+	opts.Env = func(name string) string {
+		if name == "MF_PATHS_AGENTS_OVERLAY" {
+			return "docs/agents/project.md"
+		}
+		return ""
+	}
+	cfg, err := Load(opts)
+	if err != nil {
+		t.Fatal(err)
+	}
+	v, prov, ok := cfg.Get("paths.agents_overlay")
+	if !ok || v != "docs/agents/project.md" {
+		t.Fatalf("paths.agents_overlay resolved to %q (found=%v), want the override", v, ok)
+	}
+	if prov.Layer != LayerEnv {
+		t.Errorf("provenance says %v, want the environment layer", prov.Layer)
+	}
+}
+
+func TestTheAgentsOverlayDefaultsToNone(t *testing.T) {
+	// Declaring the key must not invent an overlay: a repository that names
+	// none generates what it generated before the key existed.
+	cfg := mustLoad(t, fixture(t, "", ""))
+	if v, _, _ := cfg.Get("paths.agents_overlay"); v != "" {
+		t.Errorf("paths.agents_overlay defaults to %q, want no overlay at all", v)
+	}
+}
+
 func TestReviewModelDefaultsToNoModelAtAll(t *testing.T) {
 	// Declaring the key must not impose a model: a default here would override
 	// every backend that names its own.
