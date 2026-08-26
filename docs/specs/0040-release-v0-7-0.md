@@ -33,8 +33,10 @@ branch.
 
 ```sh
 gh release view v0.7.0 --json assets -q '.assets|length'   # 6
-mf --version
+mf doctor | head -1                                        # mf v0.7.0
 ```
+
+`mf doctor` is where the build reports itself; there is no `mf --version`.
 
 Versions: Go 1.26.7, `mf` at the tagged commit.
 
