@@ -92,13 +92,13 @@ The seven gates are `spec`, `commit`, `branch`, `docs`, `records`, `agents` and 
 Prefer the released binary. It is stamped with its tag and verified by checksum, and needs no Go toolchain.
 
 ```sh
-gh release download v0.5.0 --repo LukeSantossz/my-framework \
-  --pattern 'mf_v0.5.0_linux_amd64' --pattern 'SHA256SUMS'
+gh release download v0.6.0 --repo LukeSantossz/my-framework \
+  --pattern 'mf_v0.6.0_linux_amd64' --pattern 'SHA256SUMS'
 sha256sum --ignore-missing -c SHA256SUMS   # macOS: shasum -a 256 --ignore-missing -c
-install -m 0755 mf_v0.5.0_linux_amd64 ~/.local/bin/mf
+install -m 0755 mf_v0.6.0_linux_amd64 ~/.local/bin/mf
 ```
 
-Assets exist for `linux/{amd64,arm64}`, `darwin/{amd64,arm64}` and `windows/amd64`. Without `gh`, they are at the [release page](https://github.com/LukeSantossz/my-framework/releases/tag/v0.5.0). `go install github.com/LukeSantossz/my-framework/cmd/mf@latest` also works and reports a true version, but builds from source and gives you no checksum.
+Assets exist for `linux/{amd64,arm64}`, `darwin/{amd64,arm64}` and `windows/amd64`. Without `gh`, they are at the [release page](https://github.com/LukeSantossz/my-framework/releases/tag/v0.6.0). `go install github.com/LukeSantossz/my-framework/cmd/mf@latest` also works and reports a true version, but builds from source and gives you no checksum.
 
 ### Adopt
 
@@ -251,11 +251,11 @@ my-framework/
 
 ## Project Status
 
-In development. `v0.5.0` is the current release and the first tag whose `mf init` performs the adoption described above. It publishes stamped binaries for five platforms with a `SHA256SUMS` covering all of them. `v0.4.0` was the first tag to contain `cmd/mf/`; `v0.1.0` through `v0.3.0` are the earlier standards-only releases. Versioning is semver git tags, and `mf init` records the adopted tag in `.framework.lock`.
+In development. `v0.6.0` is the current release and the first tag whose `mf init` adopts a repository that vendors these standards as a submodule rather than writing a second corpus beside it. It publishes stamped binaries for five platforms with a `SHA256SUMS` covering all of them. `v0.5.0` was the first tag whose `mf init` genuinely adopted a repository at all; `v0.4.0` was the first to contain `cmd/mf/`; `v0.1.0` through `v0.3.0` are the earlier standards-only releases. Versioning is semver git tags, and `mf init` records the adopted tag in `.framework.lock`.
 
 Done: the seven gates and the three places they run, the four role chains, the configuration cascade, the status line contract, the CRUX explainer, the eval corpus, the design gate, and an `mf init` that genuinely adopts a repository.
 
-Pending: the fingerprint table that would let R2 report `verified`; a first R1 backend that is not `in-session`; a workflow-hosted R3 beside the forge app that reviews here today; removal of the Node status line renderer once the submodule consumer has migrated.
+Pending: the fingerprint table that would let R2 report `verified`; a first R1 backend that is not `in-session`; a workflow-hosted R3 beside the forge app that reviews here today; removal of the Node status line renderer once the submodule consumers have migrated; an `mf eval` that can compare two recorded runs, which `eval.Comparable` is written for and nothing calls.
 
 ## Known Issues & Limitations
 
