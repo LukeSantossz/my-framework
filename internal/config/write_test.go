@@ -403,3 +403,27 @@ func TestSetReplacesAQuotedKeyRatherThanDuplicatingIt(t *testing.T) {
 		t.Errorf("the key was duplicated rather than replaced:\n%s", got)
 	}
 }
+
+func TestSetWritesIntoASectionWhoseHeaderSpacesTheDots(t *testing.T) {
+	// Raised by R3: TOML allows space around the separators, so `[roles . r2]`
+	// names the table `mf config set roles.r2.backends` is looking for. Missing
+	// it appended a duplicate, which is the same unloadable file by a different
+	// route.
+	dir := t.TempDir()
+	path := filepath.Join(dir, ProjectFileName)
+	if err := os.WriteFile(path, []byte("version = 1\n\n[roles . r2]\nbackends = [\"codex\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts := Options{RepoRoot: dir, MachinePath: filepath.Join(t.TempDir(), "config.toml"),
+		Env: func(string) string { return "" }, GitConfig: func(string) (string, bool) { return "", false }}
+	if err := Set(opts, "roles.r2.backends", "gemini", TargetProject); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	cfg, err := Load(opts)
+	if err != nil {
+		t.Fatalf("the file this command wrote no longer loads: %v", err)
+	}
+	if v, _, _ := cfg.Get("roles.r2.backends"); v != "gemini" {
+		t.Errorf("roles.r2.backends resolved to %q", v)
+	}
+}

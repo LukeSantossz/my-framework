@@ -36,8 +36,43 @@ func Table(trimmed string) (string, bool) {
 	if len(header) < 2 || !strings.HasSuffix(header, "]") {
 		return "", false
 	}
-	name := strings.TrimSpace(header[1 : len(header)-1])
-	return strings.Trim(name, `"'`), true
+	return normalise(header[1 : len(header)-1]), true
+}
+
+// normalise puts a dotted table name into the one form a comparison can use.
+//
+// TOML allows space around the separators, so `[roles . r2]` and `[roles.r2]`
+// name the same table. Comparing the text as written missed the second when the
+// file wrote the first, and the caller then appended a table that already
+// existed — a duplicate definition the decoder rejects, which is the whole
+// failure this parsing exists to prevent.
+//
+// A dot inside quotes is part of a key rather than a separator, so the split
+// respects them. The quotes themselves are dropped, as they were before: this
+// reads a name to compare, not to round-trip.
+func normalise(name string) string {
+	var parts []string
+	var current strings.Builder
+	quote := rune(0)
+	for _, r := range name {
+		switch {
+		case quote != 0:
+			if r == quote {
+				quote = 0
+				continue
+			}
+			current.WriteRune(r)
+		case r == '"' || r == '\'':
+			quote = r
+		case r == '.':
+			parts = append(parts, strings.TrimSpace(current.String()))
+			current.Reset()
+		default:
+			current.WriteRune(r)
+		}
+	}
+	parts = append(parts, strings.TrimSpace(current.String()))
+	return strings.Join(parts, ".")
 }
 
 // StripComment cuts a line at the `#` that starts a comment, leaving one inside

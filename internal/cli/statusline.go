@@ -135,7 +135,12 @@ func scheduleRefresh(env Env, home string, facts statusline.Facts) {
 		statusline.ReleaseRefresh(home)
 		return
 	}
-	args := []string{"statusline", "refresh"}
+	// The child is told it holds a claim, because it is the only process that
+	// may end one. A refresh a person starts by hand holds none, and releasing
+	// what it never took would drop a scheduled refresh's claim mid-fetch —
+	// letting the next render start a second request against an endpoint that
+	// rate-limits per token.
+	args := []string{"statusline", "refresh", claimedFlag}
 	if facts.Version != "" {
 		args = append(args, "--version", facts.Version)
 	}
@@ -150,10 +155,19 @@ func scheduleRefresh(env Env, home string, facts statusline.Facts) {
 	_ = cmd.Process.Release()
 }
 
+// claimedFlag marks the refresh that scheduleRefresh spawned under a claim. It
+// is not a user-facing option: nothing but that spawn may pass it, and nothing
+// else is entitled to release the lock.
+const claimedFlag = "--claimed"
+
 func statuslineRefresh(env Env, args []string) int {
 	version := ""
+	claimed := false
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
+		case claimedFlag:
+			claimed = true
+			continue
 		case "--version":
 			// Ignoring the missing value would refresh under a version nobody
 			// asked for and report success for it.
@@ -172,9 +186,11 @@ func statuslineRefresh(env Env, args []string) int {
 		fmt.Fprintln(env.Stderr, "mf statusline refresh: no configuration directory to cache the quota in")
 		return 1
 	}
-	// This process is the refresh the claim was taken for, so it is what ends
-	// it — whichever way it ends.
-	defer statusline.ReleaseRefresh(home)
+	// This process ends the claim only if it is the one the claim was taken
+	// for — whichever way it ends.
+	if claimed {
+		defer statusline.ReleaseRefresh(home)
+	}
 	if err := statusline.Refresh(statusline.RefreshOptions{
 		Home:     home,
 		Endpoint: env.Getenv("MF_USAGE_ENDPOINT"),
