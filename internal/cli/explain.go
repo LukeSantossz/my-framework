@@ -145,6 +145,12 @@ func runExplain(env Env, args []string) int {
 		return absent(env, "no configured backend was available")
 	}
 
+	// An explainer costs a model call like a review does. Recording it keeps
+	// `mf usage` a total rather than a total of one command.
+	if store := usageStore(env); store.Path != "" {
+		_ = store.Add(out.Result.Usage)
+	}
+
 	content, parseErr := explain.Parse(report.Text(out.Result))
 	if parseErr != nil {
 		return absent(env, fmt.Sprintf("%s answered, but not with an explainer: %v", out.Result.Backend, parseErr))

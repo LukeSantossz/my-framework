@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
@@ -219,7 +220,7 @@ func oauthToken(home string) (string, bool) {
 }
 
 // ClaimRefresh takes the lock that keeps concurrent renders from each spawning
-// their own fetch.
+// their own fetch, and returns the token that owns it.
 //
 // The claim is the exclusive creation of the lock file, not a check followed by
 // a write: two renders redrawing on the same tick both pass a check, and the
@@ -229,27 +230,65 @@ func oauthToken(home string) (string, bool) {
 // A stale lock is taken over rather than respected forever: a process killed
 // mid-refresh would otherwise freeze the quota fact. Only the render whose
 // removal of the abandoned file succeeds goes on to contest the fresh claim.
-func ClaimRefresh(home string, now time.Time) bool {
+//
+// The token is written into the lock so a release can prove it owns what it is
+// dropping. Without it, a claim that stalled past LockStale and was taken over
+// would delete its successor's lock on the way out, which is the same overlap
+// the lock exists to prevent, arrived at from the other side. It is an identity,
+// not a secret: anyone able to forge it can remove the file directly.
+func ClaimRefresh(home string, now time.Time) (string, bool) {
 	if home == "" {
-		return false
+		return "", false
 	}
 	lock := filepath.Join(home, LockFileName)
-	if createdExclusively(lock) {
-		return true
+	token := fmt.Sprintf("%d-%d", os.Getpid(), now.UnixNano())
+	if createdExclusively(lock, token) {
+		return token, true
 	}
 	info, err := os.Stat(lock)
 	if err != nil || now.Sub(info.ModTime()) <= LockStale {
-		return false
+		return "", false
 	}
 	if err := os.Remove(lock); err != nil {
-		return false
+		return "", false
 	}
-	return createdExclusively(lock)
+	if createdExclusively(lock, token) {
+		return token, true
+	}
+	return "", false
 }
 
-func createdExclusively(lock string) bool {
+// ReleaseRefresh drops the claim the token owns, so the next render can take
+// one.
+//
+// Nothing released it at all before, so the file outlived every refresh and the
+// documented "a stale lock is taken over rather than respected" path became the
+// only path a claim could ever succeed through: 30 seconds of hard
+// serialisation after each render, then an mtime bump forever.
+//
+// A lock that is not there, or that a different token now owns, is left alone.
+// The second is the case that matters: a refresh started by hand holds no token
+// and must not drop a scheduled one's claim, and a claim taken over as stale
+// belongs to whoever took it.
+func ReleaseRefresh(home, token string) {
+	if home == "" || token == "" {
+		return
+	}
+	lock := filepath.Join(home, LockFileName)
+	held, err := os.ReadFile(lock)
+	if err != nil || strings.TrimSpace(string(held)) != token {
+		return
+	}
+	_ = os.Remove(lock)
+}
+
+func createdExclusively(lock, token string) bool {
 	f, err := os.OpenFile(lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
+		return false
+	}
+	if _, err := f.WriteString(token); err != nil {
+		f.Close()
 		return false
 	}
 	return f.Close() == nil

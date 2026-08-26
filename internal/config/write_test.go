@@ -342,3 +342,88 @@ func TestConfigSetRefusesAPathThatLeavesTheRepository(t *testing.T) {
 	err := Set(opts, "paths.standards", "../shared/standards", TargetProject)
 	assertRefused(t, err, "repository")
 }
+
+func TestSetWritesIntoASectionWhoseHeaderCarriesAComment(t *testing.T) {
+	// The header was recognised only when the whole trimmed line was
+	// `[section]`, so a comment after it appended a second table — and a file
+	// that defines one twice does not load, for everyone who clones it, while
+	// the command that wrote it reported success.
+	dir := t.TempDir()
+	path := filepath.Join(dir, ProjectFileName)
+	body := `version = 1
+
+[roles.r2]  # the reviewer chain
+backends = ["codex"]
+`
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts := Options{RepoRoot: dir, MachinePath: filepath.Join(t.TempDir(), "config.toml"),
+		Env: func(string) string { return "" }, GitConfig: func(string) (string, bool) { return "", false }}
+	if err := Set(opts, "roles.r2.backends", "gemini", TargetProject); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := strings.Count(string(got), "[roles.r2]"); n != 1 {
+		t.Errorf("the file declares [roles.r2] %d times:\n%s", n, got)
+	}
+	if !strings.Contains(string(got), `backends = ["gemini"]`) {
+		t.Errorf("the value was not replaced in place:\n%s", got)
+	}
+	// The proof that matters: it still loads.
+	cfg, err := Load(opts)
+	if err != nil {
+		t.Fatalf("the file this command wrote no longer loads: %v", err)
+	}
+	if v, _, _ := cfg.Get("roles.r2.backends"); v != "gemini" {
+		t.Errorf("roles.r2.backends resolved to %q", v)
+	}
+}
+
+func TestSetReplacesAQuotedKeyRatherThanDuplicatingIt(t *testing.T) {
+	dir := t.TempDir()
+	path := filepath.Join(dir, ProjectFileName)
+	body := "version = 1\n\n[review]\n\"base\" = \"main\"\n"
+	if err := os.WriteFile(path, []byte(body), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts := Options{RepoRoot: dir, MachinePath: filepath.Join(t.TempDir(), "config.toml"),
+		Env: func(string) string { return "" }, GitConfig: func(string) (string, bool) { return "", false }}
+	if err := Set(opts, "review.base", "trunk", TargetProject); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Count(string(got), "base") != 1 {
+		t.Errorf("the key was duplicated rather than replaced:\n%s", got)
+	}
+}
+
+func TestSetWritesIntoASectionWhoseHeaderSpacesTheDots(t *testing.T) {
+	// Raised by R3: TOML allows space around the separators, so `[roles . r2]`
+	// names the table `mf config set roles.r2.backends` is looking for. Missing
+	// it appended a duplicate, which is the same unloadable file by a different
+	// route.
+	dir := t.TempDir()
+	path := filepath.Join(dir, ProjectFileName)
+	if err := os.WriteFile(path, []byte("version = 1\n\n[roles . r2]\nbackends = [\"codex\"]\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	opts := Options{RepoRoot: dir, MachinePath: filepath.Join(t.TempDir(), "config.toml"),
+		Env: func(string) string { return "" }, GitConfig: func(string) (string, bool) { return "", false }}
+	if err := Set(opts, "roles.r2.backends", "gemini", TargetProject); err != nil {
+		t.Fatalf("Set: %v", err)
+	}
+	cfg, err := Load(opts)
+	if err != nil {
+		t.Fatalf("the file this command wrote no longer loads: %v", err)
+	}
+	if v, _, _ := cfg.Get("roles.r2.backends"); v != "gemini" {
+		t.Errorf("roles.r2.backends resolved to %q", v)
+	}
+}

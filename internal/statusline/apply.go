@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/LukeSantossz/my-framework/internal/tomlx"
 )
 
 // The Codex rendering of the contract. The segment names are read from an
@@ -200,7 +202,7 @@ func codexConfigWithContract(existing string) string {
 			continue
 		}
 
-		if table, isHeader := tomlTable(trimmed); isHeader {
+		if table, isHeader := tomlx.Table(trimmed); isHeader {
 			// `[tui.model_availability_nux]` is a different table and must not
 			// be mistaken for the section being edited.
 			inTui = table == tuiTable
@@ -216,7 +218,7 @@ func codexConfigWithContract(existing string) string {
 		}
 
 		if inTui {
-			switch tomlKey(trimmed) {
+			switch tomlx.Key(trimmed) {
 			case "status_line":
 				if strings.Contains(trimmed, "[") && !strings.Contains(trimmed, "]") {
 					skippingArray = true
@@ -236,54 +238,6 @@ func codexConfigWithContract(existing string) string {
 		out = append(out, "", tuiHeader, CodexStatusLine, CodexStatusColors, "")
 	}
 	return strings.Join(out, "\n")
-}
-
-// tomlTable reports which table a line opens, and whether it opens one at all.
-//
-// A header is not simply a line wrapped in brackets: TOML allows padding inside
-// them and a comment after them, and `[tui] # my terminal settings` names the
-// same table as `[tui]`. Reading either as ordinary content costs more than the
-// section it missed — the rewrite stays in whichever table it thought it was in
-// and strips the two keys from the next one, and the [tui] it never saw gets a
-// second one appended, which leaves Codex a file it refuses to parse while the
-// command reports success.
-func tomlTable(trimmed string) (string, bool) {
-	if !strings.HasPrefix(trimmed, "[") {
-		return "", false
-	}
-	header := strings.TrimSpace(stripComment(trimmed))
-	if len(header) < 2 || !strings.HasSuffix(header, "]") {
-		return "", false
-	}
-	name := strings.TrimSpace(header[1 : len(header)-1])
-	return strings.Trim(name, `"'`), true
-}
-
-// stripComment cuts a line at the `#` that starts a comment, leaving one inside
-// a quoted key alone: `["a#b"]` names a table rather than commenting one out.
-func stripComment(line string) string {
-	quote := rune(0)
-	for i, r := range line {
-		switch {
-		case quote != 0:
-			if r == quote {
-				quote = 0
-			}
-		case r == '"' || r == '\'':
-			quote = r
-		case r == '#':
-			return line[:i]
-		}
-	}
-	return line
-}
-
-func tomlKey(line string) string {
-	name, _, found := strings.Cut(line, "=")
-	if !found {
-		return ""
-	}
-	return strings.Trim(strings.TrimSpace(name), `"'`)
 }
 
 // ApplyClaude points Claude Code's status line at a command, leaving every

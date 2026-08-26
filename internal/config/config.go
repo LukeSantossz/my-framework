@@ -526,6 +526,12 @@ func (c *Config) applyDefaults() {
 	// because os.UserCacheDir differs per platform and a report that named one
 	// of them would be wrong on the other.
 	c.entries["explain.dir"] = entry{value: "", prov: Provenance{Layer: LayerDefault, Source: "built-in default (the user cache directory)"}}
+	// No model is imposed: which one reviews is the backend's business, and a
+	// default here would override every backend that names its own. The key is
+	// still declared, for the reason the empty chains above are — a key no
+	// layer wrote is one no environment override can land on, and
+	// `MF_REVIEW_MODEL` was documented and dead for exactly that reason.
+	c.entries["review.model"] = entry{value: "", prov: Provenance{Layer: LayerDefault, Source: "built-in default (each backend names its own)"}}
 }
 
 func (c *Config) applyLegacy(gitConfig func(string) (string, bool)) {
@@ -659,6 +665,34 @@ func (c *Config) withResolvedFields(name string, b Backend) Backend {
 		}
 	}
 	return b
+}
+
+// Provider resolves a provider's route through the cascade, the way Backend
+// resolves a backend's.
+//
+// `mf review` read `Machine.Providers[name]` — the raw decoded file — while
+// `mf config get providers.<name>.endpoint` answered from the resolved table.
+// So an override that redirected a provider to a local endpoint for one run
+// reported as taken and changed nothing: the diff went to the configured host
+// anyway. That is the same defect withResolvedFields exists to have fixed for
+// backends, and it is worse here, because the value it silently ignores is
+// where a change is sent.
+func (c *Config) Provider(name string) Provider {
+	var p Provider
+	if c.Machine != nil {
+		p = c.Machine.Providers[name]
+	}
+	prefix := "providers." + name + "."
+	for key, into := range map[string]*string{
+		"kind":        &p.Kind,
+		"endpoint":    &p.Endpoint,
+		"api_key_env": &p.APIKeyEnv,
+	} {
+		if value, _, ok := c.Get(prefix + key); ok && value != "" {
+			*into = value
+		}
+	}
+	return p
 }
 
 // Validate answers what only the finished cascade can answer, and is separate
@@ -858,6 +892,19 @@ func validateStatic(project *ProjectFile, projectMeta toml.MetaData, machine *Ma
 			// depends on the whole cascade, so Config.Validate answers it.
 		}
 		problems = append(problems, pathProblems(project.Paths, projectMeta)...)
+		// `agents.<name>.file` is a path this committed file chooses and every
+		// clone honours, so it is contained the way `paths.*` is. Without it
+		// `mf agents sync` wrote outside the repository on whoever ran `mf
+		// init`, from a value the repository itself supplied.
+		for name, a := range project.Agents {
+			if a.File == "" {
+				continue
+			}
+			if msg := pathProblem(a.File); msg != "" {
+				problems = append(problems, Problem{File: ProjectFileName,
+					Key: "agents." + name + ".file", Message: msg})
+			}
+		}
 	}
 
 	if machine != nil {

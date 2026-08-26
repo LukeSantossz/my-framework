@@ -75,7 +75,17 @@ func Load(dir string) ([]Case, error) {
 		caseDir := filepath.Join(dir, e.Name())
 		manifest, err := os.ReadFile(filepath.Join(caseDir, "case.toml"))
 		if err != nil {
-			continue
+			if os.IsNotExist(err) {
+				// A directory that carries no manifest is not a case. The
+				// corpus lives beside other files, and skipping those quietly
+				// is right.
+				continue
+			}
+			// Every other read failure is a case this run could not measure,
+			// and the report would still assert a hit rate over a corpus one
+			// case smaller — while CorpusVersion went on claiming the numbers
+			// are comparable with a run that read it.
+			return nil, fmt.Errorf("%s: %w", e.Name(), err)
 		}
 		var c Case
 		if _, err := toml.Decode(string(manifest), &c); err != nil {

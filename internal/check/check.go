@@ -227,11 +227,41 @@ func countCriteria(section string) int {
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") {
+		if strings.HasPrefix(line, "- ") || strings.HasPrefix(line, "* ") || orderedItem(line) {
 			n++
 		}
 	}
 	return n
+}
+
+// orderedItem reports whether a line opens an ordered list item. The Gate asks
+// for criteria, not for a bullet character: a spec that numbers them stated
+// them, and rejecting it with "states no criterion" is the one message that
+// cannot tell its author what to change.
+func orderedItem(line string) bool {
+	i := 0
+	for i < len(line) && line[i] >= '0' && line[i] <= '9' {
+		i++
+	}
+	if i == 0 || i+1 >= len(line) {
+		return false
+	}
+	if line[i] != '.' && line[i] != ')' {
+		return false
+	}
+	return line[i+1] == ' ' || line[i+1] == '\t'
+}
+
+// citedByURL collects the markdown names that appear inside a URL, so the
+// reference scan can tell a citation from a path this repository must ship.
+func citedByURL(body string) map[string]bool {
+	cited := map[string]bool{}
+	for _, u := range urlRef.FindAllString(body, -1) {
+		for _, ref := range mdRef.FindAllString(u, -1) {
+			cited[ref] = true
+		}
+	}
+	return cited
 }
 
 func allExempt(changed, exempt []string) bool {
@@ -505,6 +535,12 @@ var hypothetical = map[string]bool{
 
 var mdRef = regexp.MustCompile(`[A-Za-z0-9_./-]+\.md`)
 
+// urlRef matches a markdown name that is part of a URL. The standards cite
+// upstream documents, and a citation is not a claim that this repository ships
+// the file: reading one as a path failed the gate — inside the pre-push hook —
+// naming something that was never a path.
+var urlRef = regexp.MustCompile(`[A-Za-z][A-Za-z0-9+.-]*://[^\s)]*\.md`)
+
 func Docs(o Options) (Result, error) {
 	o = o.Defaults()
 	res := Result{Name: "docs"}
@@ -537,8 +573,9 @@ func Docs(o Options) (Result, error) {
 		if m := deprecated.FindString(body); m != "" {
 			res.Problems = append(res.Problems, Problem{File: name, Message: fmt.Sprintf("carries retired wording %q", m)})
 		}
+		cited := citedByURL(body)
 		for _, ref := range mdRef.FindAllString(body, -1) {
-			if hypothetical[ref] {
+			if hypothetical[ref] || cited[ref] {
 				continue
 			}
 			if !refResolves(o, ref) {

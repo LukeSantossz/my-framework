@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"time"
 )
 
 // Marker identifies this tool's own comment so a re-run replaces it rather than
@@ -25,11 +26,18 @@ type Client struct {
 	HTTP    *http.Client
 }
 
+// RequestBudget bounds one forge call. http.DefaultClient has no timeout, so a
+// hung connection blocked `mf review --pr N --post` forever, and in the R3
+// workflow it held the job open until the runner's own limit — the one place
+// where nothing else was going to interrupt it. Every other network path here
+// is bounded; this one was not.
+const RequestBudget = 30 * time.Second
+
 func (c *Client) http() *http.Client {
 	if c.HTTP != nil {
 		return c.HTTP
 	}
-	return http.DefaultClient
+	return &http.Client{Timeout: RequestBudget}
 }
 
 func (c *Client) do(method, path string, body any) ([]byte, int, error) {
