@@ -200,3 +200,28 @@ func TestRefreshIsDueOnlyWhenTheCacheAllowsIt(t *testing.T) {
 		t.Error("an expired cache was not refreshed")
 	}
 }
+
+func TestReleaseRefreshLetsTheNextRenderClaim(t *testing.T) {
+	// Nothing released the claim, so the file outlived every refresh and the
+	// documented "a stale lock is taken over" path became the only way a claim
+	// could ever succeed.
+	home := t.TempDir()
+	now := time.Now()
+	if !ClaimRefresh(home, now) {
+		t.Fatal("the first claim failed")
+	}
+	if ClaimRefresh(home, now) {
+		t.Fatal("a second claim succeeded while the first was held")
+	}
+	ReleaseRefresh(home)
+	if !ClaimRefresh(home, now) {
+		t.Error("a released claim was not available again")
+	}
+}
+
+func TestReleaseRefreshIsQuietWhenNothingIsHeld(t *testing.T) {
+	// `mf statusline refresh` run by hand holds no claim, and must not fail
+	// for dropping one it never took.
+	ReleaseRefresh(t.TempDir())
+	ReleaseRefresh("")
+}

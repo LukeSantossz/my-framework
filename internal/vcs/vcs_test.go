@@ -348,3 +348,26 @@ func TestRenamedPathsSaysWhereAnAddedPathWent(t *testing.T) {
 		t.Errorf("RenamedPaths = %v, want each step of the chain", renames)
 	}
 }
+
+func TestRedeclaringWithoutAModelClearsTheOldOne(t *testing.T) {
+	// Re-declaring a different provider kept the model from the declaration
+	// before it, so `mf doctor` and R2's cross-provider note reported a model
+	// that provider never ran — a record that reads as fact and is not one.
+	r := newRepo(t)
+	if err := r.SetAuthorDeclaration("main", Declaration{Provider: "anthropic", Model: "claude-opus-5"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.SetAuthorDeclaration("main", Declaration{Provider: "openai"}); err != nil {
+		t.Fatal(err)
+	}
+	got, ok := r.AuthorDeclaration("main")
+	if !ok {
+		t.Fatal("the declaration disappeared")
+	}
+	if got.Provider != "openai" {
+		t.Errorf("provider is %q, want openai", got.Provider)
+	}
+	if got.Model != "" {
+		t.Errorf("model is %q, want it cleared with the declaration that dropped it", got.Model)
+	}
+}

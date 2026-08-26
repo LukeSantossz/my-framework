@@ -490,21 +490,25 @@ func runAuthor(env Env, args []string) int {
 	provider, model := "", ""
 	rest := args[1:]
 	for i := 0; i < len(rest); i++ {
+		var into *string
 		switch rest[i] {
 		case "--provider":
-			if i+1 < len(rest) {
-				i++
-				provider = rest[i]
-			}
+			into = &provider
 		case "--model":
-			if i+1 < len(rest) {
-				i++
-				model = rest[i]
-			}
+			into = &model
 		default:
 			fmt.Fprintf(env.Stderr, "mf author declare: unknown option %q\n", rest[i])
 			return 2
 		}
+		// Open-coded, a missing value was dropped in silence: `--provider
+		// --model gpt-5` recorded the literal "--model" as the provider, and a
+		// bare `--provider` surfaced as "--provider is required". Both are the
+		// failure optionValue exists to name.
+		value, ok := optionValue(env, "mf author declare", rest, &i)
+		if !ok {
+			return 2
+		}
+		*into = value
 	}
 	if provider == "" {
 		fmt.Fprintln(env.Stderr, "mf author declare: --provider is required; it is the claim R2 is checked against")

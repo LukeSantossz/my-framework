@@ -506,3 +506,23 @@ func TestTheCodexSegmentListIsTheContractInOrder(t *testing.T) {
 		t.Errorf("CodexStatusLine = %s\nwant %s", CodexStatusLine, want)
 	}
 }
+
+func TestReadTranscriptReportsNothingWhenItCouldNotFinish(t *testing.T) {
+	// A single turn carrying a large tool result outgrows the buffer cap. The
+	// loop then ended early and the accumulated figure was drawn as though the
+	// whole transcript had been read — the one fact in this package that
+	// degraded to a number instead of to the placeholder.
+	path := filepath.Join(t.TempDir(), "session.jsonl")
+	var b strings.Builder
+	b.WriteString(`{"type":"assistant","message":{"usage":{"input_tokens":10,"output_tokens":5}}}` + "\n")
+	b.WriteString(`{"type":"assistant","message":{"usage":{"input_tokens":1},"pad":"`)
+	b.WriteString(strings.Repeat("x", 9*1024*1024))
+	b.WriteString(`"}}` + "\n")
+	if err := os.WriteFile(path, []byte(b.String()), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	context, spent := readTranscript(path)
+	if context != 0 || spent != 0 {
+		t.Errorf("a partly-read transcript reported ctx=%d spent=%d, want the placeholder", context, spent)
+	}
+}

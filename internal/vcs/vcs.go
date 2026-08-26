@@ -124,10 +124,17 @@ func (r *Repo) SetAuthorDeclaration(branch string, d Declaration) error {
 	if _, err := r.git("config", "--local", declKey(branch, "Provider"), d.Provider); err != nil {
 		return err
 	}
-	if d.Model != "" {
-		if _, err := r.git("config", "--local", declKey(branch, "Model"), d.Model); err != nil {
-			return err
-		}
+	if d.Model == "" {
+		// A declaration that names no model must not inherit the one before
+		// it. Re-declaring a different provider kept the old model, so
+		// `mf doctor` and R2's cross-provider note reported a model that
+		// provider never ran — a record that reads as fact and is not one.
+		// An unset key that was never set is not an error here.
+		_, _ = r.git("config", "--local", "--unset", declKey(branch, "Model"))
+		return nil
+	}
+	if _, err := r.git("config", "--local", declKey(branch, "Model"), d.Model); err != nil {
+		return err
 	}
 	return nil
 }

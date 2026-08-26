@@ -222,6 +222,13 @@ func readTranscript(path string) (context, spent int) {
 		spent += u.Input + u.Output + u.CacheCreation
 		context = u.Input + u.CacheCreation + u.CacheRead
 	}
+	// A line past the buffer cap ends the loop early, and returning what was
+	// accumulated so far draws a figure from part of a transcript as though it
+	// were the whole one. Every other unreadable fact in this package degrades
+	// to the placeholder; this one degraded to a number that looks read.
+	if scanner.Err() != nil {
+		return 0, 0
+	}
 	return context, spent
 }
 

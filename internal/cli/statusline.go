@@ -130,6 +130,9 @@ func scheduleRefresh(env Env, home string, facts statusline.Facts) {
 	}
 	self, err := os.Executable()
 	if err != nil {
+		// Claimed and not handed to anyone: the claim has to go back, or the
+		// lock outlives a refresh that never started.
+		statusline.ReleaseRefresh(home)
 		return
 	}
 	args := []string{"statusline", "refresh"}
@@ -139,6 +142,7 @@ func scheduleRefresh(env Env, home string, facts statusline.Facts) {
 	cmd := exec.Command(self, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	if err := cmd.Start(); err != nil {
+		statusline.ReleaseRefresh(home)
 		return
 	}
 	// Released rather than waited on: the render pass is finished, and reaping
@@ -168,6 +172,9 @@ func statuslineRefresh(env Env, args []string) int {
 		fmt.Fprintln(env.Stderr, "mf statusline refresh: no configuration directory to cache the quota in")
 		return 1
 	}
+	// This process is the refresh the claim was taken for, so it is what ends
+	// it — whichever way it ends.
+	defer statusline.ReleaseRefresh(home)
 	if err := statusline.Refresh(statusline.RefreshOptions{
 		Home:     home,
 		Endpoint: env.Getenv("MF_USAGE_ENDPOINT"),

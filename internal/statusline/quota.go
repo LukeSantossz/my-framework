@@ -247,6 +247,22 @@ func ClaimRefresh(home string, now time.Time) bool {
 	return createdExclusively(lock)
 }
 
+// ReleaseRefresh drops the claim, so the next render can take one.
+//
+// Nothing released it, so the file outlived every refresh and the documented
+// "a stale lock is taken over rather than respected" path became the only path
+// a claim could ever succeed through: 30 seconds of hard serialisation after
+// each render, then an mtime bump forever.
+//
+// A lock that is not there is not an error: the refresh may have been started
+// by hand rather than claimed.
+func ReleaseRefresh(home string) {
+	if home == "" {
+		return
+	}
+	_ = os.Remove(filepath.Join(home, LockFileName))
+}
+
 func createdExclusively(lock string) bool {
 	f, err := os.OpenFile(lock, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
 	if err != nil {
