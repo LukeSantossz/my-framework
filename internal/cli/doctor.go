@@ -322,17 +322,16 @@ func runInit(env Env, args []string) int {
 		}
 	}
 	if err == nil {
-		generated := generateAgentFiles(env)
-		steps = append(steps, generated...)
 		// A step that reported a failure is a failure, whatever the ones before
-		// it did. Exiting zero here left an adopter with no instruction files and
-		// a success message, which is the shape of activation this framework
-		// treats as the worst outcome.
-		for _, g := range generated {
-			if strings.HasPrefix(g.Message, "not generated") || strings.HasPrefix(g.Message, "cannot read") {
-				err = errors.New(g.Message)
-			}
-		}
+		// it did. Exiting zero here left an adopter with no instruction files
+		// and a success message, which is the shape of activation this
+		// framework treats as the worst outcome. The failure is returned rather
+		// than recovered by matching the message this file writes: rewording
+		// either message in one place would have restored the exact defect the
+		// matching was added to close.
+		generated, genErr := generateAgentFiles(env)
+		steps = append(steps, generated...)
+		err = genErr
 	}
 	for _, s := range steps {
 		marker := "  "
@@ -364,14 +363,15 @@ func runInit(env Env, args []string) int {
 //
 // The configuration is re-read rather than reused, because the scaffold this
 // run may have just written is the file that declares the targets.
-func generateAgentFiles(env Env) []activate.Step {
+func generateAgentFiles(env Env) ([]activate.Step, error) {
 	cfg, err := config.Load(env.configOptions())
 	if err != nil {
-		return []activate.Step{{Name: "agent files", Message: "cannot read the configuration that declares them: " + err.Error()}}
+		msg := "cannot read the configuration that declares them: " + err.Error()
+		return []activate.Step{{Name: "agent files", Message: msg}}, errors.New(msg)
 	}
 	targets := agentTargets(cfg)
 	if len(targets) == 0 {
-		return nil
+		return nil, nil
 	}
 	var pending []agents.Target
 	var kept []string
@@ -387,7 +387,8 @@ func generateAgentFiles(env Env) []activate.Step {
 	if len(pending) > 0 {
 		results, syncErr := agents.Sync(agents.Options{RepoRoot: env.RepoRoot, Targets: pending, SourcePath: agentsSource(cfg)})
 		if syncErr != nil {
-			return append(steps, activate.Step{Name: "agent files", Message: "not generated: " + syncErr.Error()})
+			msg := "not generated: " + syncErr.Error()
+			return append(steps, activate.Step{Name: "agent files", Message: msg}), errors.New(msg)
 		}
 		var written []string
 		for _, r := range results {
@@ -399,7 +400,7 @@ func generateAgentFiles(env Env) []activate.Step {
 		steps = append(steps, activate.Step{Name: "agent files", Message: "left untouched: " + strings.Join(kept, ", ") +
 			" — run `mf agents sync` to generate over what is already there"})
 	}
-	return steps
+	return steps, nil
 }
 
 func runHooks(env Env, args []string) int {

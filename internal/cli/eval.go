@@ -137,6 +137,12 @@ func evalBackend(env Env, cfg *config.Config, name, roleName string, cases []eva
 		if reviewErr != nil {
 			return eval.Report{}, fmt.Errorf("case %s: %w", c.Dir, reviewErr)
 		}
+		// The corpus is the most expensive thing this binary runs — every case
+		// is a real review — and it was the one command that recorded nothing,
+		// so `mf usage` under-reported by exactly the spend most worth seeing.
+		if store := usageStore(env); store.Path != "" {
+			_ = store.Add(res.Usage)
+		}
 		findings := structuredOnly(res)
 		rep.Accumulate(c, eval.Match(findings, c.Defects), findings)
 	}
