@@ -51,9 +51,9 @@ the process.
 ## Codex CLI
 
 - Pipeline stage: R2 cross-provider review, as one backend of the pre-push
-  chain defined in `r2_gate.md`. It is the shipped default; `gemini` and any
-  OpenAI-compatible endpoint are the alternatives, and the chain advances past
-  whichever is unavailable.
+  chain defined in `r2_gate.md`. It is the built-in default; `agy`, `gemini` and
+  any OpenAI-compatible endpoint are the alternatives, and the chain advances
+  past whichever is unavailable.
 - How to use: `mf init` (or `mf hooks install`) points `core.hooksPath` at the
   versioned hooks; `.githooks/pre-push` then runs `mf review --role r2` on every
   push. Run it by hand with `mf review --role r2`, or `--dry-run` to see the
@@ -66,10 +66,10 @@ the process.
 - Fallback: per `ai_guidelines.md` Review Composition — R1 plus CRURA's
   adjudication stage stand in for R2, and the PR notes the absence. The chain
   advances past an unavailable backend first, but only onto a backend something
-  actually named: `roles.r2.backends` ships as `codex` alone, so `gemini` or an
-  `api` backend of a machine's own reviews only once a project or a machine has
-  put it in that chain. Until one is, an unavailable Codex CLI is a chain with
-  nothing after it, and the fallback above is the whole of the answer.
+  actually named: `mf init` scaffolds `roles.r2.backends` empty, so `codex`,
+  `agy`, `gemini` or an `api` backend of a machine's own reviews only once a
+  project or a machine has put it in that chain. Until one is, the chain has
+  nothing in it at all, and the fallback above is the whole of the answer.
 
 ## The CRUX Explainer
 
@@ -80,9 +80,11 @@ the process.
   file outside version control. Quiz difficulty is `easy`, `medium`, or `hard`,
   defaulting to `medium`; a wrong quiz answer reveals a deeper, skippable
   explanation.
-- Required: optional. It is a review aid, never a blocking gate, and the command
-  exits zero on every path — including every path where no explainer was
-  produced.
+- Required: optional. It is a review aid, never a blocking gate: no path where
+  the explainer could not be produced fails the caller. A mistyped flag, an
+  invalid difficulty, a refused destination and a configuration that will not
+  load do exit non-zero — those are the caller's own error, reported rather than
+  absorbed, and none of them is the gate refusing a change.
 - Install/verify: nothing to install. It is not a skill; it is a role in the
   same configuration as R1, R2 and R3 (`roles.explain.backends`), so which model
   explains a change is chosen the same way as which model reviews one. Only a

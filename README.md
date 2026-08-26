@@ -175,7 +175,7 @@ There is no sync command, because the submodule *is* the corpus. Update it with 
 | Command | What it does |
 |---|---|
 | `mf init [--standards <dir>] [--provider <name> --endpoint <url> --api-key-env <VAR> [--model <id>] [--kind <shape>]]` | Adopt this repository. Overwrites nothing. A checked-out submodule carrying a corpus is adopted as the layout, so no second one is written; `--standards` names the directory instead. The provider flags record your chosen reviewer in the machine layer and name it in the R2 chain. |
-| `mf doctor` | Build, activation state, every role's chain and each backend's reachability, cross-provider state, credentials, usage. Changes nothing. |
+| `mf doctor` | Build, activation state, every role's chain and each backend's reachability, cross-provider state, credentials, usage, which Token Economy clauses are implemented, and whether the standards match this build. Changes nothing. |
 | `mf hooks install\|uninstall\|status` | Wire, unwire or report `core.hooksPath`. Install refuses a path it does not own; uninstall removes only what `mf` set and is idempotent. |
 | `mf upgrade` | Compare your standards against the ones this build carries. Applies nothing: your standards are your content. |
 
@@ -210,7 +210,7 @@ There is no sync command, because the submodule *is* the corpus. Update it with 
 | `mf models pin\|list` | Record the model each backend resolves to, or report drift against the pins. |
 | `mf usage [show\|reset]` | Runs and tokens spent, in disjoint buckets. |
 | `mf agents sync\|check` | Regenerate the vendor instruction files from one source, or report drift. |
-| `mf statusline render\|apply\|refresh\|revert` | The status line contract. `apply` edits the agent's own configuration; `revert` puts back what it replaced. |
+| `mf statusline render [--no-refresh]\|apply\|refresh\|revert` | The status line contract. `apply` edits the agent's own configuration; `revert` puts back what it replaced. `--no-refresh` (or `MYFW_STATUSLINE_NO_REFRESH`) draws from the cache without spawning the quota fetch. |
 
 ### Keys
 
@@ -230,7 +230,7 @@ There is no sync command, because the submodule *is* the corpus. Update it with 
 | `backends.<name>.*` | | `kind`, `provider`, `command`, `args`, `model`, `effort`, `structured`, `unavailable_patterns`. |
 | `providers.<name>.*` | | `kind`, `endpoint`, `api_key_env`. Machine layer only. |
 
-The cascade runs defaults, legacy git-config, machine, project, environment. Each layer outranks the one before it. Any key is overridable for one run as `MF_<KEY>`, uppercased with dots as underscores.
+The cascade runs defaults, legacy git-config, machine, project, environment. Each layer outranks the one before it. Every key above is overridable for one run as `MF_<KEY>`, uppercased with dots as underscores — the form reaches a key the cascade resolved, so a `backends.<name>.*` variable naming a backend nothing declares is ignored rather than defining one.
 
 ## Project Structure
 
@@ -264,12 +264,12 @@ Pending: the fingerprint table that would let R2 report `verified`; a first R1 b
 - **R1 runs only from inside a session.** Its shipped chain is `superpowers`, an `in-session` backend nothing can start as a subprocess. It is satisfiable: the session that reviewed records `git config --local mf.attestation.r1 $(git rev-parse HEAD)`. But nothing outside a session can produce that record, so CI and a plain terminal report R1 as not run.
 - **R3 runs here as a forge app, not from the workflow.** `.framework.toml` declares CodeRabbit, which reviews every pull request and does find things. The workflow-hosted alternative needs `MF_R3_ENDPOINT` and friends, unset here. That is an addition rather than a gap. A fork's pull request cannot run it at all, by GitHub's design.
 - **R2 needs at least one reachable backend.** When none is, R2 does not run for that push, the runner says so, and CRURA human review substitutes.
-- **The cross-provider requirement compares two labels.** Both provider names are configuration strings nothing verifies against the endpoint actually reached. The claim is exactly as strong as the labels, which is why the state is recorded beside the review rather than reduced to a pass. Raised as issue #16 and unresolved.
+- **The cross-provider requirement compares two labels.** Both provider names are configuration strings nothing verifies against the endpoint actually reached. The claim is exactly as strong as the labels, which is why the state is recorded beside the review rather than reduced to a pass. Raised in issue #16, which closed as superseded; the surviving question is recorded in `docs/specs/0027` and is still open.
 - **The fingerprint table that would let R2 report `verified` ships empty.** Guessing which environment variables a vendor's agent sets would be inventing them, which `ai_guidelines.md` forbids.
 
 **Backends**
 
-- **`codex` and `gemini` classify quota, authentication and network failures by matching their tool's error text,** which drifts when a vendor rewords it. A drifted pattern reads an unavailable backend as one that reviewed, so the chain stops and names it rather than falling through silently.
+- **Every `cli` backend classifies quota, authentication and network failures by matching its tool's error text,** which drifts when a vendor rewords it. A drifted pattern reads an unavailable backend as one that reviewed, so the chain stops and names it rather than falling through silently.
 - **`gemini` is exercised against a stub, not the real CLI,** which is not installed here. Its dispatch and contract are pinned; its real invocation is unverified, which is why the prompt argument is configurable.
 - **A `cli` backend's answer is prose unless it declares `structured = true`,** and only a structured finding carries a severity that can block or a category `mf eval` can score.
 - **A reasoning model behind an `api` backend has volatile latency,** so the 240s budget is reachable rather than guaranteed. Measured against `deepseek-v4-flash`: 8 KB of diff took 27s, 30 KB took 85s, 40 KB took 163s once and exceeded the budget the next time, and 112 KB never returned. Exceeding it counts as unavailability, so the push is never held hostage to a slow reviewer.

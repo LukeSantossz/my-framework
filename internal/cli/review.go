@@ -263,9 +263,11 @@ func runReview(env Env, args []string) int {
 // The first is that only a finding the reviewer classed as blocking counts.
 // Severity is the reviewer's own judgement, and treating every advisory note as
 // a stop sign would make the flag unusable and push people to `--no-verify`.
-// Unstructured prose from an agentic CLI is advisory by construction, so a
-// chain of those backends can raise findings and still never block; that is the
-// honest reading, because nothing in that answer claimed a severity.
+// Prose from a backend that declared no schema is advisory by construction, so
+// a chain of those can raise findings and still never block; that is the honest
+// reading, because nothing in that answer claimed a severity. A `cli` backend
+// that declares `structured` is asked for the schema and is judged on what it
+// answered, like any other.
 //
 // The second is that a chain that never ran never blocks. r2_gate.md is
 // explicit about it and it is what keeps the gate from being a lock: an expired

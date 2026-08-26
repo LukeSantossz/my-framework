@@ -10,7 +10,11 @@ green build. `go build`, `go vet`, `go test ./...`, four shell suites, `mf check
 silent divergence rather than a failure.
 
 They share one cause. The rebuild in `0014` replaced a shell framework with a Go
-harness, and the shell framework was never removed. The repository now carries two
+harness, and the shell framework was never removed. Removing it retires the
+compatibility both `0014` and `0018` specified for it — the shell shim that
+execs the binary, and the `SKIP_CODEX_REVIEW` and `CODEX_REVIEW_BASE`
+variables — so those acceptance criteria are superseded here and are not
+carried forward. The repository now carries two
 implementations of the same gate. The documentation describes the shell one, the
 binary implements the other, and the two have drifted on the details that matter:
 which chain runs, which environment variables are honoured, and whether a finding can

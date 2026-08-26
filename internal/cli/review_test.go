@@ -482,10 +482,13 @@ func TestCheckRejectsAnUnknownGateName(t *testing.T) {
 // through the configuration cascade instead of a name of its own.
 
 // reviewingEndpoint stands in for a reviewing provider. It answers in the
-// OpenAI wire shape with the findings object the report parser looks for, which
-// is the only way a structured severity reaches a Result: an agentic CLI cannot
-// be asked for a schema, so its answer is always recorded as unstructured and
-// can never be blocking.
+// OpenAI wire shape with the findings object the report parser looks for.
+//
+// An `api` backend is the shape used here because it is the one that always
+// answers this way. A `cli` backend can too, once it declares `structured` —
+// the prompt then asks for the schema and its severities survive — but a cli
+// that declares nothing has its prose recorded verbatim, which carries no
+// severity and can never block.
 func reviewingEndpoint(t *testing.T, severity string) *httptest.Server {
 	t.Helper()
 	body := fmt.Sprintf(`{"findings":[{"category":"correctness","severity":%q,`+
