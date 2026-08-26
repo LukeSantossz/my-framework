@@ -205,6 +205,13 @@ func Sync(o Options) ([]Result, error) {
 			results = append(results, Result{Target: t.Name, File: t.File})
 			continue
 		}
+		// A vendor whose instructions live under a directory of its own — the
+		// `.github/` layouts — got "cannot find the path" and no file, because
+		// nothing created it. The path is already contained to the repository
+		// by the loader, so this creates only inside it.
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			return results, err
+		}
 		if err := os.WriteFile(path, []byte(rendered), 0o644); err != nil {
 			return results, err
 		}

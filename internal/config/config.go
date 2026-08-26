@@ -858,6 +858,19 @@ func validateStatic(project *ProjectFile, projectMeta toml.MetaData, machine *Ma
 			// depends on the whole cascade, so Config.Validate answers it.
 		}
 		problems = append(problems, pathProblems(project.Paths, projectMeta)...)
+		// `agents.<name>.file` is a path this committed file chooses and every
+		// clone honours, so it is contained the way `paths.*` is. Without it
+		// `mf agents sync` wrote outside the repository on whoever ran `mf
+		// init`, from a value the repository itself supplied.
+		for name, a := range project.Agents {
+			if a.File == "" {
+				continue
+			}
+			if msg := pathProblem(a.File); msg != "" {
+				problems = append(problems, Problem{File: ProjectFileName,
+					Key: "agents." + name + ".file", Message: msg})
+			}
+		}
 	}
 
 	if machine != nil {

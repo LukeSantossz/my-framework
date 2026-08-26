@@ -913,3 +913,47 @@ model = "gpt-5.6-terra"
 		t.Errorf("the environment override did not reach the backend: %q", b.Model)
 	}
 }
+
+func TestRefusesAnAgentFileThatLeavesTheRepository(t *testing.T) {
+	// The same trust boundary `backends.<name>.command` is guarded at: this
+	// file is committed, so the path it names is chosen by the repository and
+	// honoured on every machine that clones it. `mf agents sync` wrote there.
+	opts := fixture(t, `version = 1
+
+[agents.escape]
+file = "../ESCAPED.md"
+roles = ["shared"]
+`, "")
+	_, err := Load(opts)
+	if err == nil {
+		t.Fatal("a committed policy file may not name a path outside the repository")
+	}
+	if !strings.Contains(err.Error(), "agents.escape.file") {
+		t.Errorf("the refusal does not name the key: %v", err)
+	}
+}
+
+func TestRefusesAnAbsoluteAgentFile(t *testing.T) {
+	opts := fixture(t, `version = 1
+
+[agents.absolute]
+file = "C:/ESCAPED.md"
+roles = ["shared"]
+`, "")
+	if _, err := Load(opts); err == nil {
+		t.Fatal("an absolute agent file was accepted")
+	}
+}
+
+func TestAcceptsAnAgentFileInASubdirectory(t *testing.T) {
+	// Every vendor whose instructions live under a directory of its own.
+	opts := fixture(t, `version = 1
+
+[agents.copilot]
+file = ".github/copilot-instructions.md"
+roles = ["shared"]
+`, "")
+	if _, err := Load(opts); err != nil {
+		t.Fatalf("a path inside the repository was refused: %v", err)
+	}
+}
