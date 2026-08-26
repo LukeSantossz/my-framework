@@ -154,7 +154,7 @@ func TestExactlyOneOfManyConcurrentRendersClaimsTheRefresh(t *testing.T) {
 		go func() {
 			defer done.Done()
 			start.Wait()
-			if ClaimRefresh(dir, now) {
+			if _, ok := ClaimRefresh(dir, now); ok {
 				claims.Add(1)
 			}
 		}()
@@ -173,17 +173,17 @@ func TestAStaleClaimIsTakenOver(t *testing.T) {
 	// rather than respected.
 	dir := t.TempDir()
 	now := time.Now()
-	if !ClaimRefresh(dir, now) {
+	if _, ok := ClaimRefresh(dir, now); !ok {
 		t.Fatal("the first claim on an unlocked directory was refused")
 	}
-	if ClaimRefresh(dir, now) {
+	if _, ok := ClaimRefresh(dir, now); ok {
 		t.Fatal("a fresh claim was taken twice")
 	}
 	abandoned := now.Add(-2 * LockStale)
 	if err := os.Chtimes(filepath.Join(dir, LockFileName), abandoned, abandoned); err != nil {
 		t.Fatal(err)
 	}
-	if !ClaimRefresh(dir, now) {
+	if _, ok := ClaimRefresh(dir, now); !ok {
 		t.Error("a lock left behind by a killed process was respected forever")
 	}
 }
@@ -207,21 +207,43 @@ func TestReleaseRefreshLetsTheNextRenderClaim(t *testing.T) {
 	// could ever succeed.
 	home := t.TempDir()
 	now := time.Now()
-	if !ClaimRefresh(home, now) {
+	token, ok := ClaimRefresh(home, now)
+	if !ok {
 		t.Fatal("the first claim failed")
 	}
-	if ClaimRefresh(home, now) {
+	if _, second := ClaimRefresh(home, now); second {
 		t.Fatal("a second claim succeeded while the first was held")
 	}
-	ReleaseRefresh(home)
-	if !ClaimRefresh(home, now) {
+	ReleaseRefresh(home, token)
+	if _, again := ClaimRefresh(home, now); !again {
 		t.Error("a released claim was not available again")
+	}
+}
+
+func TestReleaseRefreshLeavesAClaimItDoesNotOwn(t *testing.T) {
+	// Two ways to reach the same overlap the lock exists to prevent: a refresh
+	// started by hand, and a claim that stalled past LockStale, was taken over,
+	// and then finished. Neither may drop the live one.
+	home := t.TempDir()
+	now := time.Now()
+	mine, ok := ClaimRefresh(home, now)
+	if !ok {
+		t.Fatal("the claim failed")
+	}
+	ReleaseRefresh(home, "forged-or-stale")
+	if _, taken := ClaimRefresh(home, now); taken {
+		t.Error("a token that owns nothing dropped the live claim")
+	}
+	ReleaseRefresh(home, mine)
+	if _, again := ClaimRefresh(home, now); !again {
+		t.Error("the owner could not release its own claim")
 	}
 }
 
 func TestReleaseRefreshIsQuietWhenNothingIsHeld(t *testing.T) {
 	// `mf statusline refresh` run by hand holds no claim, and must not fail
 	// for dropping one it never took.
-	ReleaseRefresh(t.TempDir())
-	ReleaseRefresh("")
+	ReleaseRefresh(t.TempDir(), "some-token")
+	ReleaseRefresh("", "some-token")
+	ReleaseRefresh(t.TempDir(), "")
 }

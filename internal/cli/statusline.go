@@ -125,14 +125,15 @@ func scheduleRefresh(env Env, home string, facts statusline.Facts) {
 	if !statusline.RefreshDue(facts.Cache, now) {
 		return
 	}
-	if !statusline.ClaimRefresh(home, now) {
+	token, claimed := statusline.ClaimRefresh(home, now)
+	if !claimed {
 		return
 	}
 	self, err := os.Executable()
 	if err != nil {
 		// Claimed and not handed to anyone: the claim has to go back, or the
 		// lock outlives a refresh that never started.
-		statusline.ReleaseRefresh(home)
+		statusline.ReleaseRefresh(home, token)
 		return
 	}
 	// The child is told it holds a claim, because it is the only process that
@@ -140,14 +141,14 @@ func scheduleRefresh(env Env, home string, facts statusline.Facts) {
 	// what it never took would drop a scheduled refresh's claim mid-fetch —
 	// letting the next render start a second request against an endpoint that
 	// rate-limits per token.
-	args := []string{"statusline", "refresh", claimedFlag}
+	args := []string{"statusline", "refresh", claimedFlag, token}
 	if facts.Version != "" {
 		args = append(args, "--version", facts.Version)
 	}
 	cmd := exec.Command(self, args...)
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = nil, nil, nil
 	if err := cmd.Start(); err != nil {
-		statusline.ReleaseRefresh(home)
+		statusline.ReleaseRefresh(home, token)
 		return
 	}
 	// Released rather than waited on: the render pass is finished, and reaping
@@ -155,18 +156,25 @@ func scheduleRefresh(env Env, home string, facts statusline.Facts) {
 	_ = cmd.Process.Release()
 }
 
-// claimedFlag marks the refresh that scheduleRefresh spawned under a claim. It
-// is not a user-facing option: nothing but that spawn may pass it, and nothing
-// else is entitled to release the lock.
+// claimedFlag carries the token the refresh was spawned under. It is not a
+// user-facing option, and it is not a secret either: the token identifies which
+// claim this process may end, so a refresh started by hand — or one whose claim
+// was taken over as stale while it ran — releases nothing.
 const claimedFlag = "--claimed"
 
 func statuslineRefresh(env Env, args []string) int {
 	version := ""
-	claimed := false
+	claim := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
 		case claimedFlag:
-			claimed = true
+			// The token the claim was taken under. A refresh started by hand
+			// carries none, so it releases nothing.
+			value, ok := optionValue(env, "mf statusline refresh", args, &i)
+			if !ok {
+				return 2
+			}
+			claim = value
 			continue
 		case "--version":
 			// Ignoring the missing value would refresh under a version nobody
@@ -188,8 +196,8 @@ func statuslineRefresh(env Env, args []string) int {
 	}
 	// This process ends the claim only if it is the one the claim was taken
 	// for — whichever way it ends.
-	if claimed {
-		defer statusline.ReleaseRefresh(home)
+	if claim != "" {
+		defer statusline.ReleaseRefresh(home, claim)
 	}
 	if err := statusline.Refresh(statusline.RefreshOptions{
 		Home:     home,
