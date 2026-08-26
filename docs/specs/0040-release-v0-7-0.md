@@ -33,7 +33,7 @@ branch.
 
 ```sh
 gh release view v0.7.0 --json assets -q '.assets|length'   # 6
-mf doctor | head -1                                        # mf v0.7.0
+mf doctor                                                  # first line: mf v0.7.0
 ```
 
 `mf doctor` is where the build reports itself; there is no `mf --version`.
