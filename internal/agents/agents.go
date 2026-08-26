@@ -20,6 +20,7 @@ package agents
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -32,6 +33,11 @@ const SourcePath = "docs/agents/instructions.md"
 // DefaultPathPrefix is where a repository keeps its standards. A submodule
 // consumer overrides it, because its CLAUDE.md must point into `.standards/`.
 const DefaultPathPrefix = "docs/standards"
+
+// DefaultAgentDir is where the skill documents the source references live in the
+// shipped layout. A submodule consumer's generated file must point inside the
+// submodule instead, or the skills it names resolve to nothing there.
+const DefaultAgentDir = "docs/agents"
 
 var roleMarker = regexp.MustCompile(`(?m)^<!--\s*mf:role\s+([a-z-]+)\s*-->\s*$`)
 
@@ -116,7 +122,6 @@ func Render(src Source, t Target, sourcePath string) (string, error) {
 	}
 
 	var b strings.Builder
-	b.WriteString(header(t.Name, sourcePath))
 	if src.Preamble != "" {
 		b.WriteString("\n")
 		b.WriteString(src.Preamble)
@@ -130,11 +135,26 @@ func Render(src Source, t Target, sourcePath string) (string, error) {
 		b.WriteString(sec.Body)
 		b.WriteString("\n")
 	}
-	out := b.String()
+	// The rewrites reach the body alone. The header names the configured source,
+	// which in a vendored layout already carries the prefix, and rewriting the
+	// finished string would double it.
+	body := b.String()
 	if prefix != DefaultPathPrefix {
-		out = strings.ReplaceAll(out, DefaultPathPrefix+"/", prefix+"/")
+		body = strings.ReplaceAll(body, DefaultPathPrefix+"/", prefix+"/")
 	}
-	return out, nil
+	if dir := agentDocDir(sourcePath); dir != DefaultAgentDir {
+		body = strings.ReplaceAll(body, DefaultAgentDir+"/", dir+"/")
+	}
+	return header(t.Name, sourcePath) + body, nil
+}
+
+// agentDocDir is where the skill documents the source names actually live. They
+// ship beside the source — the framework writes `docs/agents/domain.md` next to
+// `docs/agents/instructions.md`, and a submodule delivers the whole directory —
+// so the source a repository configured is what says where they are. Deriving
+// it beats a second key: two ways to state one fact is two ways to disagree.
+func agentDocDir(sourcePath string) string {
+	return path.Dir(filepath.ToSlash(sourcePath))
 }
 
 // header names the document this file was generated from, so the reader is
