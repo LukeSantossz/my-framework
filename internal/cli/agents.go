@@ -47,7 +47,7 @@ func runAgents(env Env, args []string) int {
 		fmt.Fprintln(env.Stdout, "no [agents.*] declared; nothing to generate")
 		return 0
 	}
-	opts := agents.Options{RepoRoot: env.RepoRoot, Targets: targets}
+	opts := agents.Options{RepoRoot: env.RepoRoot, Targets: targets, SourcePath: agentsSource(cfg)}
 
 	if action == "sync" {
 		results, err := agents.Sync(opts)
@@ -83,12 +83,12 @@ func runAgents(env Env, args []string) int {
 		// Without this failing, the generated files are a convention people
 		// bypass by editing the output — the original duplication with extra
 		// steps.
-		fmt.Fprintf(env.Stdout, "\n%d file(s) differ from %s. Run `mf agents sync`.\n", drifted, agents.SourcePath)
+		fmt.Fprintf(env.Stdout, "\n%d file(s) differ from %s. Run `mf agents sync`.\n", drifted, agentsSource(cfg))
 		return 1
 	}
 	return 0
 }
 
-func agentsCheck(env Env, targets []agents.Target) ([]agents.Result, error) {
-	return agents.Check(agents.Options{RepoRoot: env.RepoRoot, Targets: targets})
+func agentsCheck(env Env, cfg *config.Config, targets []agents.Target) ([]agents.Result, error) {
+	return agents.Check(agents.Options{RepoRoot: env.RepoRoot, Targets: targets, SourcePath: agentsSource(cfg)})
 }

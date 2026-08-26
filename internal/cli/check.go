@@ -31,6 +31,15 @@ func specsDir(cfg *config.Config) string {
 // reads both durable archives, so relocating one and not the other would
 // leave a repository able to move its specs and unable to move the decisions
 // that supersede them.
+// agentsSource is where the document the vendor files are generated from
+// lives, as configured. It moves with the standards for a repository that
+// vendors them: the source sits inside the submodule beside the documents it
+// cites, and generating from a path that only resolves here left `mf agents
+// sync` as the one command such a repository could not run.
+func agentsSource(cfg *config.Config) string {
+	return configuredDir(cfg, "paths.agents_source", config.DefaultAgentsSource)
+}
+
 func adrDir(cfg *config.Config) string {
 	return configuredDir(cfg, "paths.adr", check.DefaultADRDir)
 }
@@ -193,7 +202,7 @@ func agentsGate(env Env) int {
 		fmt.Fprintf(env.Stdout, "ok   %-8s no [agents.*] declared; nothing is being compared\n", "agents")
 		return 0
 	}
-	results, err := agentsCheck(env, targets)
+	results, err := agentsCheck(env, cfg, targets)
 	if err != nil {
 		fmt.Fprintf(env.Stderr, "mf check agents: %v\n", err)
 		return 1

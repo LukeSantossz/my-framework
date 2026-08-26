@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -274,6 +276,7 @@ func runInit(env Env, args []string) int {
 		FrameworkVersion: version.Version,
 		StandardsDir:     standardsDir(cfg),
 		R2Backend:        chosen.Name,
+		AgentsSourceDir:  path.Dir(filepath.ToSlash(agentsSource(cfg))),
 	})
 	if chosen.named() && err == nil {
 		// After the scaffold, so a machine write cannot leave a repository
@@ -285,7 +288,17 @@ func runInit(env Env, args []string) int {
 		}
 	}
 	if err == nil {
-		steps = append(steps, generateAgentFiles(env)...)
+		generated := generateAgentFiles(env)
+		steps = append(steps, generated...)
+		// A step that reported a failure is a failure, whatever the ones before
+		// it did. Exiting zero here left an adopter with no instruction files and
+		// a success message, which is the shape of activation this framework
+		// treats as the worst outcome.
+		for _, g := range generated {
+			if strings.HasPrefix(g.Message, "not generated") || strings.HasPrefix(g.Message, "cannot read") {
+				err = errors.New(g.Message)
+			}
+		}
 	}
 	for _, s := range steps {
 		marker := "  "
@@ -338,7 +351,7 @@ func generateAgentFiles(env Env) []activate.Step {
 
 	var steps []activate.Step
 	if len(pending) > 0 {
-		results, syncErr := agents.Sync(agents.Options{RepoRoot: env.RepoRoot, Targets: pending})
+		results, syncErr := agents.Sync(agents.Options{RepoRoot: env.RepoRoot, Targets: pending, SourcePath: agentsSource(cfg)})
 		if syncErr != nil {
 			return append(steps, activate.Step{Name: "agent files", Message: "not generated: " + syncErr.Error()})
 		}
@@ -346,7 +359,7 @@ func generateAgentFiles(env Env) []activate.Step {
 		for _, r := range results {
 			written = append(written, r.File)
 		}
-		steps = append(steps, activate.Step{Name: "agent files", Changed: true, Message: "generated " + strings.Join(written, ", ") + " from " + agents.SourcePath})
+		steps = append(steps, activate.Step{Name: "agent files", Changed: true, Message: "generated " + strings.Join(written, ", ") + " from " + agentsSource(cfg)})
 	}
 	if len(kept) > 0 {
 		steps = append(steps, activate.Step{Name: "agent files", Message: "left untouched: " + strings.Join(kept, ", ") +

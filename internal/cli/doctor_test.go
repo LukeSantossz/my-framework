@@ -510,3 +510,26 @@ func initEnv(t *testing.T, root, machine string, args ...string) (Env, *bytes.Bu
 		GitConfig:   func(string) (string, bool) { return "", false },
 	}, &out, &errOut
 }
+
+func TestInitMaterialisesTheAgentSourceWhereTheConfigurationNamesIt(t *testing.T) {
+	// init wrote the source to the shipped layout and then generated from the
+	// configured one, so a repository that relocates it got no instruction
+	// files at all — and a success message, because nothing read the failure
+	// the generation step had already reported.
+	root := gitRepo(t, "version = 1\n\n[paths]\nagents_source = \".standards/docs/agents/instructions.md\"\n\n[agents.claude]\nfile = \"CLAUDE.md\"\nroles = [\"shared\", \"author\"]\n")
+	e, out, errOut := initEnv(t, root, filepath.Join(t.TempDir(), "config.toml"), "init")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, out.String(), errOut.String())
+	}
+
+	if _, err := os.Stat(filepath.Join(root, ".standards", "docs", "agents", "instructions.md")); err != nil {
+		t.Errorf("the source was not written where the configuration names it: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("no instruction file was generated: %v", err)
+	}
+	if !strings.Contains(string(body), ".standards/docs/agents/instructions.md") {
+		t.Error("the generated header does not name the source it came from")
+	}
+}
