@@ -310,6 +310,13 @@ type InitOptions struct {
 	// backend nothing reaches for. Empty leaves the chain empty, which is the
 	// honest state for a repository that has not chosen one.
 	R2Backend string
+
+	// AgentsSourceDir is the directory holding the document the vendor
+	// instruction files are generated from, as configured. Empty takes the
+	// layout this framework ships with. Materialising it anywhere else would
+	// write a source the configuration does not name, which init then cannot
+	// generate from — it wrote one file and read another.
+	AgentsSourceDir string
 }
 
 // Init applies the local activation state.
@@ -356,7 +363,11 @@ func Init(o InitOptions) ([]Step, error) {
 	// The agent tree is not relocatable the way the standards are: `mf agents
 	// sync` reads its source from one path, so a copy anywhere else is one
 	// nothing generates from.
-	sourceStep, err := materialise(o.RepoRoot, framework.AgentDocs, framework.AgentDocsPrefix, framework.AgentDocsPrefix, "agent source", "file", "")
+	agentsDir := o.AgentsSourceDir
+	if agentsDir == "" {
+		agentsDir = framework.AgentDocsPrefix
+	}
+	sourceStep, err := materialise(o.RepoRoot, framework.AgentDocs, framework.AgentDocsPrefix, agentsDir, "agent source", "file", "")
 	if err != nil {
 		return steps, err
 	}

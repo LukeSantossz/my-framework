@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -274,6 +276,7 @@ func runInit(env Env, args []string) int {
 		FrameworkVersion: version.Version,
 		StandardsDir:     standardsDir(cfg),
 		R2Backend:        chosen.Name,
+		AgentsSourceDir:  path.Dir(filepath.ToSlash(agentsSource(cfg))),
 	})
 	if chosen.named() && err == nil {
 		// After the scaffold, so a machine write cannot leave a repository
@@ -285,7 +288,17 @@ func runInit(env Env, args []string) int {
 		}
 	}
 	if err == nil {
-		steps = append(steps, generateAgentFiles(env)...)
+		generated := generateAgentFiles(env)
+		steps = append(steps, generated...)
+		// A step that reported a failure is a failure, whatever the ones before
+		// it did. Exiting zero here left an adopter with no instruction files and
+		// a success message, which is the shape of activation this framework
+		// treats as the worst outcome.
+		for _, g := range generated {
+			if strings.HasPrefix(g.Message, "not generated") || strings.HasPrefix(g.Message, "cannot read") {
+				err = errors.New(g.Message)
+			}
+		}
 	}
 	for _, s := range steps {
 		marker := "  "
