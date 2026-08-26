@@ -510,3 +510,41 @@ func initEnv(t *testing.T, root, machine string, args ...string) (Env, *bytes.Bu
 		GitConfig:   func(string) (string, bool) { return "", false },
 	}, &out, &errOut
 }
+
+func TestInitMaterialisesTheAgentSourceWhereTheConfigurationNamesIt(t *testing.T) {
+	// init wrote the source to the shipped layout and then generated from the
+	// configured one, so a repository that relocates it got no instruction
+	// files at all — and a success message, because nothing read the failure
+	// the generation step had already reported.
+	root := gitRepo(t, "version = 1\n\n[paths]\nagents_source = \".standards/docs/agents/instructions.md\"\n\n[agents.claude]\nfile = \"CLAUDE.md\"\nroles = [\"shared\", \"author\"]\n")
+	e, out, errOut := initEnv(t, root, filepath.Join(t.TempDir(), "config.toml"), "init")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d: %s%s", code, out.String(), errOut.String())
+	}
+
+	if _, err := os.Stat(filepath.Join(root, ".standards", "docs", "agents", "instructions.md")); err != nil {
+		t.Errorf("the source was not written where the configuration names it: %v", err)
+	}
+	body, err := os.ReadFile(filepath.Join(root, "CLAUDE.md"))
+	if err != nil {
+		t.Fatalf("no instruction file was generated: %v", err)
+	}
+	if !strings.Contains(string(body), ".standards/docs/agents/instructions.md") {
+		t.Error("the generated header does not name the source it came from")
+	}
+}
+
+func TestInitRefusesASourceFilenameItCannotMaterialise(t *testing.T) {
+	// The directory is the adopter's to choose; the filename is what this build
+	// carries. Accepting a different one made init write `instructions.md` and
+	// then generate from a name that was never written, one level below where
+	// the same defect had already been fixed.
+	root := gitRepo(t, "version = 1\n\n[paths]\nagents_source = \"docs/agents/rules.md\"\n\n[agents.claude]\nfile = \"CLAUDE.md\"\nroles = [\"shared\"]\n")
+	e, _, errOut := initEnv(t, root, filepath.Join(t.TempDir(), "config.toml"), "init")
+	if code := Run(e); code == 0 {
+		t.Fatal("init accepted a source filename it does not ship")
+	}
+	if !strings.Contains(errOut.String(), "rules.md") || !strings.Contains(errOut.String(), "instructions.md") {
+		t.Errorf("the refusal names neither the given nor the expected filename: %q", errOut.String())
+	}
+}

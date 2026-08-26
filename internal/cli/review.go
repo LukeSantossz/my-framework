@@ -343,6 +343,7 @@ func buildBackend(env Env, cfg *config.Config, name string) (backend.Backend, er
 			WorkDir: env.RepoRoot,
 			Budget:  budget,
 			Model:   spec.Model, Effort: spec.Effort,
+			Structured: spec.Structured,
 		}, nil
 
 	case "api":

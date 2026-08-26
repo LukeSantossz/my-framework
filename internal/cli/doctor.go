@@ -1,9 +1,11 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"strings"
 
@@ -269,11 +271,35 @@ func runInit(env Env, args []string) int {
 		return code
 	}
 
+	// init materialises the shipped source and then generates from the
+	// configured one, so the two have to name the same file. Only the directory
+	// is free: the basename is what this build carries, and writing one name
+	// while reading another is the defect this guard exists to stop, one level
+	// below the directory it was already fixed at.
+	source := filepath.ToSlash(agentsSource(cfg))
+	if base := path.Base(source); base != path.Base(agents.SourcePath) {
+		fmt.Fprintf(env.Stderr,
+			"mf init: paths.agents_source names %q, and this build carries %q; the directory is yours to choose, the filename is not\n",
+			base, path.Base(agents.SourcePath))
+		return 1
+	}
+	// An environment override lasts one run, and the scaffold this run writes
+	// does not record it. Materialising there would put the source somewhere
+	// the next command, without the variable set, cannot find. Activation is a
+	// durable act; a per-run value is not a place to perform it.
+	if _, prov, ok := cfg.Get("paths.agents_source"); ok && prov.Layer == config.LayerEnv {
+		fmt.Fprintln(env.Stderr,
+			"mf init: paths.agents_source is set for this run only; set it in "+config.ProjectFileName+" so the next command finds the source too")
+		return 1
+	}
+	sourceDir := path.Dir(source)
+
 	steps, err := activate.Init(activate.InitOptions{
 		RepoRoot:         env.RepoRoot,
 		FrameworkVersion: version.Version,
 		StandardsDir:     standardsDir(cfg),
 		R2Backend:        chosen.Name,
+		AgentsSourceDir:  sourceDir,
 	})
 	if chosen.named() && err == nil {
 		// After the scaffold, so a machine write cannot leave a repository
@@ -285,7 +311,17 @@ func runInit(env Env, args []string) int {
 		}
 	}
 	if err == nil {
-		steps = append(steps, generateAgentFiles(env)...)
+		generated := generateAgentFiles(env)
+		steps = append(steps, generated...)
+		// A step that reported a failure is a failure, whatever the ones before
+		// it did. Exiting zero here left an adopter with no instruction files and
+		// a success message, which is the shape of activation this framework
+		// treats as the worst outcome.
+		for _, g := range generated {
+			if strings.HasPrefix(g.Message, "not generated") || strings.HasPrefix(g.Message, "cannot read") {
+				err = errors.New(g.Message)
+			}
+		}
 	}
 	for _, s := range steps {
 		marker := "  "
@@ -338,7 +374,7 @@ func generateAgentFiles(env Env) []activate.Step {
 
 	var steps []activate.Step
 	if len(pending) > 0 {
-		results, syncErr := agents.Sync(agents.Options{RepoRoot: env.RepoRoot, Targets: pending})
+		results, syncErr := agents.Sync(agents.Options{RepoRoot: env.RepoRoot, Targets: pending, SourcePath: agentsSource(cfg)})
 		if syncErr != nil {
 			return append(steps, activate.Step{Name: "agent files", Message: "not generated: " + syncErr.Error()})
 		}
@@ -346,7 +382,7 @@ func generateAgentFiles(env Env) []activate.Step {
 		for _, r := range results {
 			written = append(written, r.File)
 		}
-		steps = append(steps, activate.Step{Name: "agent files", Changed: true, Message: "generated " + strings.Join(written, ", ") + " from " + agents.SourcePath})
+		steps = append(steps, activate.Step{Name: "agent files", Changed: true, Message: "generated " + strings.Join(written, ", ") + " from " + agentsSource(cfg)})
 	}
 	if len(kept) > 0 {
 		steps = append(steps, activate.Step{Name: "agent files", Message: "left untouched: " + strings.Join(kept, ", ") +

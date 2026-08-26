@@ -134,6 +134,18 @@ type CLI struct {
 	// treats it. Zero means no deadline, which is only ever right in a test.
 	Budget time.Duration
 
+	// Structured says this command answers with the findings schema the role
+	// prompt asks for.
+	//
+	// It is declared rather than detected. Guessing would make one backend
+	// behave two ways depending on whether a given answer happened to parse,
+	// and the severity of a finding decides whether a push is blocked. A
+	// backend that declares it and then answers prose has the prose recorded,
+	// exactly as the api kind does: a malformed answer is still an answer, and
+	// reading it as a clean review is the false negative this framework treats
+	// as the worst outcome.
+	Structured bool
+
 	// Model and Effort override the chain-wide values for this backend only.
 	Model  string
 	Effort string
@@ -197,6 +209,12 @@ func (c *CLI) Describe(req Request) string {
 // publishes "Reviewed by <this backend>" on the pull request for output no
 // reviewer produced.
 func (c *CLI) Review(ctx context.Context, req Request) (report.Result, error) {
+	// Applied once, here, so the argv the command is given and the model the
+	// result records are the same value. argv applied them and the result did
+	// not, so a backend pinning its own model reviewed with it and reported
+	// `<unset>` — a review whose record names a model it did not use.
+	req = withOverrides(req, c.Model, c.Effort)
+
 	lookPath := c.LookPath
 	if lookPath == nil {
 		lookPath = exec.LookPath
@@ -238,10 +256,23 @@ func (c *CLI) Review(ctx context.Context, req Request) (report.Result, error) {
 		return report.Result{}, &Unavailable{Backend: c.BackendName,
 			Reason: c.Command + " exited successfully but produced no output, so nothing was reviewed"}
 	}
-	// An agentic CLI cannot be asked for a schema, so its output is recorded
-	// verbatim as one finding. Reporting nothing would be read as a clean
-	// review.
-	return report.Unstructured(c.BackendName, c.ProviderName, req.Model, out), nil
+	// A CLI that has not declared the schema has its output recorded verbatim
+	if c.Structured {
+		if findings, parseErr := report.ParseFindings(out); parseErr == nil {
+			return report.Result{
+				Backend:   c.BackendName,
+				Provider:  c.ProviderName,
+				Model:     req.Model,
+				Truncated: req.Truncated,
+				Findings:  findings,
+			}, nil
+		}
+	}
+	// A partial review that loses the flag reads as a complete one, so the
+	// prose path carries it exactly as the structured path and the api kind do.
+	unstructured := report.Unstructured(c.BackendName, c.ProviderName, req.Model, out)
+	unstructured.Truncated = req.Truncated
+	return unstructured, nil
 }
 
 // snippet bounds what a failing command's output contributes to a reason, and

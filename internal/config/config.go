@@ -49,6 +49,7 @@ const (
 	DefaultStandardsDir = "docs/standards"
 	DefaultSpecsDir     = "docs/specs"
 	DefaultADRDir       = "docs/adr"
+	DefaultAgentsSource = "docs/agents/instructions.md"
 	DefaultAgentsFile   = "AGENTS.md"
 )
 
@@ -110,6 +111,7 @@ type Backend struct {
 	UnavailablePatterns []string `toml:"unavailable_patterns"`
 	Model               string   `toml:"model"`
 	Effort              string   `toml:"effort"`
+	Structured          bool     `toml:"structured"`
 
 	Endpoint  string `toml:"endpoint"`
 	APIKeyEnv string `toml:"api_key_env"`
@@ -159,10 +161,11 @@ type Review struct {
 // another — which is the drift these gates exist to catch. Every value is
 // resolved against the repository root and may not leave it.
 type Paths struct {
-	Standards  string `toml:"standards"`
-	Specs      string `toml:"specs"`
-	ADR        string `toml:"adr"`
-	AgentsFile string `toml:"agents_file"`
+	Standards    string `toml:"standards"`
+	Specs        string `toml:"specs"`
+	ADR          string `toml:"adr"`
+	AgentsSource string `toml:"agents_source"`
+	AgentsFile   string `toml:"agents_file"`
 }
 
 // ProjectFile is the committed policy file. It carries Providers only so that a
@@ -349,6 +352,9 @@ func (w writer) backends(backends map[string]Backend) {
 			"backends", name, "unavailable_patterns")
 		w.set(prefix+"model", b.Model, "backends", name, "model")
 		w.set(prefix+"effort", b.Effort, "backends", name, "effort")
+		if b.Structured {
+			w.set(prefix+"structured", "true", "backends", name, "structured")
+		}
 	}
 }
 
@@ -489,6 +495,7 @@ func (c *Config) applyDefaults() {
 		"paths.standards":        DefaultStandardsDir,
 		"paths.specs":            DefaultSpecsDir,
 		"paths.adr":              DefaultADRDir,
+		"paths.agents_source":    DefaultAgentsSource,
 		"paths.agents_file":      DefaultAgentsFile,
 	} {
 		c.set(key, value, LayerDefault, "built-in default")
@@ -563,6 +570,7 @@ func (c *Config) applyProject(p *ProjectFile, md toml.MetaData, source string) {
 	w.set("paths.standards", p.Paths.Standards, "paths", "standards")
 	w.set("paths.specs", p.Paths.Specs, "paths", "specs")
 	w.set("paths.adr", p.Paths.ADR, "paths", "adr")
+	w.set("paths.agents_source", p.Paths.AgentsSource, "paths", "agents_source")
 	w.set("paths.agents_file", p.Paths.AgentsFile, "paths", "agents_file")
 }
 
@@ -923,6 +931,7 @@ func pathProblems(p Paths, md toml.MetaData) []Problem {
 		{"paths.standards", "standards", p.Standards},
 		{"paths.specs", "specs", p.Specs},
 		{"paths.adr", "adr", p.ADR},
+		{"paths.agents_source", "agents_source", p.AgentsSource},
 		{"paths.agents_file", "agents_file", p.AgentsFile},
 	} {
 		if !md.IsDefined("paths", cfgPath.leaf) {
