@@ -127,7 +127,9 @@ mf init --provider <name> --endpoint <url> --api-key-env <VAR> --model <id>
 
 `<VAR>` is the *name* of the environment variable holding the key, never the key. The loader refuses a credential in either file. Without these flags `init` writes no machine state at all.
 
-It refuses rather than guesses in three cases: outside a git repository, into a path inside a submodule, and over a `core.hooksPath` another tool set.
+It refuses rather than guesses in two cases: outside a git repository, and when this repository declares a submodule that is not checked out — nothing can then tell whether that submodule is what supplies the standards, and writing a second corpus is the one thing a re-run cannot undo. `mf init --standards <dir>` names the directory outright and skips the question.
+
+Two more cases it declines rather than refuses, reporting each and carrying on: a standards path inside a submodule, which that submodule supplies, and a `core.hooksPath` another tool set, which is theirs to remove.
 
 ### Three things `mf init` does not do
 
@@ -162,6 +164,8 @@ path_prefix = ".standards/docs/standards"
 
 `path_prefix` is what rewrites the references inside the generated text. Without it the generated `CLAUDE.md` points at `docs/standards/...`, which does not resolve in this layout.
 
+`mf init` writes that block for you when the submodule is checked out: it reads the corpus that is there rather than the default, so nothing is materialised beside it. Run `git submodule update --init` first — on an uninitialised submodule init refuses, because an empty directory is not evidence of anything.
+
 There is no sync command, because the submodule *is* the corpus. Update it with `git submodule update --remote`, then `mf agents sync` regenerates the vendor instruction files.
 
 ## API Reference
@@ -170,7 +174,7 @@ There is no sync command, because the submodule *is* the corpus. Update it with 
 
 | Command | What it does |
 |---|---|
-| `mf init [--provider <name> --endpoint <url> --api-key-env <VAR> [--model <id>] [--kind <shape>]]` | Adopt this repository. Overwrites nothing. The provider flags record your chosen reviewer in the machine layer and name it in the R2 chain. |
+| `mf init [--standards <dir>] [--provider <name> --endpoint <url> --api-key-env <VAR> [--model <id>] [--kind <shape>]]` | Adopt this repository. Overwrites nothing. A checked-out submodule carrying a corpus is adopted as the layout, so no second one is written; `--standards` names the directory instead. The provider flags record your chosen reviewer in the machine layer and name it in the R2 chain. |
 | `mf doctor` | Build, activation state, every role's chain and each backend's reachability, cross-provider state, credentials, usage. Changes nothing. |
 | `mf hooks install\|uninstall\|status` | Wire, unwire or report `core.hooksPath`. Install refuses a path it does not own; uninstall removes only what `mf` set and is idempotent. |
 | `mf upgrade` | Compare your standards against the ones this build carries. Applies nothing: your standards are your content. |

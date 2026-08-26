@@ -236,6 +236,10 @@ func (c chosenProvider) named() bool { return c.Name != "" }
 
 func runInit(env Env, args []string) int {
 	var chosen chosenProvider
+	// Where the standards belong, when the adopter names it. It settles a
+	// question init otherwise answers from what it can see, so it is read
+	// before anything is written and skips the detection entirely.
+	var namedStandards string
 	for i := 0; i < len(args); i++ {
 		var into *string
 		switch args[i] {
@@ -249,6 +253,8 @@ func runInit(env Env, args []string) int {
 			into = &chosen.Model
 		case "--kind":
 			into = &chosen.Kind
+		case "--standards":
+			into = &namedStandards
 		default:
 			fmt.Fprintf(env.Stderr, "mf init: unknown option %q\n", args[i])
 			return 2
@@ -292,14 +298,19 @@ func runInit(env Env, args []string) int {
 			"mf init: paths.agents_source is set for this run only; set it in "+config.ProjectFileName+" so the next command finds the source too")
 		return 1
 	}
-	sourceDir := path.Dir(source)
+	standards, source, submodule, code := resolveStandards(env, cfg, namedStandards)
+	if code != 0 {
+		return code
+	}
+	sourceDir := path.Dir(filepath.ToSlash(source))
 
 	steps, err := activate.Init(activate.InitOptions{
-		RepoRoot:         env.RepoRoot,
-		FrameworkVersion: version.Version,
-		StandardsDir:     standardsDir(cfg),
-		R2Backend:        chosen.Name,
-		AgentsSourceDir:  sourceDir,
+		RepoRoot:           env.RepoRoot,
+		FrameworkVersion:   version.Version,
+		StandardsDir:       standards,
+		StandardsSubmodule: submodule,
+		R2Backend:          chosen.Name,
+		AgentsSourceDir:    sourceDir,
 	})
 	if chosen.named() && err == nil {
 		// After the scaffold, so a machine write cannot leave a repository
@@ -577,4 +588,62 @@ func recordProvider(env Env, c chosenProvider) (activate.Step, error) {
 		Changed: true,
 		Message: fmt.Sprintf("recorded %s on this machine; %s names it in the R2 chain", c.Name, config.ProjectFileName),
 	}, nil
+}
+
+// resolveStandards decides where this repository's standards live, before init
+// writes anything that depends on the answer.
+//
+// The default is only a default. A repository that vendors the corpus as a
+// submodule already has one, and materialising the shipped layout beside it
+// gives that repository two corpora — the gates read one, `mf agents sync`
+// generates references into it, and the submodule the adopter actually updates
+// is the other. The existing guard cannot catch this: it asks whether the
+// *configured* directory is inside a submodule, and a repository being adopted
+// has configured nothing yet.
+//
+// So the question is settled from evidence. A checked-out submodule carrying a
+// corpus is the answer. A declared submodule that is not checked out is not
+// evidence of anything, and is refused rather than guessed at, because the
+// wrong guess is the one that cannot be undone by re-running the command.
+func resolveStandards(env Env, cfg *config.Config, named string) (dir, source, sub string, code int) {
+	dir, source = standardsDir(cfg), agentsSource(cfg)
+	if named != "" {
+		return named, source, "", 0
+	}
+	// A repository that already configures a corpus has answered the question
+	// itself, in the layer that outranks the default.
+	if _, prov, ok := cfg.Get("paths.standards"); ok && prov.Layer != config.LayerDefault {
+		return dir, source, "", 0
+	}
+	vendored, ok := activate.VendoredStandards(env.RepoRoot)
+	if !ok {
+		return dir, source, "", 0
+	}
+	if !vendored.Populated {
+		fmt.Fprintf(env.Stderr,
+			"mf init: %s is declared as a submodule and is not checked out, so this cannot tell whether it supplies the standards.\n"+
+				"  If it does:      git submodule update --init %s, then run `mf init` again\n"+
+				"  If it does not:  mf init --standards <dir> names where the standards belong\n"+
+				"Nothing was written.\n",
+			vendored.Dir, vendored.Dir)
+		return "", "", "", 1
+	}
+	if !vendored.AgentSource {
+		// The corpus is there and the source beside it is not, which is what a
+		// pin older than the source looks like. Materialising one here would
+		// put an untracked file in that submodule; materialising it outside
+		// would generate the instruction files from a copy the adopter never
+		// updates. Both are worse than saying so before anything is written.
+		fmt.Fprintf(env.Stderr,
+			"mf init: %s supplies the standards but carries no %s, so there is nothing to"+
+				" generate the instruction files from.\n"+
+				"  Update it:  git -C %s submodule update --remote %s\n"+
+				"  Or:         mf init --standards <dir> to keep the standards somewhere this repository owns\n"+
+				"Nothing was written.\n",
+			vendored.Dir, config.DefaultAgentsSource, env.RepoRoot, vendored.Dir)
+		return "", "", "", 1
+	}
+	return vendored.Dir + "/" + config.DefaultStandardsDir,
+		vendored.Dir + "/" + config.DefaultAgentsSource,
+		vendored.Dir, 0
 }
