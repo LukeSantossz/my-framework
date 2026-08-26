@@ -365,3 +365,98 @@ func firstLines(s string, n int) string {
 	}
 	return strings.Join(lines, "\n")
 }
+
+// vendoredSource is a source that names its sibling skill documents, the way
+// the shipped one does. The consumer-owned paths are in it on purpose: a
+// rewrite that catches them would send the Spec Gate's reader into the
+// framework's archive instead of this repository's.
+const vendoredSource = "# Agent Instructions\n" +
+	"\n" +
+	"Read `docs/standards/INDEX.md` before doing anything.\n" +
+	"\n" +
+	"<!-- mf:role shared -->\n" +
+	"## Standards are binding\n" +
+	"\n" +
+	"The approved spec under `docs/specs/` is the source of truth.\n" +
+	"\n" +
+	"<!-- mf:role author -->\n" +
+	"## Your role as Author\n" +
+	"\n" +
+	"- **Issue tracker**: see `docs/agents/issue-tracker.md`.\n" +
+	"- **Domain docs**: one `CONTEXT.md` plus `docs/adr/`. See `docs/agents/domain.md`.\n"
+
+const vendoredPath = ".standards/docs/agents/instructions.md"
+
+func mustParseVendored(t *testing.T) Source {
+	t.Helper()
+	src, err := Parse(vendoredSource)
+	if err != nil {
+		t.Fatalf("Parse: %v", err)
+	}
+	return src
+}
+
+func TestRenderRewritesASkillReferenceToWhereTheVendoredSourceKeepsIt(t *testing.T) {
+	// The skill documents ship beside the instruction source, so a repository
+	// that vendors the corpus has them at `.standards/docs/agents/`. Left
+	// unrewritten, the generated file sends every session to a path that does
+	// not exist there, and nothing reports it: the output matches the source it
+	// was generated from, which is all `mf check agents` can see.
+	src := mustParseVendored(t)
+	out, err := Render(src, Target{
+		Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"},
+		PathPrefix: ".standards/docs/standards",
+	}, vendoredPath)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	for _, want := range []string{
+		".standards/docs/agents/issue-tracker.md",
+		".standards/docs/agents/domain.md",
+	} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the generated file does not point at %s:\n%s", want, out)
+		}
+	}
+	if strings.Contains(out, "`docs/agents/issue-tracker.md`") {
+		t.Errorf("an unprefixed skill reference survived:\n%s", out)
+	}
+}
+
+func TestRenderLeavesTheHeaderAloneWhenTheSourceIsVendored(t *testing.T) {
+	// The header names the configured source, which in this layout already
+	// begins with the prefix. Rewriting the finished string doubles it.
+	src := mustParseVendored(t)
+	out, err := Render(src, Target{
+		Name: "claude", File: "CLAUDE.md", Roles: []string{"shared"},
+		PathPrefix: ".standards/docs/standards",
+	}, vendoredPath)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if !strings.Contains(out, vendoredPath) {
+		t.Errorf("the header no longer names the source it was generated from:\n%s", out)
+	}
+	if strings.Contains(out, ".standards/.standards/") {
+		t.Errorf("the rewrite was applied to the header:\n%s", out)
+	}
+}
+
+func TestRenderDoesNotRewriteTheConsumerOwnedSpecAndADRPaths(t *testing.T) {
+	// `docs/specs` and `docs/adr` belong to the adopting repository. A rewrite
+	// that swept them in would point the Spec Gate's reader at the framework's
+	// own archive.
+	src := mustParseVendored(t)
+	out, err := Render(src, Target{
+		Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"},
+		PathPrefix: ".standards/docs/standards",
+	}, vendoredPath)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	for _, want := range []string{"`docs/specs/`", "`docs/adr/`"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("%s was rewritten; it is this repository's, not the submodule's:\n%s", want, out)
+		}
+	}
+}
