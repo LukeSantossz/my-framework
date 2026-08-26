@@ -153,7 +153,14 @@ standards     = ".standards/docs/standards"
 specs         = "docs/specs"
 adr           = "docs/adr"
 agents_source = ".standards/docs/agents/instructions.md"
+
+[agents.claude]
+file        = "CLAUDE.md"
+roles       = ["shared", "author"]
+path_prefix = ".standards/docs/standards"
 ```
+
+`path_prefix` is what rewrites the references inside the generated text. Without it the generated `CLAUDE.md` points at `docs/standards/...`, which does not resolve in this layout.
 
 There is no sync command, because the submodule *is* the corpus. Update it with `git submodule update --remote`, then `mf agents sync` regenerates the vendor instruction files.
 
@@ -223,7 +230,7 @@ The cascade runs defaults, legacy git-config, machine, project, environment. Eac
 
 ## Project Structure
 
-```
+```text
 my-framework/
 ├── cmd/mf/               # the binary's entry point
 ├── internal/             # config, roles, backends, checks, report
