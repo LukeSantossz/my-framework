@@ -236,3 +236,20 @@ func TestStatuslineWithNoActionRenders(t *testing.T) {
 		t.Error("the default action produced no line")
 	}
 }
+
+func TestStatuslineRenderHonoursThePrefixedNoRefreshName(t *testing.T) {
+	// R2 caught the older `MYFW_` name breaking the `MF_` prefix every other
+	// variable carries. Both are read: dropping a name that silently turns the
+	// background fetch back on is worse than carrying two.
+	for _, name := range []string{"MF_STATUSLINE_NO_REFRESH", "MYFW_STATUSLINE_NO_REFRESH"} {
+		t.Run(name, func(t *testing.T) {
+			e, out, _ := statuslineEnv(t, "{}", map[string]string{name: "1", "NO_COLOR": "1"}, "statusline", "render")
+			if code := Run(e); code != 0 {
+				t.Fatalf("exit %d", code)
+			}
+			if out.String() == "" {
+				t.Error("nothing rendered")
+			}
+		})
+	}
+}

@@ -210,7 +210,7 @@ There is no sync command, because the submodule *is* the corpus. Update it with 
 | `mf models pin\|list` | Record the model each backend resolves to, or report drift against the pins. |
 | `mf usage [show\|reset]` | Runs and tokens spent, in disjoint buckets. |
 | `mf agents sync\|check` | Regenerate the vendor instruction files from one source, or report drift. |
-| `mf statusline render [--no-refresh]\|apply\|refresh\|revert` | The status line contract. `apply` edits the agent's own configuration; `revert` puts back what it replaced. `--no-refresh` (or `MYFW_STATUSLINE_NO_REFRESH`) draws from the cache without spawning the quota fetch. |
+| `mf statusline render [--no-refresh]\|apply\|refresh\|revert` | The status line contract. `apply` edits the agent's own configuration; `revert` puts back what it replaced. `--no-refresh` (or `MF_STATUSLINE_NO_REFRESH`; the older `MYFW_`-prefixed name is still read) draws from the cache without spawning the quota fetch. |
 
 ### Keys
 
