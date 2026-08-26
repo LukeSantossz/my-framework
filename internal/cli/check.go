@@ -40,6 +40,14 @@ func agentsSource(cfg *config.Config) string {
 	return configuredDir(cfg, "paths.agents_source", config.DefaultAgentsSource)
 }
 
+// agentsOverlay is this repository's own instruction sections, if it declared
+// any. The fallback is empty on purpose: there is no shipped overlay to fall
+// back to, and a repository that declares none generates exactly what it
+// generated before the key existed.
+func agentsOverlay(cfg *config.Config) string {
+	return configuredDir(cfg, "paths.agents_overlay", "")
+}
+
 func adrDir(cfg *config.Config) string {
 	return configuredDir(cfg, "paths.adr", check.DefaultADRDir)
 }

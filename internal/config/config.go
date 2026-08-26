@@ -165,7 +165,10 @@ type Paths struct {
 	Specs        string `toml:"specs"`
 	ADR          string `toml:"adr"`
 	AgentsSource string `toml:"agents_source"`
-	AgentsFile   string `toml:"agents_file"`
+	// AgentsOverlay is this repository's own instruction sections, appended to
+	// the generated vendor files. Empty is a repository that declared none.
+	AgentsOverlay string `toml:"agents_overlay"`
+	AgentsFile    string `toml:"agents_file"`
 }
 
 // ProjectFile is the committed policy file. It carries Providers only so that a
@@ -532,6 +535,11 @@ func (c *Config) applyDefaults() {
 	// layer wrote is one no environment override can land on, and
 	// `MF_REVIEW_MODEL` was documented and dead for exactly that reason.
 	c.entries["review.model"] = entry{value: "", prov: Provenance{Layer: LayerDefault, Source: "built-in default (each backend names its own)"}}
+	// There is no default overlay: a repository either has its own instruction
+	// sections or it does not. The key is declared here rather than in the table
+	// above because `set` drops an empty value, and a key no layer wrote is a key
+	// `MF_PATHS_AGENTS_OVERLAY` cannot land on.
+	c.entries["paths.agents_overlay"] = entry{value: "", prov: Provenance{Layer: LayerDefault, Source: "built-in default (no overlay)"}}
 }
 
 func (c *Config) applyLegacy(gitConfig func(string) (string, bool)) {
@@ -577,6 +585,7 @@ func (c *Config) applyProject(p *ProjectFile, md toml.MetaData, source string) {
 	w.set("paths.specs", p.Paths.Specs, "paths", "specs")
 	w.set("paths.adr", p.Paths.ADR, "paths", "adr")
 	w.set("paths.agents_source", p.Paths.AgentsSource, "paths", "agents_source")
+	w.set("paths.agents_overlay", p.Paths.AgentsOverlay, "paths", "agents_overlay")
 	w.set("paths.agents_file", p.Paths.AgentsFile, "paths", "agents_file")
 }
 
@@ -979,6 +988,7 @@ func pathProblems(p Paths, md toml.MetaData) []Problem {
 		{"paths.specs", "specs", p.Specs},
 		{"paths.adr", "adr", p.ADR},
 		{"paths.agents_source", "agents_source", p.AgentsSource},
+		{"paths.agents_overlay", "agents_overlay", p.AgentsOverlay},
 		{"paths.agents_file", "agents_file", p.AgentsFile},
 	} {
 		if !md.IsDefined("paths", cfgPath.leaf) {

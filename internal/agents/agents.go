@@ -49,9 +49,17 @@ type Section struct {
 
 // Source is the parsed instruction source: a preamble every file carries, then
 // the role-tagged sections in the order they were written.
+//
+// Overlay holds the repository's own sections, from the file
+// `paths.agents_overlay` names. They are kept apart from Sections rather than
+// merged into them because they are treated differently: they read after the
+// framework's, as the refinement `code_conventions.md` says a project's
+// established pattern is, and they are never path-rewritten, because they are
+// this repository's text about its own layout.
 type Source struct {
 	Preamble string
 	Sections []Section
+	Overlay  []Section
 }
 
 // Parse splits the source on its role markers.
@@ -75,11 +83,13 @@ func Parse(body string) (Source, error) {
 	return src, nil
 }
 
-// Roles lists every role the source declares, sorted.
+// Roles lists every role the source declares, sorted. The overlay's count: a
+// repository may name a role of its own, and refusing it would make the
+// overlay unable to say anything the framework had not already thought of.
 func (s Source) Roles() []string {
 	seen := map[string]bool{}
 	var out []string
-	for _, sec := range s.Sections {
+	for _, sec := range append(append([]Section{}, s.Sections...), s.Overlay...) {
 		if !seen[sec.Role] {
 			seen[sec.Role] = true
 			out = append(out, sec.Role)
@@ -145,7 +155,19 @@ func Render(src Source, t Target, sourcePath string) (string, error) {
 	if dir := agentDocDir(sourcePath); dir != DefaultAgentDir {
 		body = strings.ReplaceAll(body, DefaultAgentDir+"/", dir+"/")
 	}
-	return header(t.Name, sourcePath) + body, nil
+	// After the rewrites, and after the framework's sections: the overlay's
+	// paths are the repository's own and already resolve, and an established
+	// project pattern outranks a framework default, so it reads last.
+	var overlay strings.Builder
+	for _, sec := range src.Overlay {
+		if !wanted[sec.Role] {
+			continue
+		}
+		overlay.WriteString("\n")
+		overlay.WriteString(sec.Body)
+		overlay.WriteString("\n")
+	}
+	return header(t.Name, sourcePath) + body + overlay.String(), nil
 }
 
 // agentDocDir is where the skill documents the source names actually live. They
@@ -181,6 +203,11 @@ type Options struct {
 	RepoRoot string
 	Targets  []Target
 
+	// OverlayPath is the repository's own marked-up instructions, as
+	// configured. Empty means a repository that declared none, which generates
+	// exactly what it generated before the key existed.
+	OverlayPath string
+
 	// SourcePath is where the marked-up instructions live, as configured.
 	// Empty takes the layout this framework ships with. It is a parameter for
 	// the reason the standards directory became one: a repository that vendors
@@ -204,7 +231,26 @@ func load(o Options) (Source, error) {
 	if err != nil {
 		return Source{}, fmt.Errorf("cannot read %s: %w", src, err)
 	}
-	return Parse(string(body))
+	parsed, err := Parse(string(body))
+	if err != nil {
+		return Source{}, err
+	}
+	if o.OverlayPath == "" {
+		return parsed, nil
+	}
+	// Configured and unreadable is an error, not a skip: a dropped overlay is a
+	// generated file that looks complete and has lost exactly the obligations
+	// no other document carries.
+	overlayBody, err := os.ReadFile(filepath.Join(o.RepoRoot, filepath.FromSlash(o.OverlayPath)))
+	if err != nil {
+		return Source{}, fmt.Errorf("cannot read the overlay %s: %w", o.OverlayPath, err)
+	}
+	overlay, err := Parse(string(overlayBody))
+	if err != nil {
+		return Source{}, fmt.Errorf("%s: %w", o.OverlayPath, err)
+	}
+	parsed.Overlay = overlay.Sections
+	return parsed, nil
 }
 
 // Sync writes every target, leaving one already correct untouched.
