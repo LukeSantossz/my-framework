@@ -56,6 +56,13 @@ func runDoctor(env Env) int {
 			activate.HooksDir)
 	case state.Canonical:
 		fmt.Fprintf(env.Stdout, "  hooks      wired to %s\n", activate.HooksDir)
+		// Wired is not the same as running. A hook the index records
+		// non-executable is one git skips on every platform that honours the
+		// bit, which is every platform except the one that wrote it.
+		if off := activate.NonExecutableHooks(env.RepoRoot); len(off) > 0 {
+			fmt.Fprintf(env.Stdout, "  hook mode  the index records %s as non-executable, so git will not run %s on a clone — `git update-index --chmod=+x %s`\n",
+				strings.Join(off, ", "), pluralise(len(off), "it", "them"), strings.Join(off, " "))
+		}
 	case state.Path != "":
 		fmt.Fprintf(env.Stdout, "  hooks      core.hooksPath points at %q, not %s — the gate does not run%s\n",
 			state.Path, activate.HooksDir, inheritedNote(state))
@@ -233,6 +240,15 @@ type chosenProvider struct {
 }
 
 func (c chosenProvider) named() bool { return c.Name != "" }
+
+// pluralise picks between two words by count. Two forms rather than a suffix,
+// because the pair this needs is "it" and "them".
+func pluralise(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
+}
 
 func runInit(env Env, args []string) int {
 	var chosen chosenProvider
