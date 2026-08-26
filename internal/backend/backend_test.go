@@ -661,3 +661,24 @@ func TestACLIThatPromisesTheSchemaAndAnswersProseIsStillRecorded(t *testing.T) {
 		t.Errorf("the prose was lost: %+v", res.Findings)
 	}
 }
+
+func TestTheResultNamesTheModelTheCommandWasGiven(t *testing.T) {
+	// argv applied the backend's own model and the result did not, so a backend
+	// pinning one reviewed with it and recorded `<unset>`: a review whose record
+	// names a model it did not use.
+	c := &CLI{
+		BackendName: "agy", ProviderName: "google", Model: "gemini-3.1-pro-high",
+		LookPath: func(string) (string, error) { return "agy", nil },
+		Run:      func(context.Context, string, string, []string) (string, error) { return "looks fine", nil },
+	}
+	res, err := c.Review(context.Background(), Request{Base: "main", Head: "HEAD", Truncated: true})
+	if err != nil {
+		t.Fatalf("Review: %v", err)
+	}
+	if res.Model != "gemini-3.1-pro-high" {
+		t.Errorf("Model = %q, want the one the command was given", res.Model)
+	}
+	if !res.Truncated {
+		t.Error("a partial review lost its Truncated flag and reads as complete")
+	}
+}

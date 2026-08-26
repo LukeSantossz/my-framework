@@ -209,6 +209,12 @@ func (c *CLI) Describe(req Request) string {
 // publishes "Reviewed by <this backend>" on the pull request for output no
 // reviewer produced.
 func (c *CLI) Review(ctx context.Context, req Request) (report.Result, error) {
+	// Applied once, here, so the argv the command is given and the model the
+	// result records are the same value. argv applied them and the result did
+	// not, so a backend pinning its own model reviewed with it and reported
+	// `<unset>` — a review whose record names a model it did not use.
+	req = withOverrides(req, c.Model, c.Effort)
+
 	lookPath := c.LookPath
 	if lookPath == nil {
 		lookPath = exec.LookPath
@@ -262,7 +268,11 @@ func (c *CLI) Review(ctx context.Context, req Request) (report.Result, error) {
 			}, nil
 		}
 	}
-	return report.Unstructured(c.BackendName, c.ProviderName, req.Model, out), nil
+	// A partial review that loses the flag reads as a complete one, so the
+	// prose path carries it exactly as the structured path and the api kind do.
+	unstructured := report.Unstructured(c.BackendName, c.ProviderName, req.Model, out)
+	unstructured.Truncated = req.Truncated
+	return unstructured, nil
 }
 
 // snippet bounds what a failing command's output contributes to a reason, and

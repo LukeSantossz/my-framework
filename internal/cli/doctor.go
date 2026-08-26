@@ -283,6 +283,15 @@ func runInit(env Env, args []string) int {
 			base, path.Base(agents.SourcePath))
 		return 1
 	}
+	// An environment override lasts one run, and the scaffold this run writes
+	// does not record it. Materialising there would put the source somewhere
+	// the next command, without the variable set, cannot find. Activation is a
+	// durable act; a per-run value is not a place to perform it.
+	if _, prov, ok := cfg.Get("paths.agents_source"); ok && prov.Layer == config.LayerEnv {
+		fmt.Fprintln(env.Stderr,
+			"mf init: paths.agents_source is set for this run only; set it in "+config.ProjectFileName+" so the next command finds the source too")
+		return 1
+	}
 	sourceDir := path.Dir(source)
 
 	steps, err := activate.Init(activate.InitOptions{
