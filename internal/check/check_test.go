@@ -1160,3 +1160,90 @@ func TestCountCriteriaCountsAnOrderedList(t *testing.T) {
 		t.Errorf("counted %d criteria in a bullet list, want 2", n)
 	}
 }
+
+func TestSpecFailsAnEmptyDoesNotIncludeAboveTheIncludesLine(t *testing.T) {
+	// The list is what blocks scope creep, so it is satisfied by content that
+	// belongs to it — not by whatever line happens to follow it in the section.
+	root := fixtureRepo(t)
+	git(t, root, "checkout", "-b", "feat/thing")
+	body := strings.Replace(goodSpec,
+		"- Includes: the thing\n- Does NOT include:\n  - the other thing",
+		"- Does NOT include:\n- Includes: the thing", 1)
+	writeFile(t, filepath.Join(root, "code.go"), "package x\n")
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-do-a-thing.md"), body)
+	git(t, root, "add", ".")
+	git(t, root, "commit", "-m", "feat: code")
+
+	res, _ := Spec(opts(root))
+	if res.OK() {
+		t.Fatal("an empty Does NOT include list passed because another Scope item followed it")
+	}
+}
+
+func TestSpecExemptsNothingWhenThePatternTrimsToNothing(t *testing.T) {
+	// The prefix branch exists so `docs/specs/*` can match across a separator,
+	// which filepath.Match cannot do. With `*` the prefix is empty, every path
+	// begins with it, and the Spec Gate was switched off for every change by a
+	// one-character value that does not look like a total disable in a diff.
+	//
+	// The changed file sits one directory down, which is where the two branches
+	// differ: `*` matched it only through the prefix branch, never through the
+	// glob, which does not cross a separator.
+	root := fixtureRepo(t)
+	git(t, root, "checkout", "-b", "feat/thing")
+	mkdir(t, filepath.Join(root, "internal"))
+	writeFile(t, filepath.Join(root, "internal", "code.go"), "package x\n")
+	git(t, root, "add", ".")
+	git(t, root, "commit", "-m", "feat: code")
+
+	o := opts(root)
+	o.ExemptPaths = []string{"*"}
+	res, err := Spec(o)
+	if err != nil {
+		t.Fatalf("Spec: %v", err)
+	}
+	if res.OK() {
+		t.Fatal("`*` exempted a change that carries no spec")
+	}
+}
+
+func TestSpecStillExemptsADirectoryPrefixPattern(t *testing.T) {
+	// What the prefix branch is for, and what this repository's own policy
+	// depends on: `docs/specs/*` must reach a file one separator down.
+	root := fixtureRepo(t)
+	git(t, root, "checkout", "-b", "docs/record")
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a-record.md"), specStub)
+	git(t, root, "add", ".")
+	git(t, root, "commit", "-m", "docs: a record")
+
+	o := opts(root)
+	o.ExemptPaths = []string{"docs/specs/*"}
+	res, err := Spec(o)
+	if err != nil {
+		t.Fatalf("Spec: %v", err)
+	}
+	if !res.OK() {
+		t.Errorf("a directory prefix pattern stopped matching: %+v", res.Problems)
+	}
+}
+
+func TestSpecFailsAnEmptyDoesNotIncludeWhoseSectionListsWhatItDoesInclude(t *testing.T) {
+	// The next scope item ends the search rather than being stepped over:
+	// skipping only its heading left the items beneath it — which say what the
+	// change does include — standing in for the list that says what it leaves
+	// out.
+	root := fixtureRepo(t)
+	git(t, root, "checkout", "-b", "feat/thing")
+	body := strings.Replace(goodSpec,
+		"- Includes: the thing\n- Does NOT include:\n  - the other thing",
+		"- Does NOT include:\n- Includes:\n  - the thing", 1)
+	writeFile(t, filepath.Join(root, "code.go"), "package x\n")
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-do-a-thing.md"), body)
+	git(t, root, "add", ".")
+	git(t, root, "commit", "-m", "feat: code")
+
+	res, _ := Spec(opts(root))
+	if res.OK() {
+		t.Fatal("an empty Does NOT include list was satisfied by the Includes list below it")
+	}
+}

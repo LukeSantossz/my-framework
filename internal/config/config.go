@@ -448,6 +448,18 @@ func Load(opts Options) (*Config, error) {
 	}
 	cfg.applyEnv(opts.Env)
 
+	// Containment is asked of the finished cascade, not of one layer.
+	//
+	// It used to be asked only of the decoded project file, so a per-run
+	// `MF_PATHS_SPECS=../elsewhere` — a layer that outranks every other —
+	// resolved unchecked. A gate then read a directory outside the tree, found
+	// nothing there, and reported `ok` having verified nothing, which is the
+	// one failure the containment rule exists to prevent. The override itself
+	// stays; only the escape is refused.
+	if problems := cfg.resolvedPathProblems(); len(problems) > 0 {
+		return nil, &ValidationError{Problems: problems}
+	}
+
 	// Reachability is deliberately not a load error.
 	//
 	// Whether an api backend's provider has an endpoint here is a property of
@@ -905,13 +917,26 @@ func validateStatic(project *ProjectFile, projectMeta toml.MetaData, machine *Ma
 		// clone honours, so it is contained the way `paths.*` is. Without it
 		// `mf agents sync` wrote outside the repository on whoever ran `mf
 		// init`, from a value the repository itself supplied.
+		// An empty value is not the absent key: it joins to the repository root,
+		// so `mf check agents` reads a directory as a file, reports drift on
+		// every run, and names a sync that fails the same way. pathProblem has
+		// the message for it; it was only being skipped before being asked.
 		for name, a := range project.Agents {
-			if a.File == "" {
-				continue
-			}
 			if msg := pathProblem(a.File); msg != "" {
 				problems = append(problems, Problem{File: ProjectFileName,
 					Key: "agents." + name + ".file", Message: msg})
+			}
+		}
+		// An exempt pattern is what decides whether the Spec Gate applies at
+		// all, and the matcher cannot read an empty one as anything but every
+		// path. A repository that meant a path wrote one, so this is a mistake
+		// to report rather than a policy to honour.
+		for i, pattern := range project.Checks.ExemptPaths {
+			if strings.TrimSpace(pattern) == "" {
+				problems = append(problems, Problem{File: ProjectFileName,
+					Key: "checks.exempt_paths",
+					Message: fmt.Sprintf("entry %d is empty; a pattern that names nothing would exempt everything, "+
+						"which is not something the Spec Gate can be switched off by accident", i+1)})
 			}
 		}
 	}
@@ -996,6 +1021,40 @@ func pathProblems(p Paths, md toml.MetaData) []Problem {
 		}
 		if msg := pathProblem(cfgPath.value); msg != "" {
 			problems = append(problems, Problem{File: ProjectFileName, Key: cfgPath.key, Message: msg})
+		}
+	}
+	return problems
+}
+
+// pathKeys are the configured document locations every gate joins onto the
+// repository root. Named once, so the containment rule and the project-file
+// table cannot come to cover different sets of keys.
+var pathKeys = []string{
+	"paths.standards",
+	"paths.specs",
+	"paths.adr",
+	"paths.agents_source",
+	"paths.agents_overlay",
+	"paths.agents_file",
+}
+
+// resolvedPathProblems applies the containment rule to what the cascade
+// actually resolved to.
+//
+// A built-in default is skipped because it is this build's own answer and
+// because one of them — the absent overlay — is declared empty on purpose,
+// which pathProblem refuses and should: a repository that writes it empty is
+// making a statement the table cannot honour, while the default is the absence
+// of one.
+func (c *Config) resolvedPathProblems() []Problem {
+	var problems []Problem
+	for _, key := range pathKeys {
+		value, prov, ok := c.Get(key)
+		if !ok || prov.Layer == LayerDefault {
+			continue
+		}
+		if msg := pathProblem(value); msg != "" {
+			problems = append(problems, Problem{File: prov.Source, Key: key, Message: msg})
 		}
 	}
 	return problems

@@ -3,6 +3,7 @@ package check
 import (
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"sort"
@@ -212,12 +213,30 @@ func hasDoesNotInclude(scope string) bool {
 			}
 		}
 		for _, rest := range lines[i+1:] {
-			if strings.TrimSpace(rest) != "" {
-				return true
+			rest = strings.TrimSpace(rest)
+			// A blank line is not content. The section's other item ends the
+			// search rather than being skipped over: an empty "Does NOT
+			// include" written above "Includes" was satisfied first by that
+			// heading and then, once the heading was skipped, by the items
+			// beneath it — which say what the change does include. The list is
+			// what blocks scope creep, so only content between this marker and
+			// the next one counts.
+			if rest == "" {
+				continue
 			}
+			if isScopeItem(rest) {
+				break
+			}
+			return true
 		}
 	}
 	return false
+}
+
+// isScopeItem reports whether a line opens one of the Scope section's own two
+// items, rather than carrying content beneath one.
+func isScopeItem(line string) bool {
+	return strings.Contains(line, "Does NOT include") || strings.Contains(line, "Includes:")
 }
 
 func countCriteria(section string) int {
@@ -271,13 +290,29 @@ func allExempt(changed, exempt []string) bool {
 	for _, f := range changed {
 		matched := false
 		for _, pattern := range exempt {
-			if ok, _ := filepath.Match(pattern, filepath.ToSlash(f)); ok {
+			// path.Match, not filepath.Match: git names paths with slashes and
+			// the value here is normalised to them, but filepath.Match asks the
+			// host what a separator is. On Windows that answer is `\`, so `/`
+			// became an ordinary character and `*` matched a path at any depth
+			// — the same list exempting different sets of files on the
+			// developer's machine and in CI.
+			if ok, _ := path.Match(pattern, filepath.ToSlash(f)); ok {
 				matched = true
 				break
 			}
-			if strings.HasPrefix(filepath.ToSlash(f), strings.TrimSuffix(pattern, "*")) && strings.HasSuffix(pattern, "*") {
-				matched = true
-				break
+			// The prefix branch exists because filepath.Match cannot cross a
+			// separator, so `docs/specs/*` would otherwise never reach a file
+			// one directory down — which this repository's own policy depends
+			// on. The prefix it leaves behind has to be something: trimmed to
+			// nothing, every path begins with it, and `exempt_paths = ["*"]`
+			// switched the Spec Gate off for every change, in a diff that shows
+			// one character. A pattern of exactly `*` still means what the glob
+			// says it means, matched above.
+			if prefix := strings.TrimSuffix(pattern, "*"); prefix != "" && strings.HasSuffix(pattern, "*") {
+				if strings.HasPrefix(filepath.ToSlash(f), prefix) {
+					matched = true
+					break
+				}
 			}
 		}
 		if !matched {
