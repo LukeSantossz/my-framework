@@ -19,9 +19,9 @@ that; the Scope below names each so the release notes can carry it.
 ## Alternatives Considered
 
 - **Release as `v0.7.3`.** Rejected: `mf version` is new behaviour an adopter
-  can call, and five configurations that loaded and passed under `v0.7.2` now
-  fail. Numbering that as a patch tells a reader upgrading it that nothing they
-  have can break.
+  can call, and five things a configuration could do under `v0.7.2` now behave
+  differently — two of them refused outright. Numbering that as a patch tells a
+  reader upgrading it that nothing they have can break.
 - **Split into two tags — the fixes now, the command later.** Rejected: the
   fixes are what the consumers are waiting for, and holding a merged, tested
   command back to make a version number simpler puts the number ahead of the
