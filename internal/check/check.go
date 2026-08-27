@@ -738,9 +738,22 @@ func (o Options) numbersOnOtherRefs(dir string) map[int]string {
 	if err != nil {
 		return nil
 	}
-	held, err := o.Repo.RecordNumbersOnRefs(filepath.ToSlash(rel))
+	files, err := o.Repo.RecordFilesOnOtherRefs(filepath.ToSlash(rel))
 	if err != nil {
 		return nil
+	}
+	// The same filename rule numbering itself applies, so a draft or a stray
+	// file cannot claim a number no record holds.
+	held := map[int]string{}
+	for name, ref := range files {
+		if !specFileName.MatchString(name) {
+			continue
+		}
+		n := 0
+		fmt.Sscanf(name[:4], "%d", &n)
+		if _, seen := held[n]; !seen {
+			held[n] = ref
+		}
 	}
 	return held
 }

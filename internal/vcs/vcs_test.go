@@ -372,7 +372,7 @@ func TestRedeclaringWithoutAModelClearsTheOldOne(t *testing.T) {
 	}
 }
 
-func TestRecordNumbersOnRefsFindsWhatAnotherBranchHolds(t *testing.T) {
+func TestRecordFilesOnOtherRefsFindsWhatAnotherBranchHolds(t *testing.T) {
 	// The one question contiguity cannot answer: whether a number missing from
 	// this branch is a hole or a claim somebody still has open.
 	r := newRepo(t)
@@ -384,37 +384,74 @@ func TestRecordNumbersOnRefsFindsWhatAnotherBranchHolds(t *testing.T) {
 			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 		}
 	}
-	write := func(name string) {
+	write := func(rel string) {
 		t.Helper()
-		if err := os.MkdirAll(filepath.Join(r.Root, "docs", "specs"), 0o755); err != nil {
+		full := filepath.Join(r.Root, filepath.FromSlash(rel))
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(filepath.Join(r.Root, "docs", "specs", name), []byte("# SPEC: x\n"), 0o644); err != nil {
+		if err := os.WriteFile(full, []byte("# SPEC: x\n"), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	}
-	write("0001-a.md")
+	write("docs/specs/0001-a.md")
 	run("add", ".")
 	run("commit", "-m", "docs(spec): a")
 	run("checkout", "-q", "-b", "other")
-	write("0002-b.md")
+	write("docs/specs/0002-b.md")
+	// A draft below the archive directory is not a record, and must not claim
+	// the number in its name.
+	write("docs/specs/drafts/0004-draft.md")
 	run("add", ".")
 	run("commit", "-m", "docs(spec): b")
 	run("checkout", "-q", "main")
 
-	held, err := r.RecordNumbersOnRefs("docs/specs")
+	held, err := r.RecordFilesOnOtherRefs("docs/specs")
 	if err != nil {
-		t.Fatalf("RecordNumbersOnRefs: %v", err)
+		t.Fatalf("RecordFilesOnOtherRefs: %v", err)
 	}
-	if ref, ok := held[2]; !ok || !strings.Contains(ref, "other") {
-		t.Errorf("held[2] = %q (found=%v), want the branch that holds it", ref, ok)
+	if ref, ok := held["0002-b.md"]; !ok || !strings.Contains(ref, "other") {
+		t.Errorf("held[0002-b.md] = %q (found=%v), want the branch that holds it", ref, ok)
 	}
-	if _, ok := held[3]; ok {
-		t.Errorf("a number no ref holds was reported as claimed: %v", held)
+	if _, ok := held["0004-draft.md"]; ok {
+		t.Errorf("a file below the archive directory was reported as held: %v", held)
 	}
 }
 
-func TestRecordNumbersOnRefsIgnoresTheWorkingTree(t *testing.T) {
+func TestRecordFilesOnOtherRefsIgnoresTheBranchAtHead(t *testing.T) {
+	// The current branch's tree is what this working tree came from, so
+	// counting it would let a record deleted and not yet committed excuse the
+	// gap it just made.
+	r := newRepo(t)
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = r.Root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(r.Root, "docs", "specs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"0001-a.md", "0002-b.md"} {
+		if err := os.WriteFile(filepath.Join(r.Root, "docs", "specs", name), []byte("# SPEC: x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	run("add", ".")
+	run("commit", "-m", "docs(spec): a and b")
+
+	held, err := r.RecordFilesOnOtherRefs("docs/specs")
+	if err != nil {
+		t.Fatalf("RecordFilesOnOtherRefs: %v", err)
+	}
+	if ref, ok := held["0002-b.md"]; ok {
+		t.Errorf("the branch at HEAD was counted as another ref (%s): %v", ref, held)
+	}
+}
+
+func TestRecordFilesOnOtherRefsIgnoresTheWorkingTree(t *testing.T) {
 	// A file nobody has committed is not a claim: it exists on this machine and
 	// on no ref, so it cannot excuse a gap anyone else would see.
 	r := newRepo(t)
@@ -434,15 +471,17 @@ func TestRecordNumbersOnRefsIgnoresTheWorkingTree(t *testing.T) {
 	}
 	run("add", ".")
 	run("commit", "-m", "docs(spec): a")
+	run("checkout", "-q", "-b", "other")
+	run("checkout", "-q", "main")
 	if err := os.WriteFile(filepath.Join(r.Root, "docs", "specs", "0009-uncommitted.md"), []byte("# SPEC: u\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
 
-	held, err := r.RecordNumbersOnRefs("docs/specs")
+	held, err := r.RecordFilesOnOtherRefs("docs/specs")
 	if err != nil {
-		t.Fatalf("RecordNumbersOnRefs: %v", err)
+		t.Fatalf("RecordFilesOnOtherRefs: %v", err)
 	}
-	if _, ok := held[9]; ok {
+	if _, ok := held["0009-uncommitted.md"]; ok {
 		t.Errorf("an uncommitted file was read as a claim: %v", held)
 	}
 }

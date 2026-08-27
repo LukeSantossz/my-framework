@@ -57,8 +57,10 @@ and the branches are already fetched or they are not this repository's problem.
 ## Scope
 
 - Includes: `numbering` taking the set of numbers other refs hold, and reporting
-  a gap only for a number none of them does; `Repo.RecordNumbersOnRefs`; the
-  message naming which ref holds a number when it excuses one.
+  a gap only for a number none of them does; `Repo.RecordFilesOnOtherRefs`,
+  which reads what sits directly under the archive on every ref but the one at
+  `HEAD`; the caller applying the same filename rule `numbering` applies, so a
+  draft in a subdirectory cannot claim a number.
 - Does NOT include: the duplicate check, the starts-at-0001 check, or
   `deletedRecords`, all unchanged; any change to `spec_method.md`'s numbering
   rule, which this implements rather than relaxes; reading refs over the
@@ -70,7 +72,9 @@ and the branches are already fetched or they are not this repository's problem.
 - `a_gap_at_a_number_another_branch_holds_passes`
 - `a_duplicate_number_still_fails_however_many_refs_hold_it`
 - `numbering_outside_a_git_repository_behaves_as_it_did`
-- `record_numbers_on_refs_ignores_the_current_branch_and_the_working_tree`
+- `record_files_on_other_refs_ignores_the_branch_at_head`
+- `record_files_on_other_refs_ignores_the_working_tree`
+- `a_gap_a_draft_or_a_non_record_file_would_excuse_still_fails`
 
 ## Reproducibility
 
@@ -96,8 +100,11 @@ Versions: Go 1.26.7, `mf` at the commit under review.
 - Risk: a stale local branch holding a number nobody is working on excuses a gap
   that is a typo. Deleting a merged branch is ordinary hygiene, and the failure
   it causes is a message not printed rather than a bad record accepted.
-- Assumption: `git for-each-ref` and `git ls-tree` are available. Both are core
-  git, and this gate already requires git for `deletedRecords`.
+- Assumption: `git for-each-ref`, `git ls-tree` and `git symbolic-ref` are
+  available. All three are core git, and this gate already requires git for
+  `deletedRecords`. A detached HEAD resolves to no branch, which counts one more
+  ref than it should and is the safe direction: the tree it holds is the one
+  checked out.
 - Assumption: enumerating refs is cheap enough to run on every push. One
   `for-each-ref` and one `ls-tree` per ref, over one directory, and only when a
   gap was found at all.

@@ -404,6 +404,33 @@ func TestRecordsStillFailsAGapAtANumberNoRefHolds(t *testing.T) {
 	}
 }
 
+func TestRecordsStillFailsAGapANonRecordFileOnAnotherRefWouldExcuse(t *testing.T) {
+	// A draft below the archive, or a file that is not a record, must not claim
+	// a number: the gate would then accept a gap no record fills.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): a")
+
+	git(t, root, "checkout", "-b", "other")
+	mkdir(t, filepath.Join(root, "docs", "specs", "drafts"))
+	writeFile(t, filepath.Join(root, "docs", "specs", "drafts", "0002-b.md"), specStub)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0002-not-a-record.txt"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): drafts")
+
+	git(t, root, "checkout", "main")
+	git(t, root, "checkout", "-b", "mine")
+	writeFile(t, filepath.Join(root, "docs", "specs", "0003-c.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): c")
+
+	res, _ := Records(opts(root))
+	if res.OK() {
+		t.Fatal("a gap only a draft and a non-record file would fill must still fail")
+	}
+}
+
 func TestRecordsFailsADuplicateHoweverManyRefsHoldIt(t *testing.T) {
 	// Duplicates are the part of this rule with no second check behind it.
 	root := fixtureRepo(t)
