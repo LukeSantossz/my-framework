@@ -12,14 +12,14 @@ attestation any machine-wide git setting satisfies.
 Cut `v0.8.0` from `main` as it stands, as a **minor** rather than a patch. The
 release adds a command — `mf version` — and a repository upgrading to it gains a
 capability, which is what separates a minor from the patch that `docs/specs/0045`
-argued for. Four of the gate fixes also change what an existing configuration
+argued for. Five of the gate fixes also change what an existing configuration
 does, and a release that only said "fixes" would not prepare an adopter for
 that; the Scope below names each so the release notes can carry it.
 
 ## Alternatives Considered
 
 - **Release as `v0.7.3`.** Rejected: `mf version` is new behaviour an adopter
-  can call, and four configurations that loaded and passed under `v0.7.2` now
+  can call, and five configurations that loaded and passed under `v0.7.2` now
   fail. Numbering that as a patch tells a reader upgrading it that nothing they
   have can break.
 - **Split into two tags — the fixes now, the command later.** Rejected: the
@@ -40,7 +40,7 @@ that; the Scope below names each so the release notes can carry it.
 
 ### What an adopter upgrading from v0.7.2 has to know
 
-Four fixes reject a configuration that previously loaded or passed. None is a
+Five fixes reject a configuration that previously loaded or passed. None is a
 change of intent — each closes a gate that was reporting `ok` without checking —
 but each is visible on upgrade:
 
@@ -78,7 +78,7 @@ Versions: Go 1.26.7, `mf` at the tagged commit.
 ## Risks and Assumptions
 
 - Risk: a consumer pinned to `v0.7.2` whose `.framework.toml` relies on one of
-  the four rejected configurations fails on upgrade rather than on adoption. The
+  the five rejected configurations fails on upgrade rather than on adoption. The
   failure is at load, names the key, and is the point — a gate that was passing
   without checking had to start failing somewhere.
 - Assumption: none of the three initialised consumers uses `exempt_paths = ["*"]`
