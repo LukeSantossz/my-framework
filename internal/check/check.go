@@ -214,13 +214,18 @@ func hasDoesNotInclude(scope string) bool {
 		}
 		for _, rest := range lines[i+1:] {
 			rest = strings.TrimSpace(rest)
-			// A blank line is not content, and neither is the section's other
-			// item: an empty "Does NOT include" written above "Includes" was
-			// satisfied by the line below it, which says nothing about what the
-			// change leaves out. The list is what blocks scope creep, so what
-			// counts is content belonging to it.
-			if rest == "" || isScopeItem(rest) {
+			// A blank line is not content. The section's other item ends the
+			// search rather than being skipped over: an empty "Does NOT
+			// include" written above "Includes" was satisfied first by that
+			// heading and then, once the heading was skipped, by the items
+			// beneath it — which say what the change does include. The list is
+			// what blocks scope creep, so only content between this marker and
+			// the next one counts.
+			if rest == "" {
 				continue
+			}
+			if isScopeItem(rest) {
+				break
 			}
 			return true
 		}

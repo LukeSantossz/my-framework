@@ -1226,3 +1226,24 @@ func TestSpecStillExemptsADirectoryPrefixPattern(t *testing.T) {
 		t.Errorf("a directory prefix pattern stopped matching: %+v", res.Problems)
 	}
 }
+
+func TestSpecFailsAnEmptyDoesNotIncludeWhoseSectionListsWhatItDoesInclude(t *testing.T) {
+	// The next scope item ends the search rather than being stepped over:
+	// skipping only its heading left the items beneath it — which say what the
+	// change does include — standing in for the list that says what it leaves
+	// out.
+	root := fixtureRepo(t)
+	git(t, root, "checkout", "-b", "feat/thing")
+	body := strings.Replace(goodSpec,
+		"- Includes: the thing\n- Does NOT include:\n  - the other thing",
+		"- Does NOT include:\n- Includes:\n  - the thing", 1)
+	writeFile(t, filepath.Join(root, "code.go"), "package x\n")
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-do-a-thing.md"), body)
+	git(t, root, "add", ".")
+	git(t, root, "commit", "-m", "feat: code")
+
+	res, _ := Spec(opts(root))
+	if res.OK() {
+		t.Fatal("an empty Does NOT include list was satisfied by the Includes list below it")
+	}
+}
