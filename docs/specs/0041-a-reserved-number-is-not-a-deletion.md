@@ -60,11 +60,14 @@ and the branches are already fetched or they are not this repository's problem.
   a gap only for a number none of them does; `Repo.RecordFilesOnOtherRefs`,
   which reads what sits directly under the archive on every ref but the one at
   `HEAD`; the caller applying the same filename rule `numbering` applies, so a
-  draft in a subdirectory cannot claim a number.
+  draft in a subdirectory cannot claim a number; the Contiguity paragraph in
+  `spec_method.md`, which states the narrowed rule so the standard and the gate
+  say the same thing.
 - Does NOT include: the duplicate check, the starts-at-0001 check, or
-  `deletedRecords`, all unchanged; any change to `spec_method.md`'s numbering
-  rule, which this implements rather than relaxes; reading refs over the
-  network.
+  `deletedRecords`, all unchanged; the durable-numbering rule itself — a number
+  is still never reused and a superseded record is still retired in place, and
+  what narrows is only when a gap counts as evidence that one was not; reading
+  refs over the network.
 
 ## Acceptance Criteria
 
