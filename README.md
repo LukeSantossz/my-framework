@@ -186,6 +186,7 @@ Mark it up with the same `<!-- mf:role author -->` markers. Each vendor file rec
 | Command | What it does |
 |---|---|
 | `mf init [--standards <dir>] [--provider <name> --endpoint <url> --api-key-env <VAR> [--model <id>] [--kind <shape>]]` | Adopt this repository. Overwrites nothing. A checked-out submodule carrying a corpus is adopted as the layout, so no second one is written; `--standards` names the directory instead. The provider flags record your chosen reviewer in the machine layer and name it in the R2 chain. |
+| `mf version` (`--version`, `-v`) | The build's version, and nothing else. The same string `mf doctor` opens with, for a script or a CI step that wants one line rather than a diagnosis. Runs outside a repository. |
 | `mf doctor` | Build, activation state, every role's chain and each backend's reachability, cross-provider state, credentials, usage, which Token Economy clauses are implemented, and whether the standards match this build. Changes nothing. |
 | `mf hooks install\|uninstall\|status` | Wire, unwire or report `core.hooksPath`. Install refuses a path it does not own; uninstall removes only what `mf` set and is idempotent. |
 | `mf upgrade` | Compare your standards against the ones this build carries. Applies nothing: your standards are your content. |
