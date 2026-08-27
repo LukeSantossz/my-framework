@@ -8,6 +8,26 @@ number another branch is holding from one a deleted record left behind, that
 branch could not push: both hooks fail closed. The fix is on `main` and
 unreleased, so the migration has nothing to pin but a moving branch.
 
+## Design Decision
+
+Cut the tag from `main` as it stands, as a patch. Nothing in this release adds a
+key, a command or an output shape: a gate stops refusing a case it should never
+have refused, so a repository that never hit that case sees no difference and
+one that did can push. Holding it back to gather more would leave the migration
+pinned to a moving branch, which is the state this release exists to end.
+
+## Alternatives Considered
+
+- **Release it as `v0.8.0`.** Rejected: semver reserves minor for added
+  capability, and a repository upgrading from `v0.7.0` gains none. Numbering it
+  minor would say the opposite of what the change is.
+- **Wait and release it with the next change.** Rejected: the migration that
+  needs it cannot push without it, and pinning a consumer to an untagged commit
+  is what tags exist to avoid.
+- **Have the consumer pin the commit rather than a tag.** Rejected for the same
+  reason: `.framework.lock` records an adopted version, and a commit hash there
+  is a version nobody can look up.
+
 ## Scope
 
 - Includes: the `v0.7.1` tag and the release it triggers; the README's Project
