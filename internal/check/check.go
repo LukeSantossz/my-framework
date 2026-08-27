@@ -685,7 +685,7 @@ func Records(o Options) (Result, error) {
 	o = o.Defaults()
 	res := Result{Name: "records"}
 	for label, dir := range map[string]string{"specs": o.SpecsDir, "adr": o.ADRDir} {
-		problems, err := numbering(label, dir, o.numbersOnOtherRefs(dir))
+		problems, err := numbering(label, dir, o.reservationLookup(dir))
 		if err != nil {
 			return res, err
 		}
@@ -726,6 +726,23 @@ func Records(o Options) (Result, error) {
 	return res, nil
 }
 
+// reservationLookup defers the ref walk until a gap is actually found, and
+// answers once. Enumerating refs costs a git process per ref, per archive, and
+// the overwhelmingly common case is an archive with no gap at all — so a check
+// that ran it every time would charge every push for a question it does not
+// ask.
+func (o Options) reservationLookup(dir string) func() map[int]string {
+	var held map[int]string
+	asked := false
+	return func() map[int]string {
+		if !asked {
+			asked = true
+			held = o.numbersOnOtherRefs(dir)
+		}
+		return held
+	}
+}
+
 // numbersOnOtherRefs is which durable numbers some ref's tree holds under dir.
 // Nothing here is fatal: outside a git repository, or on a git too old for the
 // plumbing, the answer is "nothing is claimed", which is how this gate behaved
@@ -758,7 +775,7 @@ func (o Options) numbersOnOtherRefs(dir string) map[int]string {
 	return held
 }
 
-func numbering(label, dir string, heldElsewhere map[int]string) ([]Problem, error) {
+func numbering(label, dir string, heldElsewhere func() map[int]string) ([]Problem, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -801,7 +818,7 @@ func numbering(label, dir string, heldElsewhere map[int]string) ([]Problem, erro
 		// writing NNNN+1 while another still holds NNNN has a gap it did not
 		// make. Deletion is caught by deletedRecords, which reads history and
 		// does not depend on what the numbers around it look like.
-		if everyMissingIsHeld(numbers[i-1], numbers[i], heldElsewhere) {
+		if everyMissingIsHeld(numbers[i-1], numbers[i], heldElsewhere()) {
 			continue
 		}
 		problems = append(problems, Problem{File: label,

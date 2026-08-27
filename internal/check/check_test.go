@@ -431,6 +431,37 @@ func TestRecordsStillFailsAGapANonRecordFileOnAnotherRefWouldExcuse(t *testing.T
 	}
 }
 
+func TestNumberingAsksAboutOtherRefsOnlyWhenThereIsAGap(t *testing.T) {
+	// Enumerating refs costs a git process per ref, per archive, and almost
+	// every archive has no gap at all. A check that asked every time would
+	// charge every push for a question it does not ask.
+	root := t.TempDir()
+	dir := filepath.Join(root, "docs", "specs")
+	mkdir(t, dir)
+	writeFile(t, filepath.Join(dir, "0001-a.md"), specStub)
+	writeFile(t, filepath.Join(dir, "0002-b.md"), specStub)
+
+	asked := 0
+	lookup := func() map[int]string {
+		asked++
+		return nil
+	}
+	if _, err := numbering("specs", dir, lookup); err != nil {
+		t.Fatal(err)
+	}
+	if asked != 0 {
+		t.Errorf("a contiguous archive asked about other refs %d time(s)", asked)
+	}
+
+	writeFile(t, filepath.Join(dir, "0004-d.md"), specStub)
+	if _, err := numbering("specs", dir, lookup); err != nil {
+		t.Fatal(err)
+	}
+	if asked != 1 {
+		t.Errorf("a gap asked %d time(s), want exactly one", asked)
+	}
+}
+
 func TestRecordsFailsADuplicateHoweverManyRefsHoldIt(t *testing.T) {
 	// Duplicates are the part of this rule with no second check behind it.
 	root := fixtureRepo(t)

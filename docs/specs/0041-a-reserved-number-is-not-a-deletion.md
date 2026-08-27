@@ -75,6 +75,7 @@ and the branches are already fetched or they are not this repository's problem.
 - `record_files_on_other_refs_ignores_the_branch_at_head`
 - `record_files_on_other_refs_ignores_the_working_tree`
 - `a_gap_a_draft_or_a_non_record_file_would_excuse_still_fails`
+- `numbering_asks_about_other_refs_only_when_there_is_a_gap`
 
 ## Reproducibility
 
