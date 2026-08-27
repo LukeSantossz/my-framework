@@ -127,7 +127,11 @@ the successor unable to tell that anything was replaced.
 the others do:
 
 - **Contiguity.** The numbers in each archive must run from `0001` with no gap
-  and no duplicate.
+  and no duplicate. A gap at a number some other branch's tree holds is a claim
+  rather than a hole — numbers are taken when a record is written, so two
+  changes open at once means one branch has a gap it did not make — and the gate
+  reads the repository's refs to tell the two apart. A number no ref holds still
+  fails.
 - **History.** Every spec and ADR ever committed must still be present. This is
   the load-bearing one: contiguity alone cannot see the deletion of the
   highest-numbered record, which leaves the rest contiguous and is the shape the

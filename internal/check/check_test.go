@@ -357,6 +357,124 @@ func TestRecordsFailsAGapLeftByADeletedRecord(t *testing.T) {
 	}
 }
 
+func TestRecordsAcceptsAGapAtANumberAnotherBranchHolds(t *testing.T) {
+	// Durable numbers are claimed when a spec is written, so two changes open
+	// at once means one branch holds 0002 while another claims 0003. The second
+	// has a gap in its own tree, has deleted nothing, and could not push: both
+	// hooks fail closed.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): a")
+
+	git(t, root, "checkout", "-b", "other")
+	writeFile(t, filepath.Join(root, "docs", "specs", "0002-b.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): b")
+
+	git(t, root, "checkout", "main")
+	git(t, root, "checkout", "-b", "mine")
+	if err := os.Remove(filepath.Join(root, "docs", "specs", "0002-b.md")); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "docs", "specs", "0003-c.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): c")
+
+	res, err := Records(opts(root))
+	if err != nil {
+		t.Fatalf("Records: %v", err)
+	}
+	if !res.OK() {
+		t.Errorf("a number another branch holds is claimed, not deleted: %+v", res.Problems)
+	}
+}
+
+func TestRecordsStillFailsAGapAtANumberNoRefHolds(t *testing.T) {
+	// The narrowing must not turn the check off: a hole nobody is filling is
+	// still a hole.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a.md"), specStub)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0003-c.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): a and c")
+	res, _ := Records(opts(root))
+	if res.OK() {
+		t.Fatal("a gap no ref fills must still fail")
+	}
+}
+
+func TestRecordsStillFailsAGapANonRecordFileOnAnotherRefWouldExcuse(t *testing.T) {
+	// A draft below the archive, or a file that is not a record, must not claim
+	// a number: the gate would then accept a gap no record fills.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): a")
+
+	git(t, root, "checkout", "-b", "other")
+	mkdir(t, filepath.Join(root, "docs", "specs", "drafts"))
+	writeFile(t, filepath.Join(root, "docs", "specs", "drafts", "0002-b.md"), specStub)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0002-not-a-record.txt"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): drafts")
+
+	git(t, root, "checkout", "main")
+	git(t, root, "checkout", "-b", "mine")
+	writeFile(t, filepath.Join(root, "docs", "specs", "0003-c.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): c")
+
+	res, _ := Records(opts(root))
+	if res.OK() {
+		t.Fatal("a gap only a draft and a non-record file would fill must still fail")
+	}
+}
+
+func TestNumberingAsksAboutOtherRefsOnlyWhenThereIsAGap(t *testing.T) {
+	// Enumerating refs costs a git process per ref, per archive, and almost
+	// every archive has no gap at all. A check that asked every time would
+	// charge every push for a question it does not ask.
+	root := t.TempDir()
+	dir := filepath.Join(root, "docs", "specs")
+	mkdir(t, dir)
+	writeFile(t, filepath.Join(dir, "0001-a.md"), specStub)
+	writeFile(t, filepath.Join(dir, "0002-b.md"), specStub)
+
+	asked := 0
+	lookup := func() map[int]string {
+		asked++
+		return nil
+	}
+	if _, err := numbering("specs", dir, lookup); err != nil {
+		t.Fatal(err)
+	}
+	if asked != 0 {
+		t.Errorf("a contiguous archive asked about other refs %d time(s)", asked)
+	}
+
+	writeFile(t, filepath.Join(dir, "0004-d.md"), specStub)
+	if _, err := numbering("specs", dir, lookup); err != nil {
+		t.Fatal(err)
+	}
+	if asked != 1 {
+		t.Errorf("a gap asked %d time(s), want exactly one", asked)
+	}
+}
+
+func TestRecordsFailsADuplicateHoweverManyRefsHoldIt(t *testing.T) {
+	// Duplicates are the part of this rule with no second check behind it.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a.md"), specStub)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-b.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): two of them")
+	res, _ := Records(opts(root))
+	if res.OK() {
+		t.Fatal("a reused number must fail whatever the refs hold")
+	}
+}
+
 func TestRecordsFailsNumberingThatDoesNotStartAtOne(t *testing.T) {
 	root := fixtureRepo(t)
 	writeFile(t, filepath.Join(root, "docs", "adr", "0002-b.md"), "x")
