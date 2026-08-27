@@ -685,7 +685,7 @@ func Records(o Options) (Result, error) {
 	o = o.Defaults()
 	res := Result{Name: "records"}
 	for label, dir := range map[string]string{"specs": o.SpecsDir, "adr": o.ADRDir} {
-		problems, err := numbering(label, dir)
+		problems, err := numbering(label, dir, o.numbersOnOtherRefs(dir))
 		if err != nil {
 			return res, err
 		}
@@ -726,7 +726,26 @@ func Records(o Options) (Result, error) {
 	return res, nil
 }
 
-func numbering(label, dir string) ([]Problem, error) {
+// numbersOnOtherRefs is which durable numbers some ref's tree holds under dir.
+// Nothing here is fatal: outside a git repository, or on a git too old for the
+// plumbing, the answer is "nothing is claimed", which is how this gate behaved
+// before the question could be asked.
+func (o Options) numbersOnOtherRefs(dir string) map[int]string {
+	if o.Repo == nil {
+		return nil
+	}
+	rel, err := filepath.Rel(o.RepoRoot, dir)
+	if err != nil {
+		return nil
+	}
+	held, err := o.Repo.RecordNumbersOnRefs(filepath.ToSlash(rel))
+	if err != nil {
+		return nil
+	}
+	return held
+}
+
+func numbering(label, dir string, heldElsewhere map[int]string) ([]Problem, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
@@ -761,12 +780,33 @@ func numbering(label, dir string) ([]Problem, error) {
 		problems = append(problems, Problem{File: label, Message: fmt.Sprintf("numbering starts at %04d, not 0001", numbers[0])})
 	}
 	for i := 1; i < len(numbers); i++ {
-		if numbers[i] != numbers[i-1]+1 {
-			problems = append(problems, Problem{File: label,
-				Message: fmt.Sprintf("gap between %04d and %04d; a record was deleted rather than retired in place", numbers[i-1], numbers[i])})
+		if numbers[i] == numbers[i-1]+1 {
+			continue
 		}
+		// A number some other ref's tree holds is claimed, not deleted:
+		// durable numbers are taken when a record is written, so a branch
+		// writing NNNN+1 while another still holds NNNN has a gap it did not
+		// make. Deletion is caught by deletedRecords, which reads history and
+		// does not depend on what the numbers around it look like.
+		if everyMissingIsHeld(numbers[i-1], numbers[i], heldElsewhere) {
+			continue
+		}
+		problems = append(problems, Problem{File: label,
+			Message: fmt.Sprintf("gap between %04d and %04d; a record was deleted rather than retired in place", numbers[i-1], numbers[i])})
 	}
 	return problems, nil
+}
+
+// everyMissingIsHeld reports whether every number between two present ones is
+// held by some other ref. A gap of more than one is excused only when each
+// number in it is claimed: one open branch does not account for two holes.
+func everyMissingIsHeld(low, high int, heldElsewhere map[int]string) bool {
+	for n := low + 1; n < high; n++ {
+		if _, ok := heldElsewhere[n]; !ok {
+			return false
+		}
+	}
+	return true
 }
 
 // --- all --------------------------------------------------------------------

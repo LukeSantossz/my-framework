@@ -270,6 +270,71 @@ func (r *Repo) PathsEverAdded(dirs ...string) ([]string, error) {
 // two records here, and only the caller knows whether it wants the end of the
 // chain or each stage of it. A chain can also loop — a name given back to an
 // earlier file — so a caller that walks it needs to remember where it has been.
+// RecordNumbersOnRefs maps each durable record number that some ref's tree
+// holds under dir to the name of a ref holding it. dir is repository-relative
+// and slash-separated.
+//
+// It answers the one question contiguity cannot: whether a number missing from
+// this branch is a hole or a claim. Numbers are taken when a record is written,
+// so two changes open at once means one branch holds NNNN while another writes
+// NNNN+1, and the second has a gap it did not make.
+//
+// Only what a ref holds now counts. History would excuse a gap forever on the
+// strength of a branch that was abandoned and deleted; a tree is a claim
+// somebody still has open. Local refs only — a gate that reached the network
+// would fail differently on a machine that is offline.
+func (r *Repo) RecordNumbersOnRefs(dir string) (map[int]string, error) {
+	if dir == "" {
+		return nil, nil
+	}
+	out, err := r.git("for-each-ref", "--format=%(refname)", "refs/heads", "refs/remotes")
+	if err != nil {
+		return nil, err
+	}
+	held := map[int]string{}
+	for _, ref := range strings.Split(out, "\n") {
+		if ref = strings.TrimSpace(ref); ref == "" {
+			continue
+		}
+		// A ref whose tree has no such directory is not an error worth
+		// stopping for: it is simply a branch that predates the archive.
+		names, err := r.git("ls-tree", "-r", "--name-only", ref, "--", dir)
+		if err != nil {
+			continue
+		}
+		for _, path := range strings.Split(names, "\n") {
+			base := path
+			if i := strings.LastIndex(base, "/"); i >= 0 {
+				base = base[i+1:]
+			}
+			n, ok := recordNumber(base)
+			if !ok {
+				continue
+			}
+			if _, seen := held[n]; !seen {
+				held[n] = ref
+			}
+		}
+	}
+	return held, nil
+}
+
+// recordNumber reads the four-digit prefix a durable record's filename carries.
+func recordNumber(name string) (int, bool) {
+	if len(name) < 5 || name[4] != '-' {
+		return 0, false
+	}
+	n := 0
+	for i := 0; i < 4; i++ {
+		c := name[i]
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int(c-'0')
+	}
+	return n, true
+}
+
 func (r *Repo) RenamedPaths(dirs ...string) (map[string]string, error) {
 	if len(dirs) == 0 {
 		return nil, nil

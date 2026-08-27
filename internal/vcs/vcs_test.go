@@ -371,3 +371,78 @@ func TestRedeclaringWithoutAModelClearsTheOldOne(t *testing.T) {
 		t.Errorf("model is %q, want it cleared with the declaration that dropped it", got.Model)
 	}
 }
+
+func TestRecordNumbersOnRefsFindsWhatAnotherBranchHolds(t *testing.T) {
+	// The one question contiguity cannot answer: whether a number missing from
+	// this branch is a hole or a claim somebody still has open.
+	r := newRepo(t)
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = r.Root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	write := func(name string) {
+		t.Helper()
+		if err := os.MkdirAll(filepath.Join(r.Root, "docs", "specs"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(r.Root, "docs", "specs", name), []byte("# SPEC: x\n"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	write("0001-a.md")
+	run("add", ".")
+	run("commit", "-m", "docs(spec): a")
+	run("checkout", "-q", "-b", "other")
+	write("0002-b.md")
+	run("add", ".")
+	run("commit", "-m", "docs(spec): b")
+	run("checkout", "-q", "main")
+
+	held, err := r.RecordNumbersOnRefs("docs/specs")
+	if err != nil {
+		t.Fatalf("RecordNumbersOnRefs: %v", err)
+	}
+	if ref, ok := held[2]; !ok || !strings.Contains(ref, "other") {
+		t.Errorf("held[2] = %q (found=%v), want the branch that holds it", ref, ok)
+	}
+	if _, ok := held[3]; ok {
+		t.Errorf("a number no ref holds was reported as claimed: %v", held)
+	}
+}
+
+func TestRecordNumbersOnRefsIgnoresTheWorkingTree(t *testing.T) {
+	// A file nobody has committed is not a claim: it exists on this machine and
+	// on no ref, so it cannot excuse a gap anyone else would see.
+	r := newRepo(t)
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = r.Root
+		if out, err := cmd.CombinedOutput(); err != nil {
+			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+		}
+	}
+	if err := os.MkdirAll(filepath.Join(r.Root, "docs", "specs"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(r.Root, "docs", "specs", "0001-a.md"), []byte("# SPEC: a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	run("add", ".")
+	run("commit", "-m", "docs(spec): a")
+	if err := os.WriteFile(filepath.Join(r.Root, "docs", "specs", "0009-uncommitted.md"), []byte("# SPEC: u\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	held, err := r.RecordNumbersOnRefs("docs/specs")
+	if err != nil {
+		t.Fatalf("RecordNumbersOnRefs: %v", err)
+	}
+	if _, ok := held[9]; ok {
+		t.Errorf("an uncommitted file was read as a claim: %v", held)
+	}
+}

@@ -357,6 +357,66 @@ func TestRecordsFailsAGapLeftByADeletedRecord(t *testing.T) {
 	}
 }
 
+func TestRecordsAcceptsAGapAtANumberAnotherBranchHolds(t *testing.T) {
+	// Durable numbers are claimed when a spec is written, so two changes open
+	// at once means one branch holds 0002 while another claims 0003. The second
+	// has a gap in its own tree, has deleted nothing, and could not push: both
+	// hooks fail closed.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): a")
+
+	git(t, root, "checkout", "-b", "other")
+	writeFile(t, filepath.Join(root, "docs", "specs", "0002-b.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): b")
+
+	git(t, root, "checkout", "main")
+	git(t, root, "checkout", "-b", "mine")
+	if err := os.Remove(filepath.Join(root, "docs", "specs", "0002-b.md")); err != nil && !os.IsNotExist(err) {
+		t.Fatal(err)
+	}
+	writeFile(t, filepath.Join(root, "docs", "specs", "0003-c.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): c")
+
+	res, err := Records(opts(root))
+	if err != nil {
+		t.Fatalf("Records: %v", err)
+	}
+	if !res.OK() {
+		t.Errorf("a number another branch holds is claimed, not deleted: %+v", res.Problems)
+	}
+}
+
+func TestRecordsStillFailsAGapAtANumberNoRefHolds(t *testing.T) {
+	// The narrowing must not turn the check off: a hole nobody is filling is
+	// still a hole.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a.md"), specStub)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0003-c.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): a and c")
+	res, _ := Records(opts(root))
+	if res.OK() {
+		t.Fatal("a gap no ref fills must still fail")
+	}
+}
+
+func TestRecordsFailsADuplicateHoweverManyRefsHoldIt(t *testing.T) {
+	// Duplicates are the part of this rule with no second check behind it.
+	root := fixtureRepo(t)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-a.md"), specStub)
+	writeFile(t, filepath.Join(root, "docs", "specs", "0001-b.md"), specStub)
+	git(t, root, "add", "-A")
+	git(t, root, "commit", "-m", "docs(spec): two of them")
+	res, _ := Records(opts(root))
+	if res.OK() {
+		t.Fatal("a reused number must fail whatever the refs hold")
+	}
+}
+
 func TestRecordsFailsNumberingThatDoesNotStartAtOne(t *testing.T) {
 	root := fixtureRepo(t)
 	writeFile(t, filepath.Join(root, "docs", "adr", "0002-b.md"), "x")
