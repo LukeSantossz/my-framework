@@ -417,7 +417,13 @@ func hasAttestation(repo *vcs.Repo, role, headSHA string) bool {
 	if headSHA == "" {
 		return false
 	}
-	recorded, err := repo.ConfigGet(attestationKey(role))
+	// Only this repository's own configuration. ConfigGet reads whatever scope
+	// defines the key, so a global `mf.attestation.r1` satisfied the whole of
+	// R1 in every repository on the machine sitting at that commit — the same
+	// mistake HooksStatus separates Path from Local to avoid. An attestation is
+	// a claim about a session that reviewed this clone, and a value that
+	// travels with no repository cannot be one.
+	recorded, err := repo.ConfigGetLocal(attestationKey(role))
 	return err == nil && recorded == headSHA
 }
 

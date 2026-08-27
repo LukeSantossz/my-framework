@@ -585,3 +585,29 @@ func TestTheBlockingModeIsPerRole(t *testing.T) {
 		t.Fatalf("exit %d, want 0: %s", code, out.String())
 	}
 }
+
+func TestAnAttestationSetOutsideThisRepositoryDoesNotSatisfyR1(t *testing.T) {
+	// The attestation names a commit precisely so it cannot cover work it never
+	// saw; scope is the other half of that promise. R1's shipped chain is one
+	// in-session backend, so a machine-wide `mf.attestation.r1` would satisfy
+	// the internal review layer in every repository on the machine that happens
+	// to sit at that commit — including ones the session never opened.
+	global := filepath.Join(t.TempDir(), "gitconfig")
+	if err := os.WriteFile(global, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", global)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+
+	root := gitRepo(t, inSessionProject)
+	branchWithChange(t, root, "feat/x")
+	gitIn(t, root, "config", "--global", "mf.attestation.r1", gitIn(t, root, "rev-parse", "HEAD"))
+
+	e, out, _ := reviewEnv(t, root, "review", "--role", "r1")
+	if code := Run(e); code != 0 {
+		t.Fatalf("exit %d: %s", code, out.String())
+	}
+	if !strings.Contains(out.String(), "did not run") {
+		t.Errorf("a global attestation satisfied R1:\n%s", out.String())
+	}
+}

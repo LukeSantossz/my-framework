@@ -1068,3 +1068,71 @@ func TestReviewModelDefaultsToNoModelAtAll(t *testing.T) {
 		t.Errorf("review.model resolved to %q, want empty", v)
 	}
 }
+
+func TestLoadRefusesAnEmptyExemptPattern(t *testing.T) {
+	// An empty pattern is the shape the Spec Gate's exemption matcher cannot
+	// read as anything but "everything", and a repository that meant a path
+	// wrote one.
+	o := fixture(t, "version = 1\n\n[checks]\nexempt_paths = [\"README.md\", \"\"]\n", "")
+	_, err := Load(o)
+	if err == nil {
+		t.Fatal("an empty exempt pattern loaded")
+	}
+	if !strings.Contains(err.Error(), "checks.exempt_paths") {
+		t.Errorf("error %q does not name the key", err)
+	}
+}
+
+func TestLoadRefusesAConfiguredPathThatLeavesTheRootWhicheverLayerWroteIt(t *testing.T) {
+	// The containment rule is about paths, not about the project file: every
+	// gate joins these onto the root, and a value pointing elsewhere makes the
+	// gate read an empty directory and report `ok` having checked nothing.
+	o := fixture(t, "version = 1\n", "")
+	o.Env = func(name string) string {
+		if name == "MF_PATHS_SPECS" {
+			return "../elsewhere"
+		}
+		return ""
+	}
+	_, err := Load(o)
+	if err == nil {
+		t.Fatal("a per-run path override left the repository root and loaded")
+	}
+	if !strings.Contains(err.Error(), "paths.specs") {
+		t.Errorf("error %q does not name the key", err)
+	}
+}
+
+func TestLoadKeepsAConfiguredPathTheEnvironmentSetsInsideTheRoot(t *testing.T) {
+	// The override itself is deliberate; only the escape is refused.
+	o := fixture(t, "version = 1\n", "")
+	o.Env = func(name string) string {
+		if name == "MF_PATHS_SPECS" {
+			return "spec"
+		}
+		return ""
+	}
+	cfg := mustLoad(t, o)
+	value, prov, ok := cfg.Get("paths.specs")
+	if !ok || value != "spec" {
+		t.Fatalf("paths.specs = %q (found=%v), want %q", value, ok, "spec")
+	}
+	if prov.Layer != LayerEnv {
+		t.Errorf("provenance layer = %v, want the environment", prov.Layer)
+	}
+}
+
+func TestLoadRefusesAnAgentFileWrittenEmpty(t *testing.T) {
+	// Empty joins to the repository root, so `mf check agents` tries to read a
+	// directory as a file, reports drift on every run, and tells the reader to
+	// run a sync that fails the same way. The message that names the cause
+	// already exists; it was only skipped.
+	o := fixture(t, "version = 1\n\n[agents.claude]\nfile = \"\"\n", "")
+	_, err := Load(o)
+	if err == nil {
+		t.Fatal("an empty agent file loaded")
+	}
+	if !strings.Contains(err.Error(), "agents.claude.file") {
+		t.Errorf("error %q does not name the key", err)
+	}
+}
