@@ -54,6 +54,8 @@ Usage:
   mf check [spec|commit|branch|docs|records|agents|design]
                                    run the deterministic gates; no model is called
 
+  mf version                       print the build's version and nothing else
+                                   (--version and -v are the same command)
   mf doctor                        report what resolves, what is wired, what is missing
   mf init [--provider <name> --endpoint <url> --api-key-env <VAR>
           [--model <id>] [--kind <shape>]]
@@ -118,6 +120,8 @@ func Run(env Env) int {
 		return runReview(env, env.Args[1:])
 	case "check":
 		return runCheck(env, env.Args[1:])
+	case "version", "--version", "-v":
+		return runVersion(env)
 	case "doctor":
 		return runDoctor(env)
 	case "init":
@@ -176,13 +180,16 @@ func MachineConfigPath(getenv func(string) string) string {
 // only honest answer, because the command cannot tell which repository it was
 // meant for.
 //
-// The exceptions are the three whose state lives outside any repository: the
+// The exceptions are the four whose state lives outside any repository: the
 // status line writes to the agent's own configuration, the usage total answers
-// "what did I spend" rather than "what did this project cost", and machine
-// configuration is what a person sets up before cloning anything.
+// "what did I spend" rather than "what did this project cost", machine
+// configuration is what a person sets up before cloning anything, and the
+// version is a fact about the binary — asking one what it is must not depend on
+// where it is standing, or the answer is unavailable in exactly the situation
+// that prompts the question.
 func requiresRepository(args []string) bool {
 	switch args[0] {
-	case "help", "-h", "--help", "statusline", "usage":
+	case "help", "-h", "--help", "statusline", "usage", "version", "--version", "-v":
 		return false
 	case "config":
 		return configReadsTheRepository(args[1:])

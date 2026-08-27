@@ -28,7 +28,7 @@ func runDoctor(env Env) int {
 	}
 	repo := vcs.Open(env.RepoRoot)
 
-	fmt.Fprintf(env.Stdout, "mf %s\n", version.Version)
+	fmt.Fprintln(env.Stdout, versionLine())
 	fmt.Fprintf(env.Stdout, "repository: %s\n\n", env.RepoRoot)
 
 	// The standards comparison is computed here rather than beside the section
