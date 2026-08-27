@@ -15,7 +15,10 @@ unambiguous and wrong for anything the overlay contributed.
 ## Design Decision
 
 The header names both files when both were used, and points the reader at the
-one their section came from rather than at "the source". A file generated
+one their section came from rather than at "the source". Overlay sections are
+filtered by role like every other section, so "used" means this file received
+one: a target playing no role the overlay covers is not sent to a file that
+contributed nothing to it. A file generated
 without an overlay keeps exactly the header it has now, so nothing churns in a
 repository that declares none.
 
@@ -50,6 +53,7 @@ to be passed in the wrong order.
 - `the_header_is_byte_identical_when_no_overlay_is_configured`
 - `the_header_tells_the_reader_to_edit_the_source_their_section_came_from`
 - `render_refuses_a_path_that_would_close_the_header_comment`
+- `the_header_does_not_name_an_overlay_that_contributed_nothing`
 
 ## Reproducibility
 

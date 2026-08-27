@@ -704,3 +704,28 @@ func TestRenderRefusesAPathThatWouldCloseTheHeaderComment(t *testing.T) {
 		t.Error("a source path containing `-->` was accepted")
 	}
 }
+
+func TestTheHeaderDoesNotNameAnOverlayThatContributedNothing(t *testing.T) {
+	// Overlay sections are filtered by role like every other section. A target
+	// playing no role the overlay covers receives none of them, and a header
+	// naming the overlay there sends the reader to a file that is not in what
+	// they are reading.
+	src := mustParse(t)
+	overlay, err := Parse("<!-- mf:role reviewer -->\n## Reviewing here\n\nOnly for the reviewer.\n")
+	if err != nil {
+		t.Fatal(err)
+	}
+	src.Overlay = overlay.Sections
+	src.OverlayPath = "docs/agents/project.md"
+
+	out, err := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared", "author"}}, SourcePath)
+	if err != nil {
+		t.Fatalf("Render: %v", err)
+	}
+	if strings.Contains(out, "docs/agents/project.md") {
+		t.Errorf("the header names an overlay none of whose sections are in this file:\n%s", out)
+	}
+	if strings.Contains(out, "Only for the reviewer.") {
+		t.Errorf("a reviewer-only overlay section reached the author file:\n%s", out)
+	}
+}

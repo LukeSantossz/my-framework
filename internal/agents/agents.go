@@ -187,7 +187,15 @@ func Render(src Source, t Target, sourcePath string) (string, error) {
 		overlay.WriteString(sec.Body)
 		overlay.WriteString("\n")
 	}
-	return header(t.Name, sourcePath, src.OverlayPath) + body + overlay.String(), nil
+	// The header names the overlay only when the overlay is in this file. A
+	// target playing no role the overlay covers gets none of its sections, and
+	// naming it there would send the reader to a file that contributed nothing
+	// to what they are reading.
+	overlayUsed := ""
+	if overlay.Len() > 0 {
+		overlayUsed = src.OverlayPath
+	}
+	return header(t.Name, sourcePath, overlayUsed) + body + overlay.String(), nil
 }
 
 // agentDocDir is where the skill documents the source names actually live. They
