@@ -3,6 +3,7 @@ package activate
 import (
 	"os"
 	"os/exec"
+	"path"
 	"path/filepath"
 	"runtime"
 	"strings"
@@ -917,5 +918,37 @@ func TestNonExecutableHooksNamesAHookGitWillNotRun(t *testing.T) {
 	off := NonExecutableHooks(root)
 	if len(off) != 1 || off[0] != HooksDir+"/pre-push" {
 		t.Errorf("got %v, want just the pre-push hook", off)
+	}
+}
+
+func TestScaffoldAgentsCommentNamesTheKeyNotAPath(t *testing.T) {
+	// The comment travels into repositories where this repository's own default
+	// is not true. Naming the key is true in every layout; naming the path is
+	// true in one, and wrong silently in both directions — an adopter edits the
+	// file the comment names, `mf agents sync` regenerates from the configured
+	// one, and `mf check agents` keeps passing.
+	section := strings.SplitN(scaffold, "# --- agent instruction files", 2)
+	if len(section) != 2 {
+		t.Fatal("the scaffold no longer carries an agent instruction files section")
+	}
+	if !strings.Contains(section[1], "paths.agents_source") {
+		t.Errorf("the [agents] comment does not name the key the source is configured under:\n%s", section[1])
+	}
+	if strings.Contains(section[1], AgentSourcePath) {
+		t.Errorf("the [agents] comment still names %q, which is only this repository's default:\n%s", AgentSourcePath, section[1])
+	}
+}
+
+func TestVendoredScaffoldStatesNoSourcePathItDoesNotConfigure(t *testing.T) {
+	// Whatever the file says about where the source lives, it must agree with
+	// the `paths` block it carries in the same layout.
+	body := vendoredScaffold(scaffold, ".standards")
+	for i, line := range strings.Split(body, "\n") {
+		if !strings.Contains(line, path.Base(AgentSourcePath)) {
+			continue
+		}
+		if !strings.Contains(line, ".standards/") {
+			t.Errorf("line %d names the source without the submodule it is under: %q", i+1, line)
+		}
 	}
 }
