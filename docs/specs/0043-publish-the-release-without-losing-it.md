@@ -42,18 +42,25 @@ reaching the button at all.
 
 ## Scope
 
-- Includes: the `Publish` step in `.github/workflows/release.yml`.
+- Includes: the `Publish` step in `.github/workflows/release.yml`; a guard in
+  `cmd/mf/release_publish_test.go` asserting the properties that make it
+  recoverable.
 - Does NOT include: what is built, how it is stamped, the checksum file, or the
   gate the release calls; retrying anything else in the workflow; republishing
   any past release.
 
 ## Acceptance Criteria
 
+Each is a test in `cmd/mf/release_publish_test.go`, which reads the workflow.
+That is a weaker test than any other here and it is deliberate: the behaviour
+runs in GitHub Actions, so what can be asserted locally is that the properties
+which make the step recoverable are still in it. A later edit dropping one is
+then caught by a test rather than by a tag published with nothing behind it.
+
 - `publish_creates_the_release_only_when_it_does_not_already_exist`
-- `publish_uploads_each_asset_with_clobber_so_a_rerun_replaces_rather_than_conflicts`
-- `publish_retries_a_failed_upload_before_giving_up`
-- `publish_fails_when_an_asset_still_cannot_be_uploaded`
-- `publish_fails_on_a_tag_that_does_not_resolve`
+- `publish_verifies_the_tag_before_creating_anything`
+- `publish_uploads_each_asset_so_a_rerun_replaces_rather_than_conflicts`
+- `publish_retries_a_failed_upload_and_then_fails`
 
 ## Reproducibility
 
