@@ -136,6 +136,20 @@ func Render(src Source, t Target, sourcePath string) (string, error) {
 	if prefix == "" {
 		prefix = DefaultPathPrefix
 	}
+	// The header is an HTML comment and both paths are written into it. A path
+	// carrying a comment terminator would close it early and spill the rest of
+	// the header into the document as content — so it is refused rather than
+	// escaped: a path with `-->` in it is a mistake in the configuration, and
+	// saying so beats generating a file that reads oddly for a reason nobody
+	// can see.
+	for _, p := range []struct{ key, value string }{
+		{"paths.agents_source", sourcePath},
+		{"paths.agents_overlay", src.OverlayPath},
+	} {
+		if strings.Contains(p.value, "-->") {
+			return "", fmt.Errorf("%s is %q, which contains `-->`; the generated header is an HTML comment and that would close it early", p.key, p.value)
+		}
+	}
 
 	var b strings.Builder
 	if src.Preamble != "" {

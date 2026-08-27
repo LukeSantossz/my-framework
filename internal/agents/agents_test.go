@@ -687,3 +687,20 @@ func TestSyncNamesTheOverlayItRead(t *testing.T) {
 		t.Errorf("the generated header does not name the overlay it was given:\n%s", generated)
 	}
 }
+
+func TestRenderRefusesAPathThatWouldCloseTheHeaderComment(t *testing.T) {
+	// Both paths are written into an HTML comment. One carrying `-->` closes it
+	// early and spills the rest of the header into the document as content.
+	src := mustParseOverlay(t)
+	src.OverlayPath = "docs/agents/oops-->.md"
+	if _, err := Render(src, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared"}}, SourcePath); err == nil {
+		t.Error("an overlay path containing `-->` was accepted")
+	} else if !strings.Contains(err.Error(), "agents_overlay") {
+		t.Errorf("the error does not name the key at fault: %v", err)
+	}
+
+	clean := mustParse(t)
+	if _, err := Render(clean, Target{Name: "claude", File: "CLAUDE.md", Roles: []string{"shared"}}, "docs/agents/-->.md"); err == nil {
+		t.Error("a source path containing `-->` was accepted")
+	}
+}

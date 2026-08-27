@@ -38,7 +38,9 @@ to be passed in the wrong order.
 
 ## Scope
 
-- Includes: `Source.OverlayPath`; `header` taking it; `load` recording it.
+- Includes: `Source.OverlayPath`; `header` taking it; `load` recording it;
+  refusing either path when it carries `-->`, which would close the comment the
+  header is written in.
 - Does NOT include: what the sections are or the order they are written in; any
   change when no overlay is configured; marking individual sections.
 
@@ -47,6 +49,7 @@ to be passed in the wrong order.
 - `the_header_names_both_sources_when_an_overlay_was_used`
 - `the_header_is_byte_identical_when_no_overlay_is_configured`
 - `the_header_tells_the_reader_to_edit_the_source_their_section_came_from`
+- `render_refuses_a_path_that_would_close_the_header_comment`
 
 ## Reproducibility
 
