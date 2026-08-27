@@ -40,21 +40,41 @@ that; the Scope below names each so the release notes can carry it.
 
 ### What an adopter upgrading from v0.7.2 has to know
 
-Five fixes reject a configuration that previously loaded or passed. None is a
-change of intent — each closes a gate that was reporting `ok` without checking —
-but each is visible on upgrade:
+Five fixes are visible on upgrade, and they are not visible in the same way.
+None is a change of intent — each closes a gate that was reporting `ok` without
+checking — but a configuration meets them at three different moments, so they
+are listed by moment rather than as one list of "rejections":
 
-- `checks.exempt_paths = ["*"]` no longer exempts everything. It now means what
-  the glob says: files at the repository root, and no deeper.
-- An `exempt_paths` glob no longer crosses a `/` on Windows, so a list that
-  exempted more there than in CI now exempts the same set on both.
+**Refused at load.** The configuration no longer resolves, and every command
+says which key was wrong.
+
 - A `paths.*` value from any layer — including `MF_PATHS_*` — that leaves the
-  repository root is refused at load rather than resolved.
-- `agents.<name>.file = ""` is refused at load, naming the key, instead of
-  failing `mf check agents` forever with a message about drift.
+  repository root. Previously only the project file was checked, so the layer
+  that outranks every other resolved unchecked.
+- `agents.<name>.file = ""`, naming the key, instead of failing
+  `mf check agents` forever with a message about drift.
+
+**Still valid, matching less.** The value loads and means something narrower, so
+a gate that used to skip a path now applies to it.
+
+- `checks.exempt_paths = ["*"]` no longer exempts everything. It means what the
+  glob says: files at the repository root, and no deeper.
+- An `exempt_paths` glob no longer crosses a `/` on Windows. A list that
+  exempted more there than in CI now exempts the same set on both — so the
+  visible change is on Windows only, and it is the platform agreeing with the
+  other two rather than diverging from them.
+
+**Silently satisfied before, reported now.**
+
 - `mf.attestation.r1` is read from this repository's own git configuration only.
-  A value recorded with `--global` no longer satisfies R1; the documented
-  command has always been `git config --local`.
+  A value recorded with `--global` no longer satisfies R1: nothing is refused,
+  and R1 reports that it did not run. The documented command has always been
+  `git config --local`.
+
+A consumer's preflight covers all five before its pin moves: the two load
+refusals are read out of its `.framework.toml`, the two matching changes out of
+its `exempt_paths`, and the attestation out of `git config --global --get
+mf.attestation.r1`.
 
 ## Acceptance Criteria
 
@@ -77,12 +97,14 @@ Versions: Go 1.26.7, `mf` at the tagged commit.
 
 ## Risks and Assumptions
 
-- Risk: a consumer pinned to `v0.7.2` whose `.framework.toml` relies on one of
-  the five rejected configurations fails on upgrade rather than on adoption. The
-  failure is at load, names the key, and is the point — a gate that was passing
-  without checking had to start failing somewhere.
-- Assumption: none of the three initialised consumers uses `exempt_paths = ["*"]`
-  or an empty `agents.<name>.file`; verified before their pins are bumped, which
+- Risk: a consumer pinned to `v0.7.2` whose `.framework.toml` carries one of the
+  two refused values fails at load rather than at adoption. The failure names
+  the key, and it is the point — a gate that was passing without checking had to
+  start failing somewhere. The other three are quieter and worth naming for that
+  reason: a narrower exempt list makes the Spec Gate apply where it did not, and
+  a global attestation stops satisfying R1 without anything being refused.
+- Assumption: none of the three initialised consumers is affected by any of the
+  five; the preflight above is run against each before its pin is bumped, which
   is a separate change in each of those repositories.
 - Assumption: the R2 chain's state does not gate the release. `codex` is out of
   quota until 2026-09-26 and reports itself unavailable, which the chain is
