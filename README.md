@@ -123,6 +123,8 @@ git commit -m "made some changes"
 
 Three gates fail and the command exits 1: `spec`, because a non-exempt path changed and no spec was added; `commit`, because the subject is not in the Type Table; `branch`, because the name is not `type/short-description`. The other four still pass, being properties of the tree rather than of the change. Undo it with `git switch main && git branch -D bad-branch-name`.
 
+The demo makes a commit, so it needs `user.name` and `user.email` set in git. Without them `git commit` stops before any gate runs.
+
 That commit lands because a clone has no hooks wired: `core.hooksPath` is local git configuration and does not travel with a clone. `./mf hooks install` wires it, and the same subject is then refused at commit time instead of a push later.
 
 ### Tests
@@ -137,8 +139,10 @@ CI runs four commands and then the gates. The same set runs locally:
 
 ```sh
 go build ./... && go vet ./... && go test ./... && gofmt -l .
-./mf check
+go build -o mf ./cmd/mf && ./mf check
 ```
+
+`go build ./...` compiles every package but writes no binary, which is why the gate line builds `./mf` itself.
 
 `gofmt -l` prints the files it would rewrite and exits 0 either way, so silence is the pass and the CI step reads its output rather than its exit code.
 
@@ -150,8 +154,11 @@ Needed to govern a repository other than this one, and to give the hooks a runne
 gh release download v0.8.0 --repo LukeSantossz/my-framework \
   --pattern 'mf_v0.8.0_linux_amd64' --pattern 'SHA256SUMS'
 sha256sum --ignore-missing -c SHA256SUMS   # macOS: shasum -a 256 --ignore-missing -c
+mkdir -p ~/.local/bin
 install -m 0755 mf_v0.8.0_linux_amd64 ~/.local/bin/mf
 ```
+
+`~/.local/bin` is on `PATH` on many systems but not all. If `mf version` does not resolve after this, add it, or put the binary somewhere already on `PATH`. The hooks look for `mf` there, so one they cannot find is a gate that stops the next commit.
 
 That snippet names the Linux asset. Assets exist for `linux/{amd64,arm64}`, `darwin/{amd64,arm64}` and `windows/amd64`, so swap the name for the one matching your platform; the Windows asset carries a `.exe` suffix. Without `gh`, they are at the [release page](https://github.com/LukeSantossz/my-framework/releases/tag/v0.8.0). `go install github.com/LukeSantossz/my-framework/cmd/mf@latest` also works and reports a true version, but builds from source and gives you no checksum.
 
@@ -396,7 +403,7 @@ Run what the hooks and CI will run anyway, before pushing:
 
 ```sh
 go build ./... && go vet ./... && go test ./... && gofmt -l .
-./mf check
+go build -o mf ./cmd/mf && ./mf check
 ```
 
 `mf check` names the gate that failed and what to do about it. `./mf hooks install` wires the same checks into `commit-msg` and `pre-push`, so they run without being remembered.
