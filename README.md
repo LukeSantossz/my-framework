@@ -1,10 +1,12 @@
-# my-framework: development standards that activate, not just document
+# my-framework: development standards a binary enforces
 
 ![Language](https://img.shields.io/badge/language-Go-00ADD8)
 [![CI](https://github.com/LukeSantossz/my-framework/actions/workflows/ci.yml/badge.svg)](https://github.com/LukeSantossz/my-framework/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
-Written standards are easy. Standards an AI coding agent actually reads, follows, and is checked against are not. This closes that gap.
+Written standards are easy. Standards an AI coding agent actually reads, follows, and is checked against are not. `mf` is the binary that checks them.
+
+Evaluating this repository takes a clone, a Go toolchain and two commands: see [Build and run it from a clone](#build-and-run-it-from-a-clone).
 
 ## What It Does
 
@@ -87,9 +89,62 @@ The seven gates are `spec`, `commit`, `branch`, `docs`, `records`, `agents` and 
 
 ## Getting Started
 
-### Install
+Two readers arrive here. To evaluate the project, the first three subsections are the whole path. To put it to work on a repository of your own, start at [Install a released binary](#install-a-released-binary).
 
-Prefer the released binary. It is stamped with its tag and verified by checksum, and needs no Go toolchain.
+### Prerequisites
+
+| Need | Why |
+|---|---|
+| Go 1.26 or newer | Builds the binary. Under the default `GOTOOLCHAIN=auto` an older Go downloads the toolchain `go.mod` pins; under `GOTOOLCHAIN=local` the build fails outright. |
+| `git` on `PATH` | Three of the seven gates read the current branch, and what it adds over its base, out of git history. |
+
+Nothing else: one Go dependency, no database, no service to start, no API key. The gates call no model, so evaluating this repository needs no provider account. Only `mf review` and `mf eval` reach for one.
+
+### Build and run it from a clone
+
+```sh
+git clone https://github.com/LukeSantossz/my-framework
+cd my-framework
+go build -o mf ./cmd/mf     # Windows: go build -o mf.exe ./cmd/mf
+./mf version
+./mf check
+```
+
+`mf check` runs the seven gates against this repository itself. On a fresh clone of `main` it prints seven `ok` lines and exits 0. `./mf doctor` prints more: activation state, each role's chain, and which backends are reachable on your machine.
+
+To see the gates refuse something rather than pass, give them something to refuse:
+
+```sh
+git switch -c bad-branch-name
+echo x > demo.txt && git add demo.txt
+git commit -m "made some changes"
+./mf check
+```
+
+Three gates fail and the command exits 1: `spec`, because a non-exempt path changed and no spec was added; `commit`, because the subject is not in the Type Table; `branch`, because the name is not `type/short-description`. The other four still pass, being properties of the tree rather than of the change. Undo it with `git switch main && git branch -D bad-branch-name`.
+
+That commit lands because a clone has no hooks wired: `core.hooksPath` is local git configuration and does not travel with a clone. `./mf hooks install` wires it, and the same subject is then refused at commit time instead of a push later.
+
+### Tests
+
+```sh
+go test ./...
+```
+
+21 packages with tests, needing no external service and no credentials. It takes minutes rather than seconds: `internal/check`, `internal/cli` and `internal/activate` build real repositories on disk and run real `git` against them instead of mocking it. One cold run here, after `go clean -testcache`, took 347s.
+
+CI runs four commands and then the gates. The same set runs locally:
+
+```sh
+go build ./... && go vet ./... && go test ./... && gofmt -l .
+./mf check
+```
+
+`gofmt -l` prints the files it would rewrite and exits 0 either way, so silence is the pass and the CI step reads its output rather than its exit code.
+
+### Install a released binary
+
+Needed to govern a repository other than this one, and to give the hooks a runner they can find. It is stamped with its tag and verified by checksum, and needs no Go toolchain.
 
 ```sh
 gh release download v0.8.0 --repo LukeSantossz/my-framework \
@@ -98,7 +153,7 @@ sha256sum --ignore-missing -c SHA256SUMS   # macOS: shasum -a 256 --ignore-missi
 install -m 0755 mf_v0.8.0_linux_amd64 ~/.local/bin/mf
 ```
 
-Assets exist for `linux/{amd64,arm64}`, `darwin/{amd64,arm64}` and `windows/amd64`. Without `gh`, they are at the [release page](https://github.com/LukeSantossz/my-framework/releases/tag/v0.8.0). `go install github.com/LukeSantossz/my-framework/cmd/mf@latest` also works and reports a true version, but builds from source and gives you no checksum.
+That snippet names the Linux asset. Assets exist for `linux/{amd64,arm64}`, `darwin/{amd64,arm64}` and `windows/amd64`, so swap the name for the one matching your platform; the Windows asset carries a `.exe` suffix. Without `gh`, they are at the [release page](https://github.com/LukeSantossz/my-framework/releases/tag/v0.8.0). `go install github.com/LukeSantossz/my-framework/cmd/mf@latest` also works and reports a true version, but builds from source and gives you no checksum.
 
 ### Adopt
 
@@ -127,7 +182,7 @@ mf init --provider <name> --endpoint <url> --api-key-env <VAR> --model <id>
 
 `<VAR>` is the *name* of the environment variable holding the key, never the key. The loader refuses a credential in either file. Without these flags `init` writes no machine state at all.
 
-It refuses rather than guesses in two cases: outside a git repository, and when this repository declares a submodule that is not checked out — nothing can then tell whether that submodule is what supplies the standards, and writing a second corpus is the one thing a re-run cannot undo. `mf init --standards <dir>` names the directory outright and skips the question.
+It refuses rather than guesses in two cases: outside a git repository, and when this repository declares a submodule that is not checked out. Nothing can then tell whether that submodule is what supplies the standards, and writing a second corpus is the one thing a re-run cannot undo. `mf init --standards <dir>` names the directory outright and skips the question.
 
 Two more cases it declines rather than refuses, reporting each and carrying on: a standards path inside a submodule, which that submodule supplies, and a `core.hooksPath` another tool set, which is theirs to remove.
 
@@ -164,13 +219,13 @@ path_prefix = ".standards/docs/standards"
 
 `path_prefix` is what rewrites the references inside the generated text. Without it the generated `CLAUDE.md` points at `docs/standards/...`, which does not resolve in this layout.
 
-`mf init` writes that block for you when the submodule is checked out: it reads the corpus that is there rather than the default, so nothing is materialised beside it. Run `git submodule update --init` first — on an uninitialised submodule init refuses, because an empty directory is not evidence of anything.
+`mf init` writes that block for you when the submodule is checked out: it reads the corpus that is there rather than the default, so nothing is materialised beside it. Run `git submodule update --init` first: on an uninitialised submodule init refuses, because an empty directory is not evidence of anything.
 
 There is no sync command, because the submodule *is* the corpus. Update it with `git submodule update --remote`, then `mf agents sync` regenerates the vendor instruction files.
 
 ### Your own instructions in the generated files
 
-Everything above is the framework's text. What your repository must tell an agent — the toolchain pin, the isolate the work runs in, the decision a result surface may not offer retry until — no shipped document can guess, and editing the generated file is what the gate reports as drift. Declare a second, repository-owned source instead:
+Everything above is the framework's text. No shipped document can guess what your repository must tell an agent: the toolchain pin, the isolate the work runs in, the decision a result surface may not offer retry until. Editing the generated file is what the gate reports as drift, so declare a second, repository-owned source instead:
 
 ```toml
 [paths]
@@ -243,7 +298,7 @@ Mark it up with the same `<!-- mf:role author -->` markers. Each vendor file rec
 | `backends.<name>.*` | | `kind`, `provider`, `command`, `args`, `model`, `effort`, `structured`, `unavailable_patterns`. |
 | `providers.<name>.*` | | `kind`, `endpoint`, `api_key_env`. Machine layer only. |
 
-The cascade runs defaults, legacy git-config, machine, project, environment. Each layer outranks the one before it. Every key above is overridable for one run as `MF_<KEY>`, uppercased with dots as underscores — the form reaches a key the cascade resolved, so a `backends.<name>.*` variable naming a backend nothing declares is ignored rather than defining one.
+The cascade runs defaults, legacy git-config, machine, project, environment. Each layer outranks the one before it. Every key above is overridable for one run as `MF_<KEY>`, uppercased with dots as underscores. The form reaches a key the cascade resolved, so a `backends.<name>.*` variable naming a backend nothing declares is ignored rather than defining one.
 
 ## Project Structure
 
@@ -257,6 +312,9 @@ my-framework/
 │   ├── specs/            # durable archive of approved specs
 │   ├── agents/           # the source the vendor instruction files come from
 │   └── eval/corpus/      # diffs with planted defects, for measuring a backend
+├── scripts/statusline/   # the superseded Node renderer, kept for one consumer
+├── standards_embed.go    # ships docs/standards, docs/agents and .githooks inside the binary
+├── CONTEXT.md            # this repository's own domain glossary
 ├── .framework.toml       # committed policy: paths, roles, backends, checks
 ├── .githooks/            # commit-msg and pre-push, both failing closed
 └── .github/              # templates, and the CI, gate, release and review workflows
@@ -264,7 +322,22 @@ my-framework/
 
 ## Project Status
 
-In development. `v0.8.0` is the current release; it adds `mf version` and closes six gates that reported `ok` while verifying nothing — among them an exempt-path glob that meant different things on Windows than in CI, and an R1 attestation any machine-wide git setting satisfied. `v0.7.2` was the first whose generated header names the overlay only in the files it reached. `v0.7.1` was the first whose records gate can tell a durable number another branch is holding from one a deleted record left behind, so a repository with two changes open at once can push. `v0.7.0` was the first in which a repository that vendors these standards can state its own obligations in the generated instruction files rather than choosing between deleting them and failing the gate. `v0.6.2` was the first whose `mf init` leaves a Windows-adopted repository with hooks a clone will actually run. `v0.6.0` was the first tag whose `mf init` adopts a repository that vendors these standards as a submodule rather than writing a second corpus beside it. It publishes stamped binaries for five platforms with a `SHA256SUMS` covering all of them. `v0.5.0` was the first tag whose `mf init` genuinely adopted a repository at all; `v0.4.0` was the first to contain `cmd/mf/`; `v0.1.0` through `v0.3.0` are the earlier standards-only releases. Versioning is semver git tags, and `mf init` records the adopted tag in `.framework.lock`.
+In development. `v0.8.0` is the current release. Versioning is semver git tags, and `mf init` records the adopted tag in `.framework.lock`.
+
+What each release was the first to do:
+
+| Tag | First to |
+|---|---|
+| `v0.8.0` | Report its own build version, and close six gates that returned `ok` while verifying nothing. Among them: an exempt-path glob that meant different things on Windows than in CI, and an R1 attestation any machine-wide git setting satisfied. |
+| `v0.7.2` | Name the overlay in the generated header only in the files it actually reached. |
+| `v0.7.1` | Tell a durable number another branch is holding apart from one a deleted record left behind, so a repository with two changes open at once can push. |
+| `v0.7.0` | Let a repository vendoring these standards state its own obligations in the generated instruction files, instead of choosing between deleting them and failing the gate. |
+| `v0.6.2` | Leave a Windows-adopted repository with hooks a clone will actually run. |
+| `v0.6.1` | Tell an agent where the instruction source is editable, naming it by its configuration key rather than by one path. |
+| `v0.6.0` | Adopt a repository that vendors these standards as a submodule rather than writing a second corpus beside it. Publishes stamped binaries for five platforms under one `SHA256SUMS`. |
+| `v0.5.0` | Genuinely adopt a repository at all. |
+| `v0.4.0` | Contain `cmd/mf/`. |
+| `v0.1.0` to `v0.3.0` | The standards-only releases, carrying no binary. |
 
 Done: the seven gates and the three places they run, the four role chains, the configuration cascade, the status line contract, the CRUX explainer, the eval corpus, the design gate, and an `mf init` that genuinely adopts a repository.
 
@@ -315,7 +388,18 @@ Small deferred follow-ups live in the issue backlog.
 
 ## Contributing
 
-Fork, branch as `type/TASK-NNN-description`, write tests before implementation, and use Conventional Commits. Open a Pull Request following the PR Model in `docs/standards/github.md`.
+Fork, branch as `type/short-description` (a `TASK-NNN` tracker id goes after the type when one exists), write tests before implementation, and use Conventional Commits. Open a Pull Request following the PR Model in `docs/standards/github.md`.
+
+There is no `CONTRIBUTING.md`. The rules a contributor is held to are the standards themselves, read in the order `docs/standards/INDEX.md` sets; a second copy of them here would be the drift this repository is built to catch.
+
+Run what the hooks and CI will run anyway, before pushing:
+
+```sh
+go build ./... && go vet ./... && go test ./... && gofmt -l .
+./mf check
+```
+
+`mf check` names the gate that failed and what to do about it. `./mf hooks install` wires the same checks into `commit-msg` and `pre-push`, so they run without being remembered.
 
 ## License
 
