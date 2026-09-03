@@ -160,7 +160,7 @@ install -m 0755 mf_v0.8.0_linux_amd64 ~/.local/bin/mf
 
 `~/.local/bin` is on `PATH` on many systems but not all. If `mf version` does not resolve after this, add it, or put the binary somewhere already on `PATH`. The hooks look for `mf` there, so one they cannot find is a gate that stops the next commit.
 
-That snippet names the Linux asset. Assets exist for `linux/{amd64,arm64}`, `darwin/{amd64,arm64}` and `windows/amd64`, so swap the name for the one matching your platform; the Windows asset carries a `.exe` suffix. Without `gh`, they are at the [release page](https://github.com/LukeSantossz/my-framework/releases/tag/v0.8.0). `go install github.com/LukeSantossz/my-framework/cmd/mf@latest` also works and reports a true version, but builds from source and gives you no checksum.
+That snippet names the Linux asset. Assets exist for `linux/{amd64,arm64}`, `darwin/{amd64,arm64}` and `windows/amd64`, so swap the name for the one matching your platform; the Windows asset carries a `.exe` suffix. Git Bash ships `sha256sum` and `install`, so the block runs on Windows as written once the name is swapped. Without `gh`, they are at the [release page](https://github.com/LukeSantossz/my-framework/releases/tag/v0.8.0). `go install github.com/LukeSantossz/my-framework/cmd/mf@latest` also works and reports a true version, but builds from source and gives you no checksum.
 
 ### Adopt
 
