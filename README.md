@@ -112,7 +112,7 @@ go build -o mf ./cmd/mf     # Windows: go build -o mf.exe ./cmd/mf
 
 `mf check` runs the seven gates against this repository itself. On a fresh clone of `main` it prints seven `ok` lines and exits 0. `./mf doctor` prints more: activation state, each role's chain, and which backends are reachable on your machine.
 
-`./mf version` on a clone reports a Go pseudo-version, such as `v0.8.1-0.20260903005601-f6ef8e38c8bc`, rather than a tag. Only the release workflow stamps a tag into a binary; a build from a checkout is told its version by the toolchain, which derives one from the last tag and the commit. A downloaded release reports the tag it was published as.
+`./mf version` on a clone reports whatever the toolchain can derive from the checkout. Sitting exactly on a release tag it reports that tag. Past one, it reports a pseudo-version built from the last tag and the commit, such as `v0.8.1-0.20260903005601-f6ef8e38c8bc`, which sorts after `v0.8.0` and before any real `v0.8.1`. Only the release workflow stamps a tag in, so a downloaded binary always reports the tag it was published as.
 
 To see the gates refuse something rather than pass, give them something to refuse:
 
