@@ -1,0 +1,1 @@
+- `isolated_review.md`: how R1, R2 and R3 run without a second provider — the same model in isolated contexts — how the pull request records them, and what to check by hand when no gate runs.

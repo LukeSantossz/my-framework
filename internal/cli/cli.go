@@ -51,7 +51,7 @@ Usage:
                                    walk the role's backend chain and report
                                    which backend actually reviewed
 
-  mf check [spec|commit|branch|docs|records|agents|design]
+  mf check [spec|commit|branch|docs|records|agents|design|edition]
                                    run the deterministic gates; no model is called
 
   mf version                       print the build's version and nothing else
@@ -67,6 +67,9 @@ Usage:
   mf upgrade                       compare standards against this build; applies nothing
   mf author declare --provider <name> [--model <id>]
   mf agents sync|check              generate the vendor instruction files from one source
+  mf edition build secfree --out <dir>
+                                   write the documents-only sec-free edition;
+                                   refuses a tree that still needs the binary
   mf models pin|list                record and compare the model ids in use
   mf usage [show|reset]             tokens spent, in disjoint buckets
   mf eval [--role r2] [--backend n]  measure a backend against planted defects
@@ -134,6 +137,8 @@ func Run(env Env) int {
 		return runAuthor(env, env.Args[1:])
 	case "agents":
 		return runAgents(env, env.Args[1:])
+	case "edition":
+		return runEdition(env, env.Args[1:])
 	case "models":
 		return runModels(env, env.Args[1:])
 	case "usage":

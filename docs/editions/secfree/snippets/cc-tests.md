@@ -1,0 +1,1 @@
+- Write the test before the implementation: red (watch it fail), green (minimal implementation passes), refactor. An implementation commit without a preceding failing-test commit is a process violation. This order is recorded here as project policy so it binds whatever tools the Author uses.

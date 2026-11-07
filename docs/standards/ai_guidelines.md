@@ -54,13 +54,16 @@ AI assistant behavior when generating or modifying code. Counterpart to `crura_m
 
 - Write the test before the implementation: red (test fails), green (minimal implementation passes), refactor.
 - An implementation commit without a preceding failing-test commit is a process violation.
+<!-- mf:edition full -->
 - This order is run by the Superpowers orchestrator's TDD phase when that plugin is installed, but the phase is not what makes it binding; `skills_guidelines.md` records whether the plugin is present and declares the fallback. This section records the order as project policy so it holds either way, and stays auditable independently of the tool.
+<!-- mf:edition end -->
 
 ## Review Composition
 
 Reviews compose; they do not replace one another. Three layers can run on a change,
 with a defined hierarchy so none is duplicated or skipped:
 
+<!-- mf:edition full secfree=ai-review-composition -->
 - R1, internal review: satisfied by a chain of review backends, taking the first one that is actually available and naming it. It applies `code_conventions.md`, `var_method.md`, and this file, and stands in for the Author's Self-Review. No provider constraint applies: each backend declares its own provider, and R1 is defined by when it runs and what it sees, not by whom it shares a provider with. Record which backend ran; do not repeat it manually.
 - R2, cross-provider review: a Reviewer model from a provider different from the Author's (the operational gate is defined in `r2_gate.md`). The Author's provider is a recorded property of the change, not an assumption, so the requirement resolves to one of three states — `verified`, `declared`, or `unknown` — and only the first two can satisfy it.
 - R3, automated PR review: any automated PR reviewer (e.g. CodeRabbit). It is additional signal and does not substitute for R2.
@@ -74,7 +77,9 @@ The Author's Self-Review is not part of that substitution. R1 already stands in 
 The chain is walked by `mf review --role <r1|r2|r3>`, which takes the first backend that is actually available and names it. A role whose every backend is unavailable is reported as not having run, and that absence belongs in the PR: a layer that did not run is never the same as a layer that found nothing.
 
 At review time an implemented change may also carry a transient CRUX explainer (see `crux_method.md`) that feeds R1 and the CRURA Review. It is an aid, not a review layer, and never blocks a ship.
+<!-- mf:edition end -->
 
+<!-- mf:edition full secfree=ai-isolated-review -->
 ## Cross-Provider Review
 
 Two roles: the Author model develops the code; the Reviewer model, when a second provider is available, reviews it before the PR. This is layer R2 above.
@@ -87,6 +92,7 @@ Two roles: the Author model develops the code; the Reviewer model, when a second
 - Record in the PR which model authored and which reviewed.
 - When no second provider is available, the fallback is the one stated in Review Composition above — R1 plus CRURA's adjudication stage — and the absence is noted in the PR.
 - A Reviewer finding is advisory, not binding, but an unresolved finding must be addressed or justified, never silently dropped.
+<!-- mf:edition end -->
 
 ## Commits, PRs, and Issues
 

@@ -158,6 +158,13 @@ An automated reviewer that runs on the Pull Request (e.g. CodeRabbit). Additiona
 signal; never a substitute for R2.
 _Avoid_: bot review, CI review.
 
+**Isolated-Context Review**:
+How R2 and R3 run in the Sec-free Edition: the same model as the Author, in a context
+that did not see the change being written and does not see the other review's findings.
+It is a same-Provider review, recorded as one, and never satisfies or reports a
+Cross-Provider State. Defined in that edition's `isolated_review.md`.
+_Avoid_: cross-provider review (it is not one), self-review (that is R1), second opinion.
+
 **CRURA Review**:
 The Developer's human review track — Change, Review, Upload, Review Again — feeding the
 PR Review Checklist. Its adjudication of the recorded layers and its merge decision run
@@ -359,6 +366,28 @@ two-stage subagent review offered as one Backend of R1's chain — never R1 itse
 `docs/adr/0010`. It runs inside a session, so what it contributes to a run is an
 Attestation rather than an execution.
 _Avoid_: the orchestrator (alone); Superpowers as a synonym for R1.
+
+### Editions
+
+**Edition**:
+One published form of this framework, cut from the same source. The Standards mark the
+regions that belong to one edition only, and each edition is built from that one source
+rather than maintained beside it.
+_Avoid_: fork, flavour, profile (a configuration of one edition, not another edition).
+
+**Full Edition**:
+The framework as this repository carries it: the Standards, the `mf` binary, its
+versioned hooks, and the Backend chains that reach other Providers.
+_Avoid_: standard edition, main edition, the real framework.
+
+**Sec-free Edition**:
+The documents-only Edition for environments where no framework executable may run and
+no code may leave the organisation. It carries no binary, hook, script or dependency,
+replaces R2 and R3 with Isolated-Context Review, and leaves every check to the Author and
+the Developer. Built by `mf edition build secfree` and published read-only on the orphan
+`secfree` branch.
+_Avoid_: offline mode, lite edition, secure edition (it removes controls the full
+edition enforces; it does not add any).
 
 ### Cross-cutting
 

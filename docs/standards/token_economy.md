@@ -3,10 +3,12 @@
 Controlled token consumption for this framework. Defines where output compression
 is applied, where it is forbidden, and how it interacts with the rest of the standards.
 
+<!-- mf:edition full secfree=token-intro -->
 The framework loads `CLAUDE.md` plus the standards documents as input on every
 session, on top of the Superpowers orchestrator's own context. The dominant
 recurring cost is this input, not conversational output. This norm targets that
 first and treats conversational terseness as a secondary, bounded measure.
+<!-- mf:edition end -->
 
 ## Tool
 
@@ -15,6 +17,7 @@ governs. Two capabilities are in scope, and only one of them exists today:
 
 - Caveman terse mode: makes the agent's conversational replies drop filler. This
   is what the installed skill provides, and it is the whole of what it provides.
+<!-- mf:edition full secfree=token-compress -->
 - `caveman-compress`: would rewrite `CLAUDE.md` into a compressed form, cutting
   input tokens every session while preserving code, URLs, and paths byte-for-byte.
   The installed Caveman does not have it. The skill is a conversational mode: it
@@ -25,6 +28,7 @@ governs. Two capabilities are in scope, and only one of them exists today:
   terse style that is. A capability this document names has to be findable as
   absent from the tool as well as from the page describing it, or the page is
   the only thing that knows.
+<!-- mf:edition end -->
 
 The distinction matters because the policy below is written against both: §1
 describes what compressing the context file requires *if* an adopter opts into it
@@ -43,6 +47,7 @@ it simply declined a cost optimization it was free to decline. The rules below
 govern the compression when it is chosen; they assert nothing about a repository
 that has not chosen it.
 
+<!-- mf:edition full secfree=token-fallback -->
 - The capability the opt-in depends on is `caveman-compress`, and it does not exist
   in the Caveman installed here (see Tool, above). Where it is absent the declared
   fallback applies: the context file is not compressed and stays in full prose.
@@ -50,6 +55,7 @@ that has not chosen it.
   is this repository's state today. What an adopter's environment provides is
   theirs to verify — `skills_guidelines.md` records what is installed here, and
   no check inside this repository can see another machine's skills.
+<!-- mf:edition end -->
 - When the opt-in is taken and a capability exists to honor it, `CLAUDE.md` is
   maintained in its compressed form, and that compressed file is the committed
   source of truth the agent loads.
@@ -73,12 +79,14 @@ cost saving for the exact failure the framework exists to prevent.
 - It is the agent's communication style, never a reason to do less work or skip a
   required step.
 
+<!-- mf:edition full -->
 The harness applies this to the prompts it composes, which is the only place a
 framework can apply anything: it appends a terse style instruction — one that
 carries its own precedence, so the model reading it also reads what outranks it
 — to a prompt whose output is a conversation, and refuses to append it to one
 whose output is a versioned artifact. `mf review --dry-run` prints which of the
 two it resolved, so the boundary is inspectable rather than asserted.
+<!-- mf:edition end -->
 
 ### 3. Where terse mode is forbidden (hard boundary)
 

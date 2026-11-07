@@ -25,6 +25,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"github.com/LukeSantossz/my-framework/internal/edition"
 )
 
 // SourcePath is where the marked-up instructions live.
@@ -273,7 +275,14 @@ func load(o Options) (Source, error) {
 	if err != nil {
 		return Source{}, fmt.Errorf("cannot read %s: %w", src, err)
 	}
-	parsed, err := Parse(string(body))
+	// The full edition keeps every region the sec-free edition drops, and loses
+	// only the marker lines, so a source that gains markers generates the same
+	// files it generated before.
+	unmarked, err := edition.Unmark(string(body))
+	if err != nil {
+		return Source{}, fmt.Errorf("%s: %w", src, err)
+	}
+	parsed, err := Parse(unmarked)
 	if err != nil {
 		return Source{}, err
 	}
