@@ -169,6 +169,45 @@ func TestSyncWritesEveryTarget(t *testing.T) {
 	}
 }
 
+func TestEditionMarkersLeaveTheFullEditionsFilesByteIdentical(t *testing.T) {
+	// The sec-free edition is cut from the same source, so the source gains
+	// `<!-- mf:edition … -->` lines. The full edition's generated files must not
+	// change by a byte for it: the markers are for the edition build, and a
+	// reader of CLAUDE.md has no use for them.
+	plain := fixture(t)
+	if _, err := Sync(plain); err != nil {
+		t.Fatal(err)
+	}
+	marked := fixture(t)
+	withMarkers := strings.Replace(source,
+		"Specify before building.\n",
+		"<!-- mf:edition full -->\nSpecify before building.\n<!-- mf:edition end -->\n", 1)
+	if err := os.WriteFile(filepath.Join(marked.RepoRoot, filepath.FromSlash(SourcePath)), []byte(withMarkers), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Sync(marked); err != nil {
+		t.Fatal(err)
+	}
+	for _, target := range plain.Targets {
+		want, _ := os.ReadFile(filepath.Join(plain.RepoRoot, target.File))
+		got, _ := os.ReadFile(filepath.Join(marked.RepoRoot, target.File))
+		if string(got) != string(want) {
+			t.Errorf("%s differs once the source carries edition markers:\n%s", target.File, got)
+		}
+	}
+}
+
+func TestAMalformedEditionMarkerFailsTheSync(t *testing.T) {
+	o := fixture(t)
+	broken := source + "<!-- mf:edition full -->\nnever closed\n"
+	if err := os.WriteFile(filepath.Join(o.RepoRoot, filepath.FromSlash(SourcePath)), []byte(broken), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := Sync(o); err == nil {
+		t.Fatal("a source with an unclosed edition region was synced")
+	}
+}
+
 func TestSyncIsIdempotent(t *testing.T) {
 	o := fixture(t)
 	if _, err := Sync(o); err != nil {
