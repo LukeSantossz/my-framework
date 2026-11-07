@@ -45,7 +45,7 @@ flowchart TD
 
     D --> E["git push"]
     E --> F{"pre-push hook"}
-    F --> G["mf check: 7 gates"]
+    F --> G["mf check: 8 gates"]
 
     G -->|any gate fails| H["push stopped<br/>the failing gate is named"]
     G -->|all pass| I["mf review --role r2"]
@@ -68,7 +68,7 @@ flowchart TD
     style D fill:#14532d,color:#fff
 ```
 
-The seven gates are `spec`, `commit`, `branch`, `docs`, `records`, `agents` and `design`. None calls a model.
+The eight gates are `spec`, `commit`, `branch`, `docs`, `records`, `agents`, `design` and `edition`. None calls a model.
 
 ## Engineering Decisions
 
@@ -96,7 +96,7 @@ Two readers arrive here. To evaluate the project, the first three subsections ar
 | Need | Why |
 |---|---|
 | Go 1.26 or newer | Builds the binary. Under the default `GOTOOLCHAIN=auto` an older Go downloads the toolchain `go.mod` pins; under `GOTOOLCHAIN=local` the build fails outright. |
-| `git` on `PATH` | Three of the seven gates read the current branch, and what it adds over its base, out of git history. |
+| `git` on `PATH` | Three of the eight gates read the current branch, and what it adds over its base, out of git history. |
 
 Nothing else: one Go dependency, no database, no service to start, no API key. The gates call no model, so evaluating this repository needs no provider account. Only `mf review` and `mf eval` reach for one.
 
@@ -110,7 +110,7 @@ go build -o mf ./cmd/mf     # Windows: go build -o mf.exe ./cmd/mf
 ./mf check
 ```
 
-`mf check` runs the seven gates against this repository itself. On a fresh clone of `main` it prints seven `ok` lines and exits 0. `./mf doctor` prints more: activation state, each role's chain, and which backends are reachable on your machine.
+`mf check` runs the eight gates against this repository itself. On a fresh clone of `main` it prints eight `ok` lines and exits 0. `./mf doctor` prints more: activation state, each role's chain, and which backends are reachable on your machine.
 
 `./mf version` on a clone reports whatever the toolchain can derive from the checkout. Sitting exactly on a release tag it reports that tag. Past one, it reports a pseudo-version built from the last tag and the commit, such as `v0.8.1-0.20260903005601-f6ef8e38c8bc`, which sorts after `v0.8.0` and before any real `v0.8.1`. Only the release workflow stamps a tag in, so a downloaded binary always reports the tag it was published as.
 
@@ -259,7 +259,7 @@ Mark it up with the same `<!-- mf:role author -->` markers. Each vendor file rec
 
 | Command | What it does |
 |---|---|
-| `mf check` | All seven gates. |
+| `mf check` | All eight gates. |
 | `mf check <gate>...` | Only the named gates. |
 | `mf check commit --message <file>` | Check one message file rather than the branch's commits. What the `commit-msg` hook runs. |
 
@@ -286,6 +286,7 @@ Mark it up with the same `<!-- mf:role author -->` markers. Each vendor file rec
 | `mf models pin\|list` | Record the model each backend resolves to, or report drift against the pins. |
 | `mf usage [show\|reset]` | Runs and tokens spent, in disjoint buckets. |
 | `mf agents sync\|check` | Regenerate the vendor instruction files from one source, or report drift. |
+| `mf edition build secfree --out <dir>` | Write the documents-only sec-free edition (spec 0052) into an empty directory. Refuses a tree that still names the binary, a hook, a declared backend, or a standard the edition leaves out. The `edition` gate runs the same build into a scratch directory. |
 | `mf statusline render [--no-refresh]\|apply\|refresh\|revert` | The status line contract. `apply` edits the agent's own configuration; `revert` puts back what it replaced. `--no-refresh` (or `MF_STATUSLINE_NO_REFRESH`; the older `MYFW_`-prefixed name is still read) draws from the cache without spawning the quota fetch. |
 
 ### Keys
@@ -348,7 +349,7 @@ What each release was the first to do:
 | `v0.4.0` | Contain `cmd/mf/`. |
 | `v0.1.0` to `v0.3.0` | The standards-only releases, carrying no binary. |
 
-Done: the seven gates and the three places they run, the four role chains, the configuration cascade, the status line contract, the CRUX explainer, the eval corpus, the design gate, and an `mf init` that genuinely adopts a repository.
+Done: the eight gates and the three places they run, the four role chains, the configuration cascade, the status line contract, the CRUX explainer, the eval corpus, the design gate, and an `mf init` that genuinely adopts a repository.
 
 Pending: the fingerprint table that would let R2 report `verified`; a first R1 backend that is not `in-session`; a workflow-hosted R3 beside the forge app that reviews here today; removal of the Node status line renderer once the submodule consumers have migrated; an `mf eval` that can compare two recorded runs, which `eval.Comparable` is written for and nothing calls.
 
