@@ -26,9 +26,11 @@ Human review discipline. Counterpart to the Self-Review section of
   it is owed when one of the Triggers below fires, or
   when the change is drawn as part of the Untriggered Sample. Make atomic
   commits for related changes either way.
+<!-- mf:edition full secfree=crura-upload -->
 - U, Upload: run git push with clear, descriptive commit messages
   (Conventional Commits per `github.md`). The push triggers the R2
   cross-provider gate (`r2_gate.md`).
+<!-- mf:edition end -->
 - RA, Review Again: open a Pull Request. This stage does two different jobs,
   and only one of them is conditional.
   - Adjudicate: read what the review layers recorded — findings, their
@@ -68,7 +70,9 @@ the re-scope becomes a deletion.
 - A finding marked `blocking`.
 - Any deterministic check failing.
 - The change touches a path the project declares high-risk.
+<!-- mf:edition full secfree=crura-r2-trigger -->
 - R2's cross-provider state is `unknown` (`r2_gate.md`).
+<!-- mf:edition end -->
 - No review layer ran at all, every backend having been unavailable.
 - The change is drawn as part of the Untriggered Sample below.
 

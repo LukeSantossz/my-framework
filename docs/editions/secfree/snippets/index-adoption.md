@@ -1,0 +1,1 @@
+- Adoption is a copy: this edition carries no program, so a project adopts it by copying the documents in, per the edition's README. No hook, gate or CI job runs on the Developer's machine; the rules are checked by the Author and confirmed by the Developer in the pull request, per `isolated_review.md`.

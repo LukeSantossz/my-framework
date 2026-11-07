@@ -1,0 +1,1 @@
+- Review layers recorded: internal review (R1), isolated-context review (R2), isolated-context PR review (R3), with the Author's model named and R2 and R3 recorded as same-provider reviews per `isolated_review.md`. Note any layer that did not run and why.

@@ -1,8 +1,10 @@
 # SPEC Method
 
+<!-- mf:edition full secfree=spec-intro -->
 The design layer that runs before any code. Counterpart to the Brainstorm and
 Plan phases of the Superpowers orchestrator; the artifact it produces (`SPEC.md`)
 is what the Spec Gate approves before implementation begins.
+<!-- mf:edition end -->
 
 This is the layer the rest of the standards assumed but never defined. `github.md`
 has an Issue Model for task tracking and a README with an Engineering Decisions
@@ -33,10 +35,12 @@ its documents elsewhere sets `paths.specs` (and `paths.adr` for the decision
 records), and every gate reads them from there. The layout is what is fixed, not
 the prefix.
 
+<!-- mf:edition full secfree=spec-title -->
 The title line must be the first line of the file. It is what identifies the
 document as a spec, and `mf check records` fails a file in the archive that does
 not open with it. There is no Status field while a spec stands; one is added
 only when it is retired, per Durable Numbers Are Never Reused below.
+<!-- mf:edition end -->
 
 ```markdown
 # SPEC: <title in Conventional Commits format>
@@ -92,11 +96,13 @@ forgets it. So for a spec the marking is **added at retirement and absent before
 it**:
 
 - **Heading**: `## Status`.
+<!-- mf:edition full secfree=spec-location -->
 - **Location**: immediately below the `# SPEC:` title, before `## Problem`. The
   title line stays first — it is what identifies the file as a spec, and
   `mf check records` reads it there — and the status is the next thing a reader
   meets, because a retired record read as a live one is the failure this marking
   exists to prevent.
+<!-- mf:edition end -->
 - **Content**: one line, in one of two forms.
 
   ```markdown
@@ -121,6 +127,7 @@ A record that supersedes another says so too, in its own Design Decision, so the
 link is readable from both ends. One-way marking leaves a reader who arrives at
 the successor unable to tell that anything was replaced.
 
+<!-- mf:edition full secfree=spec-checked -->
 ### The rule is checked, not trusted
 
 `mf check records` enforces it, in three ways, because no one of them sees what
@@ -144,6 +151,7 @@ the others do:
 
 An adopting repository inherits the rule and the gate together, because both
 travel in the binary rather than in a script the adopter has to copy.
+<!-- mf:edition end -->
 
 ## Spec-lite
 

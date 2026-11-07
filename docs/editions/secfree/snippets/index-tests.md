@@ -1,0 +1,1 @@
+- Test-first order (red-green-refactor) is project policy, recorded in `code_conventions.md` and `ai_guidelines.md`; it binds whatever tools the Author uses.
