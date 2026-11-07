@@ -78,7 +78,7 @@ func runCheck(env Env, args []string) int {
 	messageFile := ""
 	for i := 0; i < len(args); i++ {
 		switch args[i] {
-		case "spec", "commit", "branch", "docs", "records", "agents", "design":
+		case "spec", "commit", "branch", "docs", "records", "agents", "design", "edition":
 			only = append(only, args[i])
 		case "--message":
 			value, ok := optionValue(env, "mf check", args, &i)
@@ -87,7 +87,7 @@ func runCheck(env Env, args []string) int {
 			}
 			messageFile = value
 		default:
-			fmt.Fprintf(env.Stderr, "mf check: unknown check %q (expected spec, commit, branch, docs, records, agents or design)\n", args[i])
+			fmt.Fprintf(env.Stderr, "mf check: unknown check %q (expected spec, commit, branch, docs, records, agents, design or edition)\n", args[i])
 			return 2
 		}
 	}
@@ -119,6 +119,7 @@ func runCheck(env Env, args []string) int {
 	explicit := len(only) > 0
 	checkAgents := !explicit
 	checkDesign := !explicit
+	checkEdition := !explicit
 	var gates []string
 	for _, name := range only {
 		switch name {
@@ -126,6 +127,8 @@ func runCheck(env Env, args []string) int {
 			checkAgents = true
 		case "design":
 			checkDesign = true
+		case "edition":
+			checkEdition = true
 		default:
 			gates = append(gates, name)
 		}
@@ -165,6 +168,11 @@ func runCheck(env Env, args []string) int {
 	}
 	if checkDesign {
 		if code := designGate(env, cfg); code != 0 {
+			failed++
+		}
+	}
+	if checkEdition {
+		if code := editionGate(env, cfg); code != 0 {
 			failed++
 		}
 	}
