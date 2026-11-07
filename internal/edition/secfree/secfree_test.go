@@ -234,6 +234,17 @@ func TestBuildFailsWhenOutputNamesAVendorBackendCommandOrForgeApp(t *testing.T) 
 	}
 }
 
+func TestBuildFailsWhenOutputCitesAStandardTheEditionLeavesOut(t *testing.T) {
+	// r2_gate.md is in the fixture's corpus and not in the edition, so a
+	// reference to it would send a reader to a document they were never given.
+	o := fixture(t)
+	write(t, o.RepoRoot, "docs/standards/github.md", "# github\n\nRecord the layers per `r2_gate.md`.\n")
+	_, err := Build(o)
+	if err == nil || !strings.Contains(err.Error(), "github.md:3") {
+		t.Fatalf("expected a failure at github.md:3, got %v", err)
+	}
+}
+
 func TestTheWordMfInsideAnotherWordIsNotTheBinary(t *testing.T) {
 	o := fixture(t)
 	write(t, o.RepoRoot, "docs/standards/github.md", "# github\n\nmy-framework and mfa tokens are fine.\n")

@@ -75,7 +75,11 @@ func Build(o Options) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	if problems := scan(files, o.Forbidden); len(problems) > 0 {
+	left, err := leftOut(o)
+	if err != nil {
+		return nil, err
+	}
+	if problems := scan(files, rules(o.Forbidden, left)); len(problems) > 0 {
 		return nil, fmt.Errorf("the edition still depends on what it cannot run:\n  %s", strings.Join(problems, "\n  "))
 	}
 	if err := ensureEmpty(o.Out); err != nil {
@@ -201,10 +205,37 @@ type rule struct {
 	reason  string
 }
 
-func rules(forbidden []string) []rule {
+// leftOut is every standard in the corpus the edition does not carry, read
+// from the standards directory rather than listed here, so a standard added to
+// the full edition later is one the edition may not cite until it is carried.
+func leftOut(o Options) ([]string, error) {
+	entries, err := os.ReadDir(filepath.Join(o.RepoRoot, filepath.FromSlash(o.StandardsDir)))
+	if err != nil {
+		return nil, fmt.Errorf("cannot list %s: %w", o.StandardsDir, err)
+	}
+	carried := map[string]bool{}
+	for _, name := range standards {
+		carried[name] = true
+	}
+	var out []string
+	for _, e := range entries {
+		if !e.IsDir() && strings.HasSuffix(e.Name(), ".md") && !carried[e.Name()] {
+			out = append(out, e.Name())
+		}
+	}
+	return out, nil
+}
+
+func rules(forbidden, leftOut []string) []rule {
 	out := []rule{
 		{regexp.MustCompile(`\bmf\b`), "names the framework binary"},
 		{regexp.MustCompile(`(?i)pre-push|commit-msg|hooksPath|\.githooks`), "names a git hook"},
+	}
+	for _, name := range leftOut {
+		out = append(out, rule{
+			regexp.MustCompile(`\b` + regexp.QuoteMeta(name)),
+			fmt.Sprintf("cites %s, which the edition does not carry", name),
+		})
 	}
 	seen := map[string]bool{}
 	for _, name := range forbidden {
@@ -222,8 +253,7 @@ func rules(forbidden []string) []rule {
 }
 
 // scan reports every line of the edition that breaks a rule, as file:line.
-func scan(files map[string]string, forbidden []string) []string {
-	rs := rules(forbidden)
+func scan(files map[string]string, rs []rule) []string {
 	names := make([]string, 0, len(files))
 	for name := range files {
 		names = append(names, name)
