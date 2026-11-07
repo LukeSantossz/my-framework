@@ -28,8 +28,8 @@ jobs:
     needs: gate
     runs-on: ubuntu-latest
     permissions:
-      # `gh release create` uploads the assets, and that is the only write in
-      # this workflow.
+      # `gh release create` uploads the assets, and that is the only write this
+      # job makes.
       contents: write
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -128,3 +128,72 @@ jobs:
               exit 1
             fi
           done
+
+  edition:
+    # Publishes the sec-free edition (spec 0052): the documents-only tree for
+    # environments where no framework executable may run. It is cut from the
+    # tagged commit, after the release it belongs to is out, and committed as
+    # the next commit of the orphan `secfree` branch, so a clone of that branch
+    # alone carries no Go code, hook or script. Its tag is `secfree-<tag>`,
+    # which the `v*` trigger above never matches.
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      # Pushing the edition branch and its tag is the only write this job makes.
+      contents: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@b7ad1dad31e06c5925ef5d2fc7ad053ef454303e # v7.0.0
+        with:
+          go-version-file: go.mod
+          # Off for the reason the build job gives: what this job builds is
+          # published.
+          cache: false
+
+      # The build refuses a tree that still names the binary, a hook, a vendor
+      # backend or a standard the edition leaves out, so what reaches the
+      # branch is what `mf check edition` already held main to.
+      - name: Build the edition
+        run: go run ./cmd/mf edition build secfree --out "$RUNNER_TEMP/secfree"
+
+      - name: Publish the edition
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          edition_tag="secfree-${TAG}"
+          remote="https://github.com/${GITHUB_REPOSITORY}"
+          auth="AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          git_auth() { git -c "http.https://github.com/.extraheader=${auth}" "$@"; }
+
+          # Safe to re-run: once this release's edition tag exists, the edition
+          # is out, and a second commit for the same release would be noise.
+          if git_auth ls-remote --exit-code --tags "$remote" "refs/tags/${edition_tag}" >/dev/null; then
+            echo "${edition_tag} already exists; the edition for ${TAG} is published"
+            exit 0
+          fi
+
+          # The branch has no history in common with main. Its first commit
+          # has no parent; every later one has the previous edition as parent.
+          parent=""
+          if git_auth ls-remote --exit-code --heads "$remote" secfree >/dev/null; then
+            git_auth fetch --no-tags --depth=1 "$remote" secfree
+            parent="$(git rev-parse FETCH_HEAD)"
+          fi
+
+          export GIT_INDEX_FILE="$RUNNER_TEMP/secfree.index"
+          git --git-dir="$GITHUB_WORKSPACE/.git" --work-tree="$RUNNER_TEMP/secfree" \
+            -C "$RUNNER_TEMP/secfree" add --all .
+          tree="$(git write-tree)"
+          export GIT_AUTHOR_NAME="github-actions[bot]"
+          export GIT_AUTHOR_EMAIL="41898282+github-actions[bot]@users.noreply.github.com"
+          export GIT_COMMITTER_NAME="$GIT_AUTHOR_NAME" GIT_COMMITTER_EMAIL="$GIT_AUTHOR_EMAIL"
+          commit="$(git commit-tree "$tree" ${parent:+-p "$parent"} \
+            -m "docs(edition): publish the sec-free edition of ${TAG}")"
+
+          git_auth push "$remote" "${commit}:refs/heads/secfree" "${commit}:refs/tags/${edition_tag}"
+          echo "published ${edition_tag} at ${commit}"
